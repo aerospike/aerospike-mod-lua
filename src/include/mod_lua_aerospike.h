@@ -1,8 +1,15 @@
-#ifndef _MOD_LUA_AEROSPIKE_H
-#define _MOD_LUA_AEROSPIKE_H
+#pragma once
 
 #include <lua.h>
 
-int mod_lua_aerospike_register(lua_State *);
+// typedef struct mod_lua_aerospike_s mod_lua_aerospike;
+// typedef struct mod_lua_aerospike_hooks_s mod_lua_aerospike_hooks;
 
-#endif // _MOD_LUA_AEROSPIKE_H
+
+
+// struct mod_lua_aerospike_hooks_s {
+//     int (*get)
+// };
+
+
+int mod_lua_aerospike_register(lua_State *);
