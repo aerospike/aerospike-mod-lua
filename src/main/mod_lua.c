@@ -26,9 +26,7 @@ struct mod_lua_context_s {
 /**
  * Single Instance of the Lua Module Specific Data
  */
-static mod_lua_context lua = {
-    NULL
-};
+static mod_lua_context lua = {};
 
 #define LOG(m) \
     // printf("%s:%d  -- %s\n",__FILE__,__LINE__, m);
