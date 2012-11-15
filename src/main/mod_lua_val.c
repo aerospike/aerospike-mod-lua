@@ -3,6 +3,7 @@
 #include <lua.h>
 #include <lauxlib.h>
 #include <lualib.h>
+#include <string.h>
 
 /**
  * Reads a val from the Lua stack
@@ -18,7 +19,7 @@ as_val * mod_lua_toval(lua_State * l, int i) {
         case LUA_TBOOLEAN :
             return (as_val *) as_boolean_new(lua_toboolean(l, i));
         case LUA_TSTRING :
-            return (as_val *) as_string_new(lua_tostring(l, i));
+            return (as_val *) as_string_new(strdup(lua_tostring(l, i)));
         case LUA_TNIL :
         case LUA_TTABLE :
         case LUA_TFUNCTION :
