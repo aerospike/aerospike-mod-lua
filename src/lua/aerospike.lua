@@ -12,44 +12,20 @@ require("range")
 
 log = {}
 
-log.level = {
-    TRACE = 5,
-    DEBUG = 4,
-    INFO    = 3,
-    WARN    = 2,
-    ERROR = 1
-}
-
-log.level.str = {}
-log.level.str[log.level.TRACE]    = "TRACE"
-log.level.str[log.level.DEBUG]    = "DEBUG"
-log.level.str[log.level.INFO]     = "INFO"
-log.level.str[log.level.WARN]     = "WARN"
-log.level.str[log.level.ERROR]    = "ERROR"
-
-
-function log.write(l, m, ...)
-        return print("[" .. log.level.str[l] .. "] " .. m, ...)
-end
-
 function log.trace(m, ...)
-    return log.write(log.level.TRACE, m, ...)
+    return aerospike:log(4, string.format(m, ...))
 end
 
 function log.debug(m, ...)
-    return log.write(log.level.DEBUG, m, ...)
+    return aerospike:log(3, string.format(m, ...))
 end
 
 function log.info(m, ...)
-    return log.write(log.level.INFO, m, ...)
+    return aerospike:log(2, string.format(m, ...))
 end
 
 function log.warn(m, ...)
-    return log.write(log.level.WARN, m, ...)
-end
-
-function log.error(m, ...)
-    return log.write(log.level.ERROR, m, ...)
+    return aerospike:log(1, string.format(m, ...))
 end
 
 -- ######################################################################################
@@ -61,9 +37,11 @@ end
 --
 -- Creates a new environment for use in apply* functions
 --
-function env()
+function env(pname,fname)
     local e = {}
     e["_G"] = {}
+    e["__PACKAGE__"] = pname;
+    e["__FUNCTION__"] = fname;
     e["setfenv"] = setfenv
     e["log"] = log
     e["require"] = require
@@ -77,6 +55,7 @@ function env()
     e["Stream"] = Stream
     e["Iterator"] = Iterator
     e["aerospike"] = aerospike
+    e["print"] = print;
     return e
 end
 
@@ -106,6 +85,7 @@ function apply(f, ...)
         return nil
     end
 
+    pname = names[1]
     fname = names[#names]
     table.remove(names,#names)
 
@@ -120,7 +100,7 @@ function apply(f, ...)
         return nil
     end
     
-    setfenv(fn,env())
+    setfenv(fn,env(pname,fname))
 
     return pcall(fn, ...)
 end

@@ -1,15 +1,11 @@
 #pragma once
 
+#include "as_aerospike.h"
+
 #include <lua.h>
 
-// typedef struct mod_lua_aerospike_s mod_lua_aerospike;
-// typedef struct mod_lua_aerospike_hooks_s mod_lua_aerospike_hooks;
-
-
-
-// struct mod_lua_aerospike_hooks_s {
-//     int (*get)
-// };
-
-
 int mod_lua_aerospike_register(lua_State *);
+
+as_aerospike * mod_lua_pushaerospike(lua_State *, as_aerospike * );
+
+as_aerospike * mod_lua_toaerospike(lua_State *, int);

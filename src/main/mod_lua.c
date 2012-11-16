@@ -4,6 +4,7 @@
 #include "mod_lua_iterator.h"
 #include "mod_lua_stream.h"
 #include "mod_lua_val.h"
+#include "as_aerospike.h"
 #include "as_types.h"
 
 #include <dirent.h>
@@ -35,8 +36,8 @@ static const as_module_hooks hooks;
 
 static int init(as_module *);
 static int configure(as_module *);
-static int apply_record(as_module *, const char *, as_rec *, as_list *, as_result *);
-static int apply_stream(as_module *, const char *, as_stream *, as_list *, as_result *);
+static int apply_record(as_module *, as_aerospike * as, const char *, as_rec *, as_list *, as_result *);
+static int apply_stream(as_module *, as_aerospike * as, const char *, as_stream *, as_list *, as_result *);
 
 static lua_State * create_state();
 static lua_State * open_state(as_module * m, const char * f);
@@ -170,18 +171,22 @@ static int pushargs(lua_State * l, as_list * args) {
  * @param result pointer to a val that will be populated with the result.
  * @return 0 on success, otherwise 1
  */
-static int apply_record(as_module * m, const char * fqn, as_rec * r, as_list * args, as_result * res) {
+static int apply_record(as_module * m, as_aerospike * as, const char * fqn, as_rec * r, as_list * args, as_result * res) {
 
-    lua_State * l = (lua_State *) NULL;     // Lua State
-    int argc = 0;                           // Number of arguments pushed onto the stack
-    as_val * ret = (as_val *) NULL;               // Return value from call
+    lua_State *     l       = (lua_State *) NULL;     // Lua State
+    int             argc    = 0;                      // Number of arguments pushed onto the stack
+    as_val *        ret     = (as_val *) NULL;        // Return value from call
 
     LOG("BEGIN")
 
     // lease a context
     LOG("open context")
     l = open_state(m, fqn);
-
+    
+    // push aerospike into the global scope
+    mod_lua_pushaerospike(l, as);
+    lua_setglobal(l, "aerospike");
+    
     // push apply_record() onto the stack
     LOG("push apply_record() onto the stack");
     lua_getglobal(l, "apply_record");
@@ -237,7 +242,7 @@ static int apply_record(as_module * m, const char * fqn, as_rec * r, as_list * a
  * @param result pointer to a val that will be populated with the result.
  * @return 0 on success, otherwise 1
  */
-static int apply_stream(as_module * m, const char * fqn, as_stream * s, as_list * args, as_result * res) {
+static int apply_stream(as_module * m, as_aerospike * as, const char * fqn, as_stream * s, as_list * args, as_result * res) {
 
     lua_State * l = (lua_State *) NULL;     // Lua State
     int argc = 0;                           // Number of arguments pushed onto the stack
@@ -248,6 +253,10 @@ static int apply_stream(as_module * m, const char * fqn, as_stream * s, as_list 
     // lease a context
     LOG("open context")
     l = open_state(m, fqn);
+
+    // push aerospike into the global scope
+    mod_lua_pushaerospike(l, as);
+    lua_setglobal(l, "aerospike");
 
     // push apply_stream() onto the stack
     LOG("push apply_stream() onto the stack");
@@ -302,7 +311,7 @@ static const as_module_hooks hooks = {
 /**
  * Module
  */
-extern as_module mod_lua = {
+as_module mod_lua = {
     &lua,
     &hooks
 };

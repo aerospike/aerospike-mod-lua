@@ -18,6 +18,8 @@ as_types += as_iterator.o
 as_types += as_stream.o
 as_types += as_result.o
 
+as_types += as_aerospike.o
+
 as_module = as_module.o
 
 mod_lua =  mod_lua.o
