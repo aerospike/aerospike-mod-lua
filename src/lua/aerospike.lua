@@ -1,6 +1,3 @@
--- define search paths for lua scripts
-package.path = package.path .. ";/home/chris/projects/misc/aerospike-lua/src/lua/?.lua"
-
 require("stream")
 require("range")
 

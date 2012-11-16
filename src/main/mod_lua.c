@@ -1,4 +1,5 @@
 #include "mod_lua.h"
+#include "mod_lua_config.h"
 #include "mod_lua_aerospike.h"
 #include "mod_lua_record.h"
 #include "mod_lua_iterator.h"
@@ -17,17 +18,25 @@
 #include <lauxlib.h>
 #include <lualib.h>
 
+// #define _GNU_SOURCE
+#include <stdio.h>
+
 /**
  * Lua Module Specific Data
  * This will populate the module.source field
  */
 struct mod_lua_context_s {
+    char * system_path;
+    char * user_path;
 };
 
 /**
  * Single Instance of the Lua Module Specific Data
  */
-static mod_lua_context lua = {};
+static mod_lua_context lua = {
+    .system_path    = NULL,
+    .user_path      = NULL
+};
 
 #define LOG(m) \
     // printf("%s:%d  -- %s\n",__FILE__,__LINE__, m);
@@ -35,7 +44,7 @@ static mod_lua_context lua = {};
 static const as_module_hooks hooks;
 
 static int init(as_module *);
-static int configure(as_module *);
+static int configure(as_module *, void *);
 static int apply_record(as_module *, as_aerospike * as, const char *, as_rec *, as_list *, as_result *);
 static int apply_stream(as_module *, as_aerospike * as, const char *, as_stream *, as_list *, as_result *);
 
@@ -63,8 +72,22 @@ static int init(as_module * m) {
  * @param m the module being configured.
  * @return 0 on success, otherwhise 1
  */
-static int configure(as_module * m) {
+static int configure(as_module * m, void * config) {
+    mod_lua_context *   ctx = (mod_lua_context *) m->source;
+    mod_lua_config *    cfg = (mod_lua_config *) config;
+    ctx->system_path = strdup(cfg->system_path);
+    ctx->user_path   = strdup(cfg->user_path);
     return 0;
+}
+
+static char * concat(const char * a, const char * b) {
+    size_t al = strlen(a);
+    size_t bl = strlen(b);
+    char * c = malloc(al + bl + 1);
+    memcpy(c, a, al);
+    memcpy(c + al, b, bl); // includes terminating null
+    c[al + bl] = 0;
+    return c;
 }
 
 /**
@@ -72,22 +95,42 @@ static int configure(as_module * m) {
  *
  * @return a new lua_State
  */
-static lua_State * create_state() {
+static lua_State * create_state(as_module * m) {
+    mod_lua_context * ctx = (mod_lua_context *) m->source;
 
     lua_State * l = lua_open();
     luaL_openlibs(l);
-    
-    int error = luaL_dofile(l, "/home/chris/projects/misc/aerospike-lua/src/lua/aerospike.lua");
-    if ( error ) {
-        fprintf(stderr, "%s", lua_tostring(l, -1));
-        lua_pop(l, 1);  // pop error message from the stack
-    }
+
+    lua_getglobal(l, "package");
+    lua_getfield(l, -1, "path");
+
+    char *          usrpath     = concat(ctx->user_path,"/?.lua");
+    char *          usrpath2    = concat(";",usrpath);
+    const char *    oldpath     = lua_tostring(l, -1);
+    char *          newpath     = concat(oldpath,usrpath2);
+
+    lua_pop(l, 1);
+    lua_pushstring(l, newpath);
+    lua_setfield(l, -2, "path");
+    lua_pop(l, 1);
 
     mod_lua_aerospike_register(l);
     mod_lua_record_register(l);
     mod_lua_iterator_register(l);
     mod_lua_stream_register(l);
 
+    char * aerospike_lua = concat(ctx->system_path,"/aerospike.lua");
+    int error = luaL_dofile(l, aerospike_lua);
+    if ( error ) {
+        fprintf(stderr, "%s", lua_tostring(l, -1));
+        lua_pop(l, 1);
+    }
+
+    free(usrpath);
+    free(usrpath2);
+    free(newpath);
+    free(aerospike_lua);
+    
     return l;
 }
 
@@ -100,7 +143,7 @@ static lua_State * create_state() {
  * @return a lua_State to be used as the context.
  */
 static lua_State * open_state(as_module * m, const char * fqn) {
-    lua_State * l = create_state();
+    lua_State * l = create_state(m);
     // lua_State * L = ((mod_lua_context *)m->source)->root;
     // lua_State * l = lua_newthread(((mod_lua_context *)m->source)->root);
     // lua_pop(L, -1);

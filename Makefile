@@ -1,6 +1,6 @@
 include project/build.makefile
 
-CFLAGS = -std=c99 -Wall 
+# CFLAGS = -std=c99 -Wall 
 CFLAGS = -std=gnu99 -Wall -fPIC -fno-strict-aliasing
 #CFLAGS = -g -O3 -fno-common -fno-strict-aliasing -rdynamic  -Wall -D_FILE_OFFSET_BITS=64 -std=gnu99 -D_REENTRANT -D_GNU_SOURCE  -D MARCH_x86_64 -march=nocona  -DMEM_COUNT -MMD 
 LDFLAGS = -fPIC
@@ -28,6 +28,7 @@ mod_lua += mod_lua_record.o
 mod_lua += mod_lua_iterator.o
 mod_lua += mod_lua_stream.o
 mod_lua += mod_lua_val.o
+mod_lua += mod_lua_config.o
 
 
 test_o =  test.o
