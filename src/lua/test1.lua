@@ -12,6 +12,16 @@ function join(r,delim)
     return "join: " .. r.a .. delim .. r.b
 end
 
+function setbin(r,bin,val)
+    r[bin] = val;
+    aerospike:update(r);
+    return r[bin];
+end
+
+function getbin(r,bin)
+    return r[bin];
+end
+
 function cat(r,a,b)
     return "cat: " .. a .. b
 end
@@ -21,10 +31,12 @@ function abc(r,a,b)
     return "abc"
 end
 
+function log(r,msg)
+    log.info(msg)
+    return 1
+end
+
 function one(r)
-    log.info("one() : BEGIN")
-    log.info(r.foo or '<nil>')
-    log.info("one() : END")
     return 1
 end
 
