@@ -7,21 +7,19 @@ require("range")
 --
 -- ######################################################################################
 
-log = {}
-
-function log.trace(m, ...)
+function trace(m, ...)
     return aerospike:log(4, string.format(m, ...))
 end
 
-function log.debug(m, ...)
+function debug(m, ...)
     return aerospike:log(3, string.format(m, ...))
 end
 
-function log.info(m, ...)
+function info(m, ...)
     return aerospike:log(2, string.format(m, ...))
 end
 
-function log.warn(m, ...)
+function warn(m, ...)
     return aerospike:log(1, string.format(m, ...))
 end
 
@@ -34,13 +32,14 @@ end
 --
 -- Creates a new environment for use in apply* functions
 --
-function env(pname,fname)
+function env()
     local e = {}
     e["_G"] = {}
-    e["__PACKAGE__"] = pname;
-    e["__FUNCTION__"] = fname;
     e["setfenv"] = setfenv
-    e["log"] = log
+    e["trace"] = trace
+    e["debug"] = debug
+    e["info"] = info
+    e["warn"] = warn
     e["require"] = require
     e["pairs"] = pairs
     e["pcall"] = pcall
@@ -81,8 +80,7 @@ function apply(f, ...)
         error("invalid function name.")
         return nil
     end
-
-    pname = names[1]
+    
     fname = names[#names]
     table.remove(names,#names)
 
@@ -97,7 +95,7 @@ function apply(f, ...)
         return nil
     end
     
-    setfenv(fn,env(pname,fname))
+    setfenv(fn,env())
 
     return pcall(fn, ...)
 end

@@ -1,11 +1,12 @@
 
+local math = require "test_math"
+
 function record(r)
     return r.a
 end
 
-
 function sum(r,a,b)
-    return a+b
+    return math.add(a,b)
 end
 
 function join(r,delim)
@@ -27,12 +28,12 @@ function cat(r,a,b)
 end
 
 function abc(r,a,b)
-    log.info(r,a,b)
+    info(r,a,b)
     return "abc"
 end
 
 function log(r,msg)
-    log.info(msg)
+    info(msg)
     return 1
 end
 
