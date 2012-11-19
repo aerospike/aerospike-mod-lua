@@ -90,6 +90,29 @@ static char * concat(const char * a, const char * b) {
     return c;
 }
 
+static void package_path_set(lua_State * l, char * system_path, char * user_path) {
+    int stack = 0;
+
+    lua_getglobal(l, "package");
+    lua_getfield(l, -1, "path");
+    stack += 1;
+
+    lua_pushstring(l, ";");
+    lua_pushstring(l, system_path);
+    lua_pushstring(l, "/?.lua");
+    stack += 3;
+    
+    lua_pushstring(l, ";");
+    lua_pushstring(l, user_path);
+    lua_pushstring(l, "/?.lua");
+    stack += 3;
+
+    lua_concat(l, stack);
+
+    lua_setfield(l, -2, "path");
+    lua_pop(l, 1);
+}
+
 /**
  * Creates a new context (lua_State) populating it with default values.
  *
@@ -101,18 +124,7 @@ static lua_State * create_state(as_module * m) {
     lua_State * l = lua_open();
     luaL_openlibs(l);
 
-    lua_getglobal(l, "package");
-    lua_getfield(l, -1, "path");
-
-    char *          usrpath     = concat(ctx->user_path,"/?.lua");
-    char *          usrpath2    = concat(";",usrpath);
-    const char *    oldpath     = lua_tostring(l, -1);
-    char *          newpath     = concat(oldpath,usrpath2);
-
-    lua_pop(l, 1);
-    lua_pushstring(l, newpath);
-    lua_setfield(l, -2, "path");
-    lua_pop(l, 1);
+    package_path_set(l, ctx->system_path, ctx->user_path);
 
     mod_lua_aerospike_register(l);
     mod_lua_record_register(l);
@@ -126,9 +138,6 @@ static lua_State * create_state(as_module * m) {
         lua_pop(l, 1);
     }
 
-    free(usrpath);
-    free(usrpath2);
-    free(newpath);
     free(aerospike_lua);
     
     return l;

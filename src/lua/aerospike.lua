@@ -51,7 +51,9 @@ function env()
     e["Stream"] = Stream
     e["Iterator"] = Iterator
     e["aerospike"] = aerospike
-    e["print"] = print;
+    e["print"] = print
+    e['package'] = package
+    e['select'] = select
     return e
 end
 
