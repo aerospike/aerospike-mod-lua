@@ -19,9 +19,9 @@ To build the test app:
 
 	$ make test
 
-To build a static archive `mod_lua.a`:
+To build a static archive `libmod_lua.a`:
 
-	$ make mod_lua.a
+	$ make libmod_lua.a
 
 To build a dynamic library `libmod_lua.so`:
 
