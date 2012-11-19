@@ -37,13 +37,11 @@ test_o += $(as_types) $(as_module) $(mod_lua)
 val_test_o =  val_test.o
 val_test_o += $(as_types)
 
-test: $(call objects, $(test_o)) | $(TARGET_BIN) libmod_lua.so
-	$(call build, $(empty), target/Linux-x86_64/lib,  mod_lua lua, $(empty))
+all: libmod_lua.a
 
 libmod_lua.so: $(call objects, $(as_types) $(as_module) $(mod_lua)) | $(TARGET_LIB)
 	$(call library, $(empty), $(empty), lua, $(empty))
 
-mod_lua.a: $(call objects, $(as_types) $(as_module) $(mod_lua)) | $(TARGET_LIB)
+libmod_lua.a: $(call objects, $(as_types) $(as_module) $(mod_lua)) | $(TARGET_LIB)
 	$(call archive, $(empty), $(empty), lua, $(empty))
 
-all: app
