@@ -225,9 +225,10 @@ static int pushargs(lua_State * l, as_list * args) {
  */
 static int apply_record(as_module * m, as_aerospike * as, const char * fqn, as_rec * r, as_list * args, as_result * res) {
 
-    lua_State *     l       = (lua_State *) NULL;     // Lua State
-    int             argc    = 0;                      // Number of arguments pushed onto the stack
-    as_val *        ret     = (as_val *) NULL;        // Return value from call
+    lua_State *     l       = (lua_State *) NULL;   // Lua State
+    int             argc    = 0;                    // Number of arguments pushed onto the stack
+    as_val *        rv      = (as_val *) NULL;      // Return value from pcall
+    int             rc      = 0;                    // Return code from pcall
 
     LOG("BEGIN")
 
@@ -257,16 +258,19 @@ static int apply_record(as_module * m, as_aerospike * as, const char * fqn, as_r
     
     // call apply_record(f, r, argc)
     LOG("call apply_record()");
-    lua_pcall(l, argc, 1, 0);
+    rc = lua_pcall(l, argc, 1, 0);
 
     // Convert the return value from a lua type to a val type
     LOG("convert lua type to val");
-    ret = mod_lua_toval(l, -1);
+    rv = mod_lua_toval(l, -1);
 
-    // Make it a success
-    // Note: This is too simplistic, as it is not catching errors.
-    as_result_tosuccess(res, ret);
-
+    if ( rc == 0 ) {
+        as_result_tosuccess(res, rv);
+    }
+    else {
+        as_result_tofailure(res, rv);
+    }
+    
     // Pop the return value off the stack
     LOG("pop return value from the stack");
     lua_pop(l, -1);
