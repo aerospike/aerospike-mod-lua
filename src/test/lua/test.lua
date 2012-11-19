@@ -9,8 +9,16 @@ function sum(r,a,b)
     return math.add(a,b)
 end
 
-function join(r,delim)
-    return "join: " .. r.a .. delim .. r.b
+function join(r,delim,...)
+    local out = ''
+    local len = select('#',...)
+    for i=1, len do
+        if i > 1 then
+            out = out .. (delim or ',')
+        end
+        out = out .. r[select(i,...)]
+    end
+    return out
 end
 
 function setbin(r,bin,val)
@@ -23,8 +31,8 @@ function getbin(r,bin)
     return r[bin];
 end
 
-function cat(r,a,b)
-    return "cat: " .. a .. b
+function cat(r,a,b,c,d,e,f)
+    return (a or '') .. (b or '') .. (c or '') .. (d or '') .. (e or '') .. (f or '')
 end
 
 function abc(r,a,b)
