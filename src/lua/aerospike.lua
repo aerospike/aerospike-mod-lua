@@ -3,7 +3,7 @@ require("range")
 
 -- ######################################################################################
 --
--- LOGGING FACILITY
+-- LOG FUNCTIONS
 --
 -- ######################################################################################
 
@@ -34,12 +34,10 @@ end
 --
 function env()
     local e = {}
+
+    -- standard lua
     e["_G"] = {}
     e["setfenv"] = setfenv
-    e["trace"] = trace
-    e["debug"] = debug
-    e["info"] = info
-    e["warn"] = warn
     e["require"] = require
     e["pairs"] = pairs
     e["pcall"] = pcall
@@ -47,59 +45,23 @@ function env()
     e["ipairs"] = ipairs
     e["getmetatable"] = getmetatable
     e["setmetatable"] = setmetatable
+    e["print"] = print
+    e['package'] = package
+    e['select'] = select
+
+    -- aerospike types
     e["Record"] = Record
     e["Stream"] = Stream
     e["Iterator"] = Iterator
     e["aerospike"] = aerospike
-    e["print"] = print
-    e['package'] = package
-    e['select'] = select
+
+    -- logging functions
+    e["trace"] = trace
+    e["debug"] = debug
+    e["info"] = info
+    e["warn"] = warn
+
     return e
-end
-
--- 
--- Generic apply function.
--- It accepts the fully-qualified name of the function to call and arguments, then
--- loads the function and calles it.
--- 
--- @param f fully-qualified function name
--- @param ... arguments for the function
---
-function apply(f, ...)
-
-    local names = {}
-    local fname = ""
-    local fn = nil
-
-    if #f <= 0 then
-        error("missing function name.")
-        return nil
-    end
-
-    for name in f:gmatch("%w+") do names[#names+1] = name end
-
-    if #names <= 0 then
-        error("invalid function name.")
-        return nil
-    end
-    
-    fname = names[#names]
-    table.remove(names,#names)
-
-    if #names > 0 then
-        require(table.concat(names,"/"))
-    end
-
-    fn = _G[fname]
-
-    if fn == nil then
-        error("function not found: " .. f)
-        return nil
-    end
-    
-    setfenv(fn,env())
-
-    return pcall(fn, ...)
 end
 
 --
@@ -111,7 +73,8 @@ end
 -- @return result of the called function or nil.
 -- 
 function apply_record(f, r, ...)
-    success, result = apply(f, r, ...)
+    setfenv(f,env())
+    success, result = pcall(f, r, ...)
     if success then
         return result
     else
@@ -130,7 +93,8 @@ end
 -- 
 
 function apply_stream(f, s, ...)
-    success, result = apply(f, StreamOps_create(), ...)
+    setfenv(f,env())
+    success, result = pcall(f, StreamOps_create(), ...)
     if success then
         return (StreamOps_eval(s, result))[1]
     else

@@ -18,40 +18,40 @@
 #include <lauxlib.h>
 #include <lualib.h>
 
-// #define _GNU_SOURCE
 #include <stdio.h>
 
-/**
- * Lua Module Specific Data
- * This will populate the module.source field
- */
-struct mod_lua_context_s {
-    char * system_path;
-    char * user_path;
-};
-
-/**
- * Single Instance of the Lua Module Specific Data
- */
-static mod_lua_context lua = {
-    .system_path    = NULL,
-    .user_path      = NULL
-};
 
 #define LOG(m) \
     // printf("%s:%d  -- %s\n",__FILE__,__LINE__, m);
+
+typedef struct mod_lua_context_s mod_lua_context;
 
 static const as_module_hooks hooks;
 
 static int init(as_module *);
 static int configure(as_module *, void *);
-static int apply_record(as_module *, as_aerospike * as, const char *, as_rec *, as_list *, as_result *);
-static int apply_stream(as_module *, as_aerospike * as, const char *, as_stream *, as_list *, as_result *);
+static int apply_record(as_module *, as_aerospike * as, const char *, const char *, as_rec *, as_list *, as_result *);
+static int apply_stream(as_module *, as_aerospike * as, const char *, const char *, as_stream *, as_list *, as_result *);
 
 static lua_State * create_state();
 static lua_State * open_state(as_module * m, const char * f);
 static int close_state(as_module * m, const char * f, lua_State * l);
 
+/**
+ * Lua Module Specific Data
+ * This will populate the module.source field
+ */
+static struct mod_lua_context_s {
+    lua_State * lua_cache;
+    bool        cache_enabled;
+    char *      system_path;
+    char *      user_path;
+} lua = {
+    .lua_cache      = NULL,
+    .cache_enabled  = true,
+    .system_path    = NULL,
+    .user_path      = NULL
+};
 
 /**
  * Module Initializer.
@@ -75,19 +75,52 @@ static int init(as_module * m) {
 static int configure(as_module * m, void * config) {
     mod_lua_context *   ctx = (mod_lua_context *) m->source;
     mod_lua_config *    cfg = (mod_lua_config *) config;
-    ctx->system_path = strdup(cfg->system_path);
-    ctx->user_path   = strdup(cfg->user_path);
-    return 0;
-}
+    
+    ctx->cache_enabled  = cfg->cache_enabled;
+    ctx->system_path    = strdup(cfg->system_path);
+    ctx->user_path      = strdup(cfg->user_path);
 
-static char * concat(const char * a, const char * b) {
-    size_t al = strlen(a);
-    size_t bl = strlen(b);
-    char * c = malloc(al + bl + 1);
-    memcpy(c, a, al);
-    memcpy(c + al, b, bl); // includes terminating null
-    c[al + bl] = 0;
-    return c;
+    if ( ctx->cache_enabled ) {
+        
+        if ( ctx->lua_cache ) {
+            lua_close(ctx->lua_cache);
+            ctx->lua_cache = NULL;
+        }
+
+        ctx->lua_cache = lua_open();
+
+        DIR *           dir             = NULL;
+        struct dirent * entry           = NULL;
+        char            filename[128]   = {0};
+
+        dir = opendir(ctx->user_path);
+        
+        if ( dir == 0 ) {
+            return -1;
+        }
+        
+        while ( (entry = readdir(dir)) && entry->d_name ) {
+
+            char * name = entry->d_name;
+            size_t len = strlen(name);
+
+            if ( len < 4 ) continue;
+
+            if ( strcmp(&name[len-4],".lua") != 0 ) continue;
+            
+            strncpy(filename, name, len-4);
+
+            lua_State * l = create_state(m, filename);
+
+            lua_pushlightuserdata(ctx->lua_cache, l);
+            lua_setglobal(ctx->lua_cache, filename);
+        }
+
+        closedir(dir);
+        
+    }
+
+    return 0;
 }
 
 static void package_path_set(lua_State * l, char * system_path, char * user_path) {
@@ -118,10 +151,11 @@ static void package_path_set(lua_State * l, char * system_path, char * user_path
  *
  * @return a new lua_State
  */
-static lua_State * create_state(as_module * m) {
-    mod_lua_context * ctx = (mod_lua_context *) m->source;
+static lua_State * create_state(as_module * m, const char * filename) {
+    mod_lua_context *   ctx = (mod_lua_context *) m->source;
+    lua_State *         l   = NULL;
 
-    lua_State * l = lua_open();
+    l = lua_open();
     luaL_openlibs(l);
 
     package_path_set(l, ctx->system_path, ctx->user_path);
@@ -131,15 +165,14 @@ static lua_State * create_state(as_module * m) {
     mod_lua_iterator_register(l);
     mod_lua_stream_register(l);
 
-    char * aerospike_lua = concat(ctx->system_path,"/aerospike.lua");
-    int error = luaL_dofile(l, aerospike_lua);
-    if ( error ) {
-        fprintf(stderr, "%s", lua_tostring(l, -1));
-        lua_pop(l, 1);
-    }
+    lua_getglobal(l, "require");
+    lua_pushstring(l, "aerospike");
+    lua_call(l, 1, 1);
 
-    free(aerospike_lua);
-    
+    lua_getglobal(l, "require");
+    lua_pushstring(l, filename);
+    lua_call(l, 1, 1);
+
     return l;
 }
 
@@ -151,12 +184,21 @@ static lua_State * create_state(as_module * m) {
  * @param fqn the fully qualified name of the function the context will be used for.
  * @return a lua_State to be used as the context.
  */
-static lua_State * open_state(as_module * m, const char * fqn) {
-    lua_State * l = create_state(m);
-    // lua_State * L = ((mod_lua_context *)m->source)->root;
-    // lua_State * l = lua_newthread(((mod_lua_context *)m->source)->root);
-    // lua_pop(L, -1);
-    return l;
+static lua_State * open_state(as_module * m, const char * filename) {
+
+    mod_lua_context *   ctx = (mod_lua_context *) m->source;
+
+    if ( ctx->cache_enabled == true && ctx->lua_cache != NULL ) {
+        lua_getglobal(ctx->lua_cache, filename);
+        lua_State * root = (lua_State *) lua_touserdata(ctx->lua_cache, -1);
+        lua_State * node = lua_newthread(root);
+        lua_pop(ctx->lua_cache, -1);
+        lua_pop(root, -1);
+        return node;
+    }
+    else {
+        return create_state(m, filename);
+    }
 }
 
 /**
@@ -168,8 +210,15 @@ static lua_State * open_state(as_module * m, const char * fqn) {
  * @return 0 on success, otherwise 1
  */
 static int close_state(as_module * m, const char * fqn, lua_State * l) {
-    lua_gc(l, LUA_GCCOLLECT, 0);
-    lua_close(l);
+    mod_lua_context *   ctx = (mod_lua_context *) m->source;
+
+    if ( ctx->cache_enabled == true && ctx->lua_cache != NULL ) {
+        lua_gc(l, LUA_GCCOLLECT, 0);
+    }
+    else {
+        lua_gc(l, LUA_GCCOLLECT, 0);
+        lua_close(l);
+    }
     return 0;
 }
 
@@ -184,24 +233,23 @@ static int pushargs(lua_State * l, as_list * args) {
     LOG("pushargs()");
     int argc = 0;
     as_iterator * i = as_list_iterator(args);
-
     while( as_iterator_has_next(i) ) {
         const as_val * arg = as_iterator_next(i);
-        as_integer * i = NULL;
-        as_string * s  = NULL;
         switch ( as_val_type(arg) ) {
-            case AS_INTEGER :
-                i = as_integer_fromval(arg);
+            case AS_INTEGER : {
+                as_integer * i = as_integer_fromval(arg);
                 lua_pushinteger(l, as_integer_toint(i));
                 argc++;
                 i = NULL;
                 break;
-            case AS_STRING :
-                s = as_string_fromval(arg);
+            }
+            case AS_STRING : {
+                as_string * s = as_string_fromval(arg);
                 lua_pushstring(l, as_string_tostring(s));
                 s = NULL;
                 argc++;
                 break;
+            }
             default:
                 break;
         }
@@ -223,20 +271,21 @@ static int pushargs(lua_State * l, as_list * args) {
  * @param result pointer to a val that will be populated with the result.
  * @return 0 on success, otherwise 1
  */
-static int apply_record(as_module * m, as_aerospike * as, const char * fqn, as_rec * r, as_list * args, as_result * res) {
+static int apply_record(as_module * m, as_aerospike * as, const char * filename, const char * function, as_rec * r, as_list * args, as_result * res) {
 
-    lua_State *     l       = (lua_State *) NULL;   // Lua State
-    int             argc    = 0;                    // Number of arguments pushed onto the stack
-    as_val *        rv      = (as_val *) NULL;      // Return value from pcall
-    int             rc      = 0;                    // Return code from pcall
+    lua_State * l       = (lua_State *) NULL;   // Lua State
+    int         argc    = 0;                    // Number of arguments pushed onto the stack
+    as_val *    rv      = (as_val *) NULL;      // Return value from pcall
+    int         rc      = 0;                    // Return code from pcall
 
     LOG("BEGIN")
 
     // lease a context
     LOG("open context")
-    l = open_state(m, fqn);
+    l = open_state(m, filename);
     
     // push aerospike into the global scope
+    LOG("push aerospike into the global scope");
     mod_lua_pushaerospike(l, as);
     lua_setglobal(l, "aerospike");
     
@@ -244,9 +293,9 @@ static int apply_record(as_module * m, as_aerospike * as, const char * fqn, as_r
     LOG("push apply_record() onto the stack");
     lua_getglobal(l, "apply_record");
     
-    // push the fully qualified name (fqn) of the function onto the stack
-    LOG("push the fully qualified name (fqn) of the function onto the stack");
-    lua_pushstring(l, fqn);
+    // push function onto the stack
+    LOG("push function onto the stack");
+    lua_getglobal(l, function);
 
     // push the record onto the stack
     LOG("push the record onto the stack");
@@ -254,9 +303,12 @@ static int apply_record(as_module * m, as_aerospike * as, const char * fqn, as_r
 
     // push each argument onto the stack
     LOG("push each argument onto the stack");
-    argc = pushargs(l, args) + 2;
+    argc = pushargs(l, args);
+
+    // function + stream + arglist
+    argc = argc + 2;
     
-    // call apply_record(f, r, argc)
+    // call apply_record(f, r, ...)
     LOG("call apply_record()");
     rc = lua_pcall(l, argc, 1, 0);
 
@@ -277,7 +329,7 @@ static int apply_record(as_module * m, as_aerospike * as, const char * fqn, as_r
 
     // release the context
     LOG("close the context");
-    close_state(m, fqn, l);
+    close_state(m, filename, l);
 
     LOG("END");
     return 0;
@@ -298,19 +350,21 @@ static int apply_record(as_module * m, as_aerospike * as, const char * fqn, as_r
  * @param result pointer to a val that will be populated with the result.
  * @return 0 on success, otherwise 1
  */
-static int apply_stream(as_module * m, as_aerospike * as, const char * fqn, as_stream * s, as_list * args, as_result * res) {
+static int apply_stream(as_module * m, as_aerospike * as, const char * filename, const char * function, as_stream * s, as_list * args, as_result * res) {
 
-    lua_State * l = (lua_State *) NULL;     // Lua State
-    int argc = 0;                           // Number of arguments pushed onto the stack
-    as_val * ret = (as_val *) NULL;               // Return value from call
+    lua_State * l       = (lua_State *) NULL;   // Lua State
+    int         argc    = 0;                    // Number of arguments pushed onto the stack
+    as_val *    rv      = (as_val *) NULL;      // Return value from pcall
+    int         rc      = 0;                    // Return code from pcall
 
     LOG("apply_stream: BEGIN")
 
     // lease a context
     LOG("open context")
-    l = open_state(m, fqn);
+    l = open_state(m, filename);
 
     // push aerospike into the global scope
+    LOG("push aerospike into the global scope");
     mod_lua_pushaerospike(l, as);
     lua_setglobal(l, "aerospike");
 
@@ -318,9 +372,9 @@ static int apply_stream(as_module * m, as_aerospike * as, const char * fqn, as_s
     LOG("push apply_stream() onto the stack");
     lua_getglobal(l, "apply_stream");
     
-    // push the fully qualified name (fqn) of the function onto the stack
-    LOG("push the fully qualified name (fqn) of the function onto the stack");
-    lua_pushstring(l, fqn);
+    // push function onto the stack
+    LOG("push function onto the stack");
+    lua_getglobal(l, function);
 
     // push the stream onto the stack
     LOG("push the stream iterator onto the stack");
@@ -328,19 +382,25 @@ static int apply_stream(as_module * m, as_aerospike * as, const char * fqn, as_s
 
     // push each argument onto the stack
     LOG("push each argument onto the stack");
-    argc = pushargs(l, args) + 2;
+    argc = pushargs(l, args); 
+
+    // function + stream + arglist
+    argc = argc + 2;
     
-    // call apply_stream(f, s, argc)
+    // call apply_stream(f, s, ...)
     LOG("call apply_stream()");
-    lua_pcall(l, argc, 1, 0);
+    rc = lua_pcall(l, argc, 1, 0);
 
     // Convert the return value from a lua type to a val type
     LOG("convert lua type to val");
-    ret = mod_lua_toval(l, -1);
+    rv = mod_lua_toval(l, -1);
     
-    // Make it a success
-    // Note: This is too simplistic, as it is not catching errors.
-    as_result_tosuccess(res, ret);
+    if ( rc == 0 ) {
+        as_result_tosuccess(res, rv);
+    }
+    else {
+        as_result_tofailure(res, rv);
+    }
 
     // Pop the return value off the stack
     LOG("pop return value from the stack");
@@ -348,7 +408,7 @@ static int apply_stream(as_module * m, as_aerospike * as, const char * fqn, as_s
 
     // release the context
     LOG("close the context");
-    close_state(m, fqn, l);
+    close_state(m, filename, l);
 
     LOG("apply_stream: END");
     return 0;
