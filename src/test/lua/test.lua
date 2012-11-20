@@ -49,6 +49,11 @@ function one(r)
     return 1
 end
 
+function failnil(r)
+    warn('failnil')
+    return r.empty
+end
+
 local function f1(b,a)
     b = b or {}
     b["sum"] = (b["sum"] or 0) + a
