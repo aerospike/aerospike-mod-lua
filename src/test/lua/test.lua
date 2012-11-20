@@ -35,6 +35,10 @@ function cat(r,a,b,c,d,e,f)
     return (a or '') .. (b or '') .. (c or '') .. (d or '') .. (e or '') .. (f or '')
 end
 
+function catfail(r,a,b,c,d,e,f)
+    return a .. b .. c .. d .. e .. f
+end
+
 function abc(r,a,b)
     info(r,a,b)
     return "abc"
