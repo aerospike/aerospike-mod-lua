@@ -191,9 +191,19 @@ static lua_State * open_state(as_module * m, const char * filename) {
     if ( ctx->cache_enabled == true && ctx->lua_cache != NULL ) {
         lua_getglobal(ctx->lua_cache, filename);
         lua_State * root = (lua_State *) lua_touserdata(ctx->lua_cache, -1);
+
+        if ( root == NULL ) {
+            root = create_state(m, filename);
+            lua_pushlightuserdata(ctx->lua_cache, root);
+            lua_setglobal(ctx->lua_cache, filename);
+        }
+
+        if ( root == NULL ) return NULL;
+
         lua_State * node = lua_newthread(root);
         lua_pop(ctx->lua_cache, -1);
         lua_pop(root, -1);
+
         return node;
     }
     else {
