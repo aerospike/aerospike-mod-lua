@@ -115,7 +115,7 @@ function apply_record(f, r, ...)
     if success then
         return result
     else
-        error(result)
+        error(result, 2)
         return nil
     end
 end
@@ -134,7 +134,7 @@ function apply_stream(f, s, ...)
     if success then
         return (StreamOps_eval(s, result))[1]
     else
-        error(result)
+        error(result, 2)
         return nil
     end
 end
