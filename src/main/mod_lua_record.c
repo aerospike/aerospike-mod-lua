@@ -60,7 +60,13 @@ static int mod_lua_record_newindex(lua_State * l) {
     as_rec * r = mod_lua_checkrecord(l, 1);
     const char * name = luaL_optstring(l, 2, 0);
     as_val * value = (as_val *) mod_lua_toval(l, 3);
-    as_rec_set(r, name, value);
+
+    if ( value == NULL ) {
+        as_rec_remove(r, name);
+    }
+    else {
+        as_rec_set(r, name, value);
+    }
     return 0;
 }
 
@@ -76,14 +82,14 @@ static int mod_lua_record_gc(lua_State * l) {
 }
 
 /**
- * Methods to be added to the object
+ * record table
  */
-static const luaL_reg mod_lua_record_methods[] = {
+static const luaL_reg mod_lua_record_table[] = {
     {0, 0}
 };
 
 /**
- * Metatable events to be added to the object
+ * record metatable
  */
 static const luaL_reg mod_lua_record_metatable[] = {
     {"__index",     mod_lua_record_index},
@@ -97,22 +103,23 @@ static const luaL_reg mod_lua_record_metatable[] = {
  */
 int mod_lua_record_register(lua_State * l) {
 
-    int methods, metatable;
+    int table, metatable;
 
-    luaL_register(l, MOD_LUA_RECORD, mod_lua_record_methods);
-    methods = lua_gettop(l);
+    // register the table
+    luaL_register(l, MOD_LUA_RECORD, mod_lua_record_table);
+    table = lua_gettop(l);
 
+    // register the metatable
     luaL_newmetatable(l, MOD_LUA_RECORD);
-    
     luaL_register(l, 0, mod_lua_record_metatable);
     metatable = lua_gettop(l);
 
     // lua_pushliteral(l, "__index");
-    // lua_pushvalue(l, methods);
+    // lua_pushvalue(l, table);
     // lua_rawset(l, metatable);
 
     lua_pushliteral(l, "__metatable");
-    // lua_pushvalue(l, methods);
+    lua_pushvalue(l, table);
     lua_rawset(l, metatable);
     
     lua_pop(l, 1);

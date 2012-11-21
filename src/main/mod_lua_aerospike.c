@@ -138,9 +138,9 @@ static int mod_lua_aerospike_gc(lua_State * l) {
 }
 
 /**
- * aerospike functions
+ * aerospike table
  */
-static const luaL_reg mod_lua_aerospike_functions[] = {
+static const luaL_reg mod_lua_aerospike_table[] = {
     {"get",         mod_lua_aerospike_get},
     {"put",         mod_lua_aerospike_put},
     {"update",      mod_lua_aerospike_update},
@@ -150,11 +150,9 @@ static const luaL_reg mod_lua_aerospike_functions[] = {
 };
 
 /**
- * Metatable events to be added to the object
+ * aerospike metatable
  */
 static const luaL_reg mod_lua_aerospike_metatable[] = {
-    // {"__index",     mod_lua_aerospike_index},
-    // {"__newindex",  mod_lua_aerospike_newindex},
     {"__gc",        mod_lua_aerospike_gc},
     {0, 0}
 };
@@ -165,22 +163,23 @@ static const luaL_reg mod_lua_aerospike_metatable[] = {
  */
 int mod_lua_aerospike_register(lua_State * l) {
 
-    int methods, metatable;
+    int table, metatable;
 
-    luaL_register(l, MOD_LUA_AEROSPIKE, mod_lua_aerospike_functions);
-    methods = lua_gettop(l);
+    // register the table
+    luaL_register(l, MOD_LUA_AEROSPIKE, mod_lua_aerospike_table);
+    table = lua_gettop(l);
 
+    // register the metatable
     luaL_newmetatable(l, MOD_LUA_AEROSPIKE);
-    
     luaL_register(l, 0, mod_lua_aerospike_metatable);
     metatable = lua_gettop(l);
 
     lua_pushliteral(l, "__index");
-    lua_pushvalue(l, methods);
+    lua_pushvalue(l, table);
     lua_rawset(l, metatable);
 
     lua_pushliteral(l, "__metatable");
-    lua_pushvalue(l, methods);
+    lua_pushvalue(l, table);
     lua_rawset(l, metatable);
     
     lua_pop(l, 1);

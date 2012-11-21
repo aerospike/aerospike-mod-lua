@@ -90,9 +90,9 @@ static int mod_lua_iterator_gc(lua_State * l) {
 
 
 /**
- * iterator methods
+ * iterator table
  */
-static const luaL_reg mod_lua_iterator_methods[] = {
+static const luaL_reg mod_lua_iterator_table[] = {
     {"has_next",        mod_lua_iterator_has_next},
     {"next",            mod_lua_iterator_next},
     {0, 0}
@@ -111,22 +111,23 @@ static const luaL_reg mod_lua_iterator_metatable[] = {
  */
 int mod_lua_iterator_register(lua_State * l) {
 
-    int methods, metatable;
+    int table, metatable;
 
-    luaL_register(l, MOD_LUA_ITERATOR, mod_lua_iterator_methods);
-    methods = lua_gettop(l);
+    // register the table
+    luaL_register(l, MOD_LUA_ITERATOR, mod_lua_iterator_table);
+    table = lua_gettop(l);
 
+    // register the metatable
     luaL_newmetatable(l, MOD_LUA_ITERATOR);
-    
     luaL_register(l, 0, mod_lua_iterator_metatable);
     metatable = lua_gettop(l);
 
     lua_pushliteral(l, "__index");
-    lua_pushvalue(l, methods);
+    lua_pushvalue(l, table);
     lua_rawset(l, metatable);
 
     lua_pushliteral(l, "__metatable");
-    lua_pushvalue(l, methods);
+    lua_pushvalue(l, table);
     lua_rawset(l, metatable);
     
     lua_pop(l, 1);

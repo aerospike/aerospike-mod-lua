@@ -61,9 +61,9 @@ static int mod_lua_stream_iterator(lua_State * l) {
 }
 
 /**
- * stream methods
+ * stream table
  */
-static const luaL_reg mod_lua_stream_methods[] = {
+static const luaL_reg mod_lua_stream_table[] = {
     {"iterator",        mod_lua_stream_iterator},
     {0, 0}
 };
@@ -79,22 +79,24 @@ static const luaL_reg mod_lua_stream_metatable[] = {
  * Registers the iterator library
  */
 int mod_lua_stream_register(lua_State * l) {
-    int methods, metatable;
-
-    luaL_register(l, MOD_LUA_STREAM, mod_lua_stream_methods);
-    methods = lua_gettop(l);
-
-    luaL_newmetatable(l, MOD_LUA_STREAM);
     
+    int table, metatable;
+
+    // register the table
+    luaL_register(l, MOD_LUA_STREAM, mod_lua_stream_table);
+    table = lua_gettop(l);
+
+    // register the metatable
+    luaL_newmetatable(l, MOD_LUA_STREAM);
     luaL_register(l, 0, mod_lua_stream_metatable);
     metatable = lua_gettop(l);
 
     lua_pushliteral(l, "__index");
-    lua_pushvalue(l, methods);
+    lua_pushvalue(l, table);
     lua_rawset(l, metatable);
 
     lua_pushliteral(l, "__metatable");
-    lua_pushvalue(l, methods);
+    lua_pushvalue(l, table);
     lua_rawset(l, metatable);
     
     lua_pop(l, 1);
