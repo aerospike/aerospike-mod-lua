@@ -1,6 +1,12 @@
 
 local math = require "test_math"
 
+-- this is not accessible, really, give it a try
+global_counter = 0
+
+-- this is accessible
+local file_local_counter = 0;
+
 function record(r)
     return r.a
 end
@@ -31,6 +37,12 @@ function getbin(r,bin)
     return r[bin];
 end
 
+function rmbin(r,bin)
+    r[bin] = nil
+    -- aerospike:update(r)
+    return 1;
+end
+
 function cat(r,a,b,c,d,e,f)
     return (a or '') .. (b or '') .. (c or '') .. (d or '') .. (e or '') .. (f or '')
 end
@@ -40,13 +52,20 @@ function catfail(r,a,b,c,d,e,f)
 end
 
 function abc(r,a,b)
-    info(r,a,b)
     return "abc"
 end
 
 function log(r,msg)
     info(msg)
     return 1
+end
+
+function global_count(r)
+    return global_counter
+end
+
+function local_count(r)
+    return file_local_counter
 end
 
 function one(r)
