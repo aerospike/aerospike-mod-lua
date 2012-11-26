@@ -10,6 +10,6 @@ struct mod_lua_config_s {
     char *  user_path;
 };
 
-mod_lua_config * mod_lua_config_create(bool, char *, char *);
+mod_lua_config * mod_lua_config_new(bool, char *, char *);
 
 int mod_lua_config_free(mod_lua_config *);

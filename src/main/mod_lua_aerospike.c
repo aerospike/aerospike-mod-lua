@@ -61,31 +61,42 @@ static as_aerospike * mod_lua_checkaerospike(lua_State * l, int index) {
 /**
  * aerospike.get(namespace, set, key) => result<record>
  */
-static int mod_lua_aerospike_get(lua_State * l) {
-    as_aerospike *  a   = mod_lua_checkaerospike(l, 1);
-    const char *    ns  = luaL_optstring(l, 2, NULL);
-    const char *    set = luaL_optstring(l, 3, NULL);
-    const char *    key = luaL_optstring(l, 4, NULL);
-    as_rec *        r   = as_aerospike_get(a, ns, set, key);
+// static int mod_lua_aerospike_get(lua_State * l) {
+//     as_aerospike *  a   = mod_lua_checkaerospike(l, 1);
+//     const char *    ns  = luaL_optstring(l, 2, NULL);
+//     const char *    set = luaL_optstring(l, 3, NULL);
+//     const char *    key = luaL_optstring(l, 4, NULL);
+//     as_rec *        r   = as_aerospike_get(a, ns, set, key);
 
-    if ( r == NULL ) return 0;
+//     if ( r == NULL ) return 0;
 
-    mod_lua_pushrecord(l, r);
-    return 1;
-}
+//     mod_lua_pushrecord(l, r);
+//     return 1;
+// }
 
 /**
  * aerospike.put(namespace, set, key, lua_Table) => result<bool>
  */
-static int mod_lua_aerospike_put(lua_State * l) {
-    as_aerospike *  a   = mod_lua_checkaerospike(l, 1);
-    const char *    ns  = luaL_optstring(l, 2, NULL);
-    const char *    set = luaL_optstring(l, 3, NULL);
-    const char *    key = luaL_optstring(l, 4, NULL);
-    as_map *        map = NULL;
-    // as_map *        map = mod_lua_tomap(l, 5);
+// static int mod_lua_aerospike_put(lua_State * l) {
+//     as_aerospike *  a   = mod_lua_checkaerospike(l, 1);
+//     const char *    ns  = luaL_optstring(l, 2, NULL);
+//     const char *    set = luaL_optstring(l, 3, NULL);
+//     const char *    key = luaL_optstring(l, 4, NULL);
+//     as_map *        map = NULL;
+//     // as_map *        map = mod_lua_tomap(l, 5);
     
-    as_aerospike_put(a, ns, set, key, map);
+//     as_aerospike_put(a, ns, set, key, map);
+//     return 0;
+// }
+
+/**
+ * aerospike.create(record) => result<bool>
+ */
+static int mod_lua_aerospike_create(lua_State * l) {
+    as_aerospike *  a   = mod_lua_checkaerospike(l, 1);
+    as_rec *        r   = mod_lua_torecord(l, 2);
+    
+    as_aerospike_create(a, r);
     return 0;
 }
 
@@ -141,8 +152,9 @@ static int mod_lua_aerospike_gc(lua_State * l) {
  * aerospike table
  */
 static const luaL_reg mod_lua_aerospike_table[] = {
-    {"get",         mod_lua_aerospike_get},
-    {"put",         mod_lua_aerospike_put},
+    // {"get",         mod_lua_aerospike_get},
+    // {"put",         mod_lua_aerospike_put},
+    {"create",      mod_lua_aerospike_create},
     {"update",      mod_lua_aerospike_update},
     {"remove",      mod_lua_aerospike_remove},
     {"log",         mod_lua_aerospike_log},

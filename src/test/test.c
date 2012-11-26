@@ -4,6 +4,7 @@
 #include <stdlib.h>
 
 #include "mod_lua.h"
+#include "mod_lua_config.h"
 #include "as_result.h"
 #include "as_stream.h"
 #include "as_types.h"
@@ -13,6 +14,8 @@
 
 #define len(arr) sizeof( arr ) / sizeof( arr[0] )
 
+#define LOG(m) \
+    printf("%s:%d - %s\n",__FILE__,__LINE__,m);
 
 /**
  * 
@@ -24,7 +27,6 @@ static const as_val * maprecord_get(const as_rec *, const char *);
 static const int maprecord_set(const as_rec *, const char *, const as_val *);
 static const int maprecord_free(as_rec *);
 static const as_rec_hooks maprecord_hooks;
-
 
 as_rec * maprecord_create(as_map * source) {
     return as_rec_create(source, &maprecord_hooks);
@@ -38,6 +40,10 @@ static const int maprecord_set(const as_rec * r, const char * name, const as_val
     return 0;
 }
 
+static const int maprecord_remove(const as_rec * r, const char * name) {
+    return 0;
+}
+
 static const int maprecord_free(as_rec * r) {
     return 0;
 }
@@ -45,6 +51,7 @@ static const int maprecord_free(as_rec * r) {
 static const as_rec_hooks maprecord_hooks = {
     maprecord_get,
     maprecord_set,
+    maprecord_remove,
     maprecord_free
 };
 
@@ -81,17 +88,23 @@ static void show_result(as_result * res) {
     }
 }
 
-static void run_record(const char * fqn, as_list * args, as_result * res) {
+static void run_record(const char * filename, const char * function, as_list * args, as_result * res) {
 
     // map * bins = listmap_create();
     // map_set(bins, String("a"), String("x"));
     // map_set(bins, String("b"), String("y"));
     // map_set(bins, String("c"), String("z"));
 
+    LOG("fuck yeah");
+
+    as_aerospike * as = as_aerospike_create(NULL,NULL);
     as_map * bins = as_map_new();
     as_rec * rec = maprecord_create(bins);
 
-    as_module_apply_record(&mod_lua, fqn, rec, args, res);
+    LOG("fuck yeah");
+    as_module_apply_record(&mod_lua, as, filename, function, rec, args, res);
+
+    LOG("fuck yeah");
 }
 
 as_integer * stream_value = NULL;
@@ -115,33 +128,39 @@ static const int run_stream_free(as_stream * s) {
     return 0;
 }
 
-static void run_stream(const char * fqn, as_list * args, as_result * res) {
+static void run_stream(const char * filename, const char * function, as_list * args, as_result * res) {
     as_integer * i = as_integer_new(0);
     as_stream_hooks hooks = {run_stream_read, run_stream_free};
-    as_module_apply_stream(&mod_lua, fqn, as_stream_create(i, &hooks), args, res);
+    as_module_apply_stream(&mod_lua, NULL, filename, function, as_stream_create(i, &hooks), args, res);
     as_integer_free(i);
 }
 
 int main ( int argc, char ** argv ) {
 
-    mod_lua_config * config = mod_lua_config_create("src/lua", "src/test/lua");
+    if ( argc < 4 ) {
+        printf("Usage: test [record|stream] <filename> <function> [args ...]\n");
+        return 1;
+    }
+
+    mod_lua_config * config = mod_lua_config_create(false, "src/lua", "src/test/lua");
 
     as_module_init(&mod_lua);
     as_module_configure(&mod_lua, config);
 
     char * ftype = argv[1];
-    char * fqn = argv[2];
+    char * filename = argv[2];
+    char * function = argv[3];
 
-    as_list * args = arglist(argc-3, argv+3);
+    as_list * args = argc > 4 ? arglist(argc-4, argv+4) : as_list_new();
 
     int i;
     for ( i = 0; i < LIMIT; i++ ) {
         as_result res = { false, NULL };
         if ( strcmp(ftype,"record") == 0 ) {
-            run_record(fqn, args, &res);
+            run_record(filename, function, args, &res);
         }
         else {
-            run_stream(fqn, args, &res);
+            run_stream(filename, function, args, &res);
         }
         show_result(&res);
     }

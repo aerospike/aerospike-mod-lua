@@ -29,7 +29,7 @@ end
 
 function setbin(r,bin,val)
     r[bin] = val;
-    aerospike:update(r);
+    -- aerospike:update(r);
     return r[bin];
 end
 
