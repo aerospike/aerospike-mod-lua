@@ -46,8 +46,8 @@ common:
 libmod_lua.so: $(call objects, $(as_types) $(mod_lua)) | $(TARGET_LIB) $(MODULES)
 	$(call library, $(empty), $(empty), lua cf, $(empty))
 
-libmod_lua.a: $(call objects, $(as_types) $(mod_lua)) | $(TARGET_LIB) $(MODULES)
-	$(call archive, $(empty), $(empty), lua cf, $(empty))
+libmod_lua.a: $(call objects, $(as_types) $(mod_lua)) | $(TARGET_LIB) 
+	$(call archive, $(empty), $(empty), $(empty), $(empty))
 
 test: $(SOURCE_TEST)/test.c $(TARGET_LIB)/libmod_lua.a | $(TARGET_BIN)
 	$(call executable, $(empty), $(empty), lua, $(empty))
