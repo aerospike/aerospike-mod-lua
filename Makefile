@@ -6,7 +6,7 @@ LDFLAGS = -fPIC
 
 MODULES += common
 
-as_types = 	as_val.o
+as_types =  as_val.o
 as_types += as_boolean.o
 as_types += as_integer.o
 as_types += as_list.o
@@ -20,7 +20,7 @@ as_types += as_iterator.o
 as_types += as_stream.o
 as_types += as_result.o
 as_types += as_aerospike.o
-as_types = as_module.o
+as_types += as_module.o
 
 mod_lua =  mod_lua.o
 mod_lua += mod_lua_aerospike.o
