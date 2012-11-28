@@ -102,7 +102,23 @@ define build
 endef
 
 define executable
-	$(strip $(CC) $(addprefix -I, $(INC_PATH)) $(addprefix -I, $($@_inc_path)) $(addprefix -I, $(1)) $(addprefix -L, $(LIB_PATH)) $(addprefix -L, $($@_lib_path)) $(addprefix -L, $(2)) $(addprefix -l, $($@_lib)) $(addprefix -l, $(3)) $(4) $(LDFLAGS) $($@_flags) -o $(TARGET_BIN)/$@ $^ )
+	$(strip $(CC) \
+		$(addprefix -I, $(MODULES:%=modules/%/src/include)) \
+		$(addprefix -I, $(INC_PATH)) \
+		$(addprefix -I, $($@_inc_path)) \
+		$(addprefix -I, $(1)) \
+		$(addprefix -L, $(MODULES:%=modules/%/$(TARGET_LIB))) \
+		$(addprefix -L, $(LIB_PATH)) \
+		$(addprefix -L, $($@_lib_path)) \
+		$(addprefix -L, $(2)) \
+		$(addprefix -l, $($@_lib)) \
+		$(addprefix -l, $(3)) \
+		$(4) \
+		$(LDFLAGS) \
+		$($@_flags) \
+		-o $(TARGET_BIN)/$@ \
+		$^ \
+	)
 endef
 
 define archive
@@ -110,11 +126,44 @@ define archive
 endef
 
 define library
-	$(strip $(CC) -shared $(addprefix -I, $(INC_PATH)) $(addprefix -I, $($@_inc_path)) $(addprefix -I, $(1)) $(addprefix -L, $(LIB_PATH)) $(addprefix -L, $($@_lib_path)) $(addprefix -L, $(2)) $(addprefix -l, $($@_lib)) $(addprefix -l, $(3)) $(4) $(LDFLAGS) $($@_flags) -fPIC -o $(TARGET_LIB)/$@ $^ )
+	$(strip $(CC) -shared \
+		$(addprefix -I, $(MODULES:%=modules/%/src/include)) \
+		$(addprefix -I, $(INC_PATH)) \
+		$(addprefix -I, $($@_inc_path)) \
+		$(addprefix -I, $(1)) \
+		$(addprefix -L, $(MODULES:%=modules/%/$(TARGET_LIB))) \
+		$(addprefix -L, $(LIB_PATH)) \
+		$(addprefix -L, $($@_lib_path)) \
+		$(addprefix -L, $(2)) \
+		$(addprefix -l, $($@_lib)) \
+		$(addprefix -l, $(3)) \
+		$(4) \
+		$(LDFLAGS) \
+		$($@_flags) \
+		-fPIC \
+		-o $(TARGET_LIB)/$@ \
+		$^ \
+	)
 endef
 
 define object
-	$(strip $(CC) $(addprefix -I, $(INC_PATH)) $(addprefix -I, $($@_inc_path)) $(addprefix -I, $(1)) $(addprefix -L, $(LIB_PATH)) $(addprefix -L, $($@_lib_path)) $(addprefix -L, $(2)) $(addprefix -l, $($@_lib)) $(addprefix -l, $(3)) $(4) $(CFLAGS) $($@_flags) -o $@ -c $^ )
+	$(strip $(CC) \
+		$(addprefix -I, $(MODULES:%=modules/%/src/include)) \
+		$(addprefix -I, $(INC_PATH)) \
+		$(addprefix -I, $($@_inc_path)) \
+		$(addprefix -I, $(1)) \
+		$(addprefix -L, $(MODULES:%=modules/%/$(TARGET_LIB))) \
+		$(addprefix -L, $(LIB_PATH)) \
+		$(addprefix -L, $($@_lib_path)) \
+		$(addprefix -L, $(2)) \
+		$(addprefix -l, $($@_lib)) \
+		$(addprefix -l, $(3)) \
+		$(4) \
+		$(CFLAGS) \
+		$($@_flags) \
+		-o $@ \
+		-c $^ \
+	)
 endef
 
 #
