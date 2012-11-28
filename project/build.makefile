@@ -219,13 +219,14 @@ info:
 	@echo "      target:     " $(TARGET_BASE)
 	@echo "      includes:   " $(INC_PATH)
 	@echo "      libraries:  " $(LIB_PATH)
+	@echo "      modules:    " $(MODULES:%=modules/%)
 	@echo
 	@echo "  COMPILER:"
-	@echo "      compiler:   " $(CC)
+	@echo "      command:    " $(CC)
 	@echo "      flags:      " $(CFLAGS)
 	@echo
 	@echo "  LINKER:"
-	@echo "      linker:     " $(LD)
+	@echo "      command:    " $(LD)
 	@echo "      flags:      " $(LDFLAGS)
 	@echo
 
