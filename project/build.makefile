@@ -140,7 +140,6 @@ define library
 		$(4) \
 		$(LDFLAGS) \
 		$($@_flags) \
-		-fPIC \
 		-o $(TARGET_LIB)/$@ \
 		$^ \
 	)
