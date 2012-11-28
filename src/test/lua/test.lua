@@ -29,7 +29,7 @@ end
 
 function setbin(r,bin,val)
     r[bin] = val;
-    -- aerospike:update(r);
+    aerospike:update(r);
     return r[bin];
 end
 
@@ -39,8 +39,16 @@ end
 
 function rmbin(r,bin)
     r[bin] = nil
-    -- aerospike:update(r)
+    aerospike:update(r)
     return 1;
+end
+
+function setbins(r,b1,v1,b2,v2,b3)
+    r[b1] = v1;
+    r[b2] = v2;
+	r[b3] = nil;
+    aerospike:update(r);
+    return r[b1];
 end
 
 function cat(r,a,b,c,d,e,f)
