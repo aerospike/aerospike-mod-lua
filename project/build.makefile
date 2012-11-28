@@ -103,7 +103,7 @@ endef
 
 define executable
 	$(strip $(CC) \
-		$(addprefix -I, $(MODULES:%=modules/%/src/include)) \
+		$(addprefix -I, $(MODULES:%=modules/%/$(SOURCE_INCL))) \
 		$(addprefix -I, $(INC_PATH)) \
 		$(addprefix -I, $($@_inc_path)) \
 		$(addprefix -I, $(1)) \
@@ -127,7 +127,7 @@ endef
 
 define library
 	$(strip $(CC) -shared \
-		$(addprefix -I, $(MODULES:%=modules/%/src/include)) \
+		$(addprefix -I, $(MODULES:%=modules/%/$(SOURCE_INCL))) \
 		$(addprefix -I, $(INC_PATH)) \
 		$(addprefix -I, $($@_inc_path)) \
 		$(addprefix -I, $(1)) \
@@ -148,7 +148,7 @@ endef
 
 define object
 	$(strip $(CC) \
-		$(addprefix -I, $(MODULES:%=modules/%/src/include)) \
+		$(addprefix -I, $(MODULES:%=modules/%/$(SOURCE_INCL))) \
 		$(addprefix -I, $(INC_PATH)) \
 		$(addprefix -I, $($@_inc_path)) \
 		$(addprefix -I, $(1)) \
@@ -234,7 +234,7 @@ clean:
 	$(call make_each, $(MODULES:%=modules/%), clean)
 
 $(MODULES): 
-	@make -C modules/$@ all
+	make -C modules/$@ all
 
 $(TARGET_OBJ)/%.o : %.c | $(TARGET_OBJ) 
 	$(call object)
