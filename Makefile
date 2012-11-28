@@ -5,6 +5,9 @@ CFLAGS = -std=gnu99 -Wall -fPIC -fno-strict-aliasing
 #CFLAGS = -g -O3 -fno-common -fno-strict-aliasing -rdynamic  -Wall -D_FILE_OFFSET_BITS=64 -std=gnu99 -D_REENTRANT -D_GNU_SOURCE  -D MARCH_x86_64 -march=nocona  -DMEM_COUNT -MMD 
 LDFLAGS = -fPIC
 
+INC_PATH += modules/common/src/include
+
+MODULES += common
 
 as_types = 	as_val.o
 as_types += as_boolean.o
@@ -42,13 +45,16 @@ test_o += $(as_types) $(as_module) $(mod_lua)
 val_test_o =  val_test.o
 val_test_o += $(as_types)
 
-all: libmod_lua.so
+all: libmod_lua.a
 
-libmod_lua.so: $(call objects, $(as_types) $(as_module) $(mod_lua)) | $(TARGET_LIB)
-	$(call library, $(empty), $(empty), lua, $(empty))
+common: 
+	make -C modules/common all MEM_COUNT=$(MEM_COUNT)
 
-libmod_lua.a: $(call objects, $(as_types) $(as_module) $(mod_lua)) | $(TARGET_LIB)
-	$(call archive, $(empty), $(empty), lua, $(empty))
+libmod_lua.so: $(call objects, $(as_types) $(as_module) $(mod_lua)) | $(TARGET_LIB) $(MODULES)
+	$(call library, $(empty), $(empty), lua cf, $(empty))
+
+libmod_lua.a: $(call objects, $(as_types) $(as_module) $(mod_lua)) | $(TARGET_LIB) $(MODULES)
+	$(call archive, $(empty), $(empty), lua cf, $(empty))
 
 test: $(SOURCE_TEST)/test.c $(TARGET_LIB)/libmod_lua.a | $(TARGET_BIN)
 	$(call executable, $(empty), $(empty), lua, $(empty))

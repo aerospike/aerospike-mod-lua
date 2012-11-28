@@ -4,6 +4,7 @@ OS = $(shell uname)
 ARCH = $(shell arch)
 
 PROJECT = project
+MODULES = 
 
 #
 # Setup Tools
@@ -129,6 +130,13 @@ define objects
 	$(addprefix $(TARGET_OBJ)/, $(1)) 
 endef
 
+
+define make_each
+	@for i in $(1); do \
+		make -C $$i $(2);\
+	done;
+endef
+
 # 
 # Common Targets
 #
@@ -174,6 +182,10 @@ info:
 
 clean: 
 	@rm -rf $(TARGET)
+	$(call make_each, $(MODULES:%=modules/%), clean)
+
+$(MODULES): 
+	@make -C modules/$@ all
 
 $(TARGET_OBJ)/%.o : %.c | $(TARGET_OBJ) 
 	$(call object)
