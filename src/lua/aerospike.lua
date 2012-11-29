@@ -50,12 +50,10 @@ function env()
     e['select'] = select
 
     -- aerospike types
-    e["Record"] = Record
-    e["Stream"] = Stream
-    e["Iterator"] = Iterator
+    e["record"] = record
+    e["iterator"] = iterator
     e["list"] = list
-    e["List"] = List
-    -- e["Map"] = Map
+    e["map"] = map
     e["aerospike"] = aerospike
 
     -- logging functions
@@ -76,6 +74,11 @@ end
 -- @return result of the called function or nil.
 -- 
 function apply_record(f, r, ...)
+
+    if f == nil then
+        error("function not found", 2)
+    end
+
     setfenv(f,env())
     success, result = pcall(f, r, ...)
     if success then
@@ -96,6 +99,11 @@ end
 -- 
 
 function apply_stream(f, s, ...)
+    
+    if f == nil then
+        error("function not found", 2)
+    end
+
     setfenv(f,env())
     success, result = pcall(f, StreamOps_create(), ...)
     if success then

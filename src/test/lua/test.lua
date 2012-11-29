@@ -34,7 +34,8 @@ function setbin(r,bin,val)
 end
 
 function getbin(r,bin)
-    return r[bin];
+    info("bin: %s = %s", "a", r.a or "<null>")
+    return r.a;
 end
 
 function rmbin(r,bin)
@@ -80,13 +81,33 @@ function one(r)
     return 1
 end
 
-function make_list(r,l)
-    info("@make_list")
-    list.new {1,2,4}
-    -- info("@make_list - l[1] = %s", l[1])
-    info("@make_list - %s", l[1] or "<null>")
-    info("@make_list - %d", list.size(l))
-    -- info("size: %d",list.size(l))
+function prepend(r,l)
+
+    info("l[1] = %s", l[1] or "<null>")
+    info("size = %d", list.size(l))
+
+    list.prepend(l, "z")
+
+    info("l[1] = %s", l[1] or "<null>")
+    info("size = %d", list.size(l))
+    
+    return list.size(l)
+end
+
+function iterate(r,l)
+
+    info("iterate:")
+    local i = list.iterator(l);
+    while iterator.has_next(i) do
+        info(iterator.next(i))
+    end
+
+    info("iterate 2:")
+    local j = list.iterator(l);
+    while j:has_next() do
+        info(j:next())
+    end
+    
     return list.size(l)
 end
 
@@ -99,6 +120,11 @@ local function f1(b,a)
     b = b or {}
     b["sum"] = (b["sum"] or 0) + a
     return b
+end
+
+function metadata(r,key)
+    local m = record.metadata(r)
+    return m[key]
 end
 
 local function f2(a,b)

@@ -1,4 +1,6 @@
 #include "mod_lua_val.h"
+#include "mod_lua_list.h"
+#include "mod_lua_map.h"
 
 #include <lua.h>
 #include <lauxlib.h>
@@ -24,10 +26,23 @@ as_val * mod_lua_toval(lua_State * l, int i) {
         case LUA_TSTRING : {
             return (as_val *) as_string_new(strdup(lua_tostring(l, i)));
         }
+        case LUA_TUSERDATA : {
+            as_val * val = (as_val *) lua_touserdata(l, i);
+            switch ( as_val_type(val) ) {
+                case AS_BOOLEAN:
+                case AS_INTEGER:
+                case AS_STRING:
+                case AS_LIST:
+                case AS_MAP:
+                case AS_PAIR:
+                    return val;
+                default:
+                    return NULL;
+            }
+        }
         case LUA_TNIL :
         case LUA_TTABLE :
         case LUA_TFUNCTION :
-        case LUA_TUSERDATA :
         case LUA_TLIGHTUSERDATA :
         default:
             return (as_val *) NULL;
@@ -44,6 +59,10 @@ as_val * mod_lua_toval(lua_State * l, int i) {
  */
 int mod_lua_pushval(lua_State * l, const as_val * v) {
     switch( as_val_type(v) ) {
+        case AS_BOOLEAN: {
+            lua_pushboolean(l, as_boolean_tobool((as_boolean *) v) );
+            return 1;
+        }
         case AS_INTEGER: {
             lua_pushinteger(l, as_integer_toint((as_integer *) v) );
             return 1;
@@ -53,8 +72,18 @@ int mod_lua_pushval(lua_State * l, const as_val * v) {
             return 1;   
         }
         case AS_LIST: {
-            printf("mod_lua_pushval: AS_LIST\n");
             mod_lua_pushlist(l, (as_list *) v);
+            return 1;   
+        }
+        case AS_MAP: {
+            mod_lua_pushmap(l, (as_map *) v);
+            return 1;   
+        }
+        case AS_PAIR: {
+            as_pair * p = (as_pair *) lua_newuserdata(l, sizeof(as_pair));
+            *p = *((as_pair *)v);
+            // as_val * val = (as_val *) lua_newuserdata(l, sizeof(as_val));
+            // *val = *((as_val *)v);
             return 1;   
         }
         default: {

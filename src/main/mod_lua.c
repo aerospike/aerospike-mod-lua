@@ -4,6 +4,8 @@
 #include "mod_lua_record.h"
 #include "mod_lua_iterator.h"
 #include "mod_lua_stream.h"
+#include "mod_lua_list.h"
+#include "mod_lua_map.h"
 #include "mod_lua_val.h"
 #include "as_aerospike.h"
 #include "as_types.h"
@@ -22,7 +24,7 @@
 
 
 #define LOG(m) \
-    printf("%s:%d  -- %s\n",__FILE__,__LINE__, m);
+    // printf("%s:%d  -- %s\n",__FILE__,__LINE__, m);
 
 typedef struct mod_lua_context_s mod_lua_context;
 
@@ -165,7 +167,7 @@ static lua_State * create_state(as_module * m, const char * filename) {
     mod_lua_iterator_register(l);
     mod_lua_stream_register(l);
     mod_lua_list_register(l);
-    // mod_lua_map_register(l);
+    mod_lua_map_register(l);
 
     lua_getglobal(l, "require");
     lua_pushstring(l, "aerospike");

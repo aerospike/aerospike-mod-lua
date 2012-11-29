@@ -5,8 +5,7 @@
 #include "as_result.h"
 #include "as_stream.h"
 #include "as_types.h"
-#include "as_string.h"
-#include "as_rec.h"
+#include "as_pair.h"
 
 #define LIMIT 1
 
@@ -20,7 +19,7 @@ static uint32_t maprecord_hash(as_rec *);
 static const as_rec_hooks maprecord_hooks;
 
 static as_rec * maprecord_create() {
-    return as_rec_new(as_hashmap_new(8), &maprecord_hooks);
+    return as_rec_new(as_hashmap_new(64), &maprecord_hooks);
 }
 
 static as_val * maprecord_get(const as_rec * r, const char * name) {
@@ -66,7 +65,7 @@ static const as_rec_hooks maprecord_hooks = {
 as_list * arglist(int argc, char ** argv) {
     if ( argc == 0 || argv == NULL ) return cons(NULL,NULL);
     log("arg: %s",argv[0]);
-    return cons((as_val *) as_string_new(argv[0]), arglist(argc-1, argv+1));
+    return cons(as_string_new(argv[0]), arglist(argc-1, argv+1));
 }
 
 
@@ -74,19 +73,12 @@ static void show_result(as_result * res) {
     log("SHOW RESULTS!");
     if ( res->is_success ) {
         as_val * v = res->value;
-        as_integer * i;
-        as_string * s;
         switch( as_val_type(v) ) {
-            case AS_INTEGER:
-                i = as_integer_fromval(v);
-                printf("SUCCESS: %lu\n", as_integer_toint(i) );
-                break;
-            case AS_STRING:
-                s = as_string_fromval(v);
-                printf("SUCCESS: %s\n", as_string_tostring(s) );
+            case AS_UNKNOWN:
+                printf("SUCCESS: <unknown>\n");
                 break;
             default:
-                printf("SUCCESS: <unknown>\n");
+                printf("SUCCESS: %s\n", as_val_tostring(v));
         }
     }
     else {
@@ -97,7 +89,7 @@ static void show_result(as_result * res) {
 }
 
 static int aslog(as_aerospike * as, const char * file, int line, int level, const char * m) {
-    log_append(file,line,"[%d] - %s",level,m);
+    log_append(file,line,"%s",m);
     return 0;
 }
 
@@ -107,12 +99,22 @@ static void run_record(const char * filename, const char * function, as_list * a
     as_aerospike *      as          = as_aerospike_new(NULL, &as_hooks);
     as_rec *            rec         = maprecord_create();
 
-    as_rec_set(rec, "a", (as_val *) as_string_new("x"));
-    as_rec_set(rec, "b", (as_val *) as_string_new("y"));
-    as_rec_set(rec, "c", (as_val *) as_string_new("z"));
+    as_list *   l   = cons(as_string_new("foo"), cons(as_string_new("bar"), cons(as_string_new("baz"),NULL)));
+    as_map *    m   = as_hashmap_new(24);
+    as_pair *   p   = pair(as_string_new("five"), as_integer_new(5));
 
-    // as_module_apply_record(&mod_lua, as, filename, function, rec, args, res);
-    as_module_apply_record(&mod_lua, as, filename, function, rec, as_linkedlist_new((as_val*)args,NULL), res);
+    as_map_set(m, (as_val *) as_string_new("s"), (as_val *) as_string_new("hi"));
+    as_map_set(m, (as_val *) as_string_new("l"), (as_val *) l);
+    as_map_set(m, (as_val *) as_string_new("p"), (as_val *) p);
+
+    as_rec_set(rec, "s", (as_val *) as_string_new("hello"));
+    as_rec_set(rec, "b", (as_val *) as_boolean_new(true));
+    as_rec_set(rec, "i", (as_val *) as_integer_new(12345));
+    as_rec_set(rec, "l", (as_val *) l);
+    as_rec_set(rec, "m", (as_val *) m);
+    as_rec_set(rec, "p", (as_val *) as_pair_new((as_val*) as_string_new("five"), (as_val*)as_integer_new(5)));
+    
+    as_module_apply_record(&mod_lua, as, filename, function, rec, args, res);
 }
 
 int main ( int argc, char ** argv ) {

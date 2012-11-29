@@ -26,6 +26,7 @@ as_types += as_aerospike.o
 as_types += as_module.o
 
 mod_lua =  mod_lua.o
+mod_lua += mod_lua_reg.o
 mod_lua += mod_lua_aerospike.o
 mod_lua += mod_lua_record.o
 mod_lua += mod_lua_iterator.o

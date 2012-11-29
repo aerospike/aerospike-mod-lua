@@ -14,4 +14,4 @@ void log_append(const char * file, int line, const char * fmt, ...) {
 }
 
 #define log(fmt, args...) \
-    log_append(__FILE__, __LINE__, fmt, ## args);
+    // log_append(__FILE__, __LINE__, fmt, ## args);
