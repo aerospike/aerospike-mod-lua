@@ -1,19 +1,5 @@
-/**
- * Provides a lua interface to the aerospike struct and functions
- *
- *
- *      aerospike.get(namespace, set, key): result<record>
- *      aerospike.put(namespace, set, key, table)
- *      aerospike.remove(namespace, set, key): result<bool>
- *
- *      aerospike.update(record): result<record>
- *
- *
- */
-
 #include "mod_lua_val.h"
 #include "mod_lua_iterator.h"
-#include "mod_lua_record.h"
 
 #include <lua.h>
 #include <lauxlib.h>
@@ -79,8 +65,6 @@ static int mod_lua_iterator_next(lua_State * l) {
 
 /**
  * Garbage collection 
- * Thought: Possibly not needed because the external (to lua) 
- * environment should handle the lifecycle of the record.
  */
 static int mod_lua_iterator_gc(lua_State * l) {
     as_iterator * i = mod_lua_checkiterator(l, 1);
