@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stdlib.h>
 #include <inttypes.h>
 
 typedef enum as_val_t as_val_t;
@@ -14,12 +15,15 @@ enum as_val_t {
     AS_STRING,
     AS_LIST,
     AS_MAP,
-    AS_REC
+    AS_REC,
+    AS_PAIR
 };
 
 struct as_val_s {
     as_val_t type;
     int (*free)(as_val * v);
+    uint32_t (*hash)(as_val * v);
+    char * (*tostring)(as_val * v);
 };
 
 #define as_val_free(v) \
@@ -28,4 +32,8 @@ struct as_val_s {
 #define as_val_type(v) \
     (v != NULL && ((as_val *)v)->free != NULL ? ((as_val *)v)->type : AS_UNKNOWN)
 
-typedef uint32_t (* as_val_hash_function)(as_val *);
+#define as_val_hash(v) \
+    (v != NULL && ((as_val *)v)->hash != NULL ? ((as_val *)v)->hash((as_val *)v) : 0)
+
+#define as_val_tostring(v) \
+    (v != NULL && ((as_val *)v)->tostring != NULL ? ((as_val *)v)->tostring((as_val *)v) : NULL)

@@ -1,32 +1,19 @@
-/**
- * Provides a lua interface to the aerospike struct and functions
- *
- *
- *      aerospike.get(namespace, set, key): result<record>
- *      aerospike.put(namespace, set, key, table)
- *      aerospike.remove(namespace, set, key): result<bool>
- *
- *      aerospike.update(record): result<record>
- *
- *
- */
-
 #include "mod_lua_val.h"
 #include "mod_lua_iterator.h"
-#include "mod_lua_record.h"
 
 #include <lua.h>
 #include <lauxlib.h>
 #include <lualib.h>
 
-#define MOD_LUA_ITERATOR "Iterator"
+#define OBJECT_NAME "iterator"
+#define CLASS_NAME  "Iterator"
 
 /**
  * Read the item at index and convert to a iterator
  */
 as_iterator * mod_lua_toiterator(lua_State * l, int index) {
     as_iterator * i = (as_iterator *) lua_touserdata(l, index);
-    if (i == NULL) luaL_typerror(l, index, MOD_LUA_ITERATOR);
+    if (i == NULL) luaL_typerror(l, index, CLASS_NAME);
     return i;
 }
 
@@ -36,7 +23,7 @@ as_iterator * mod_lua_toiterator(lua_State * l, int index) {
 as_iterator * mod_lua_pushiterator(lua_State * l, as_iterator * i) {
     as_iterator * li = (as_iterator *) lua_newuserdata(l, sizeof(as_iterator));
     *li = *i;
-    luaL_getmetatable(l, MOD_LUA_ITERATOR);
+    luaL_getmetatable(l, CLASS_NAME);
     lua_setmetatable(l, -2);
     return li;
 }
@@ -47,8 +34,8 @@ as_iterator * mod_lua_pushiterator(lua_State * l, as_iterator * i) {
 static as_iterator * mod_lua_checkiterator(lua_State * l, int index) {
     as_iterator * i = NULL;
     luaL_checktype(l, index, LUA_TUSERDATA);
-    i = (as_iterator *) luaL_checkudata(l, index, MOD_LUA_ITERATOR);
-    if (i == NULL) luaL_typerror(l, index, MOD_LUA_ITERATOR);
+    i = (as_iterator *) luaL_checkudata(l, index, CLASS_NAME);
+    if (i == NULL) luaL_typerror(l, index, CLASS_NAME);
     return i;
 }
 
@@ -79,58 +66,49 @@ static int mod_lua_iterator_next(lua_State * l) {
 
 /**
  * Garbage collection 
- * Thought: Possibly not needed because the external (to lua) 
- * environment should handle the lifecycle of the record.
  */
 static int mod_lua_iterator_gc(lua_State * l) {
-    as_iterator * i = mod_lua_checkiterator(l, 1);
-    as_iterator_free(i);
+    // as_iterator * i = mod_lua_checkiterator(l, 1);
+    // as_iterator_free(i);
     return 0;
 }
 
+/*******************************************************************************
+ * ~~~ Object ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ ******************************************************************************/
 
-/**
- * iterator table
- */
-static const luaL_reg mod_lua_iterator_table[] = {
+static const luaL_reg object_table[] = {
     {"has_next",        mod_lua_iterator_has_next},
     {"next",            mod_lua_iterator_next},
     {0, 0}
 };
 
-/**
- * iterator metatable
- */
-static const luaL_reg mod_lua_iterator_metatable[] = {
+static const luaL_reg object_metatable[] = {
+    {0, 0}
+};
+
+/*******************************************************************************
+ * ~~~ Class ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ ******************************************************************************/
+
+static const luaL_reg class_table[] = {
+    {"has_next",        mod_lua_iterator_has_next},
+    {"next",            mod_lua_iterator_next},
+    {0, 0}
+};
+
+static const luaL_reg class_metatable[] = {
     {"__gc",            mod_lua_iterator_gc},
     {0, 0}
 };
 
-/**
- * Registers the iterator library
- */
+/*******************************************************************************
+ * ~~~ Register ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ ******************************************************************************/
+
 int mod_lua_iterator_register(lua_State * l) {
-
-    int table, metatable;
-
-    // register the table
-    luaL_register(l, MOD_LUA_ITERATOR, mod_lua_iterator_table);
-    table = lua_gettop(l);
-
-    // register the metatable
-    luaL_newmetatable(l, MOD_LUA_ITERATOR);
-    luaL_register(l, 0, mod_lua_iterator_metatable);
-    metatable = lua_gettop(l);
-
-    lua_pushliteral(l, "__index");
-    lua_pushvalue(l, table);
-    lua_rawset(l, metatable);
-
-    lua_pushliteral(l, "__metatable");
-    lua_pushvalue(l, table);
-    lua_rawset(l, metatable);
-    
-    lua_pop(l, 1);
-
+    mod_lua_reg_object(l, OBJECT_NAME, object_table, object_metatable);
+    mod_lua_reg_class(l, CLASS_NAME, class_table, class_metatable);
     return 1;
 }
+
