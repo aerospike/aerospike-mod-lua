@@ -53,6 +53,9 @@ function env()
     e["Record"] = Record
     e["Stream"] = Stream
     e["Iterator"] = Iterator
+    e["list"] = list
+    e["List"] = List
+    -- e["Map"] = Map
     e["aerospike"] = aerospike
 
     -- logging functions
