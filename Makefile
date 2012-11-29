@@ -9,13 +9,16 @@ MODULES += common
 as_types =  as_val.o
 as_types += as_boolean.o
 as_types += as_integer.o
+as_types += as_string.o
 as_types += as_list.o
+as_types += as_map.o
+as_types += as_rec.o
+as_types += as_pair.o
+
 as_types += as_linkedlist.o
 as_types += as_arraylist.o
-as_types += as_map.o
 as_types += as_hashmap.o
-as_types += as_string.o
-as_types += as_rec.o
+
 as_types += as_iterator.o
 as_types += as_stream.o
 as_types += as_result.o
@@ -43,11 +46,27 @@ all: libmod_lua.a
 common: 
 	make -C modules/common all MEM_COUNT=$(MEM_COUNT)
 
-libmod_lua.so: $(call objects, $(as_types) $(mod_lua)) | $(TARGET_LIB) $(MODULES)
+libmod_lua.so: $(call objects, $(as_types) $(mod_lua)) | $(TARGET_LIB) $(MODULES) common
 	$(call library, $(empty), $(empty), lua cf, $(empty))
 
-libmod_lua.a: $(call objects, $(as_types) $(mod_lua)) | $(TARGET_LIB) 
+libmod_lua.a: $(call objects, $(as_types) $(mod_lua)) | $(TARGET_LIB) common
 	$(call archive, $(empty), $(empty), $(empty), $(empty))
 
-test: $(SOURCE_TEST)/test.c $(TARGET_LIB)/libmod_lua.a | $(TARGET_BIN)
-	$(call executable, $(empty), $(empty), lua, $(empty))
+
+##
+## TEST
+##
+
+record_udf_test: $(SOURCE_TEST)/record_udf_test.c | $(TARGET_BIN) libmod_lua.a
+	$(call executable, $(empty), $(empty), lua, $(empty), $(TARGET_LIB)/libmod_lua.a  modules/common/$(TARGET_LIB)/libcf.a )
+
+hashmap_test: $(SOURCE_TEST)/hashmap_test.c | $(TARGET_BIN) $(MODULES) libmod_lua.a
+	$(call executable, $(empty), $(empty), $(empty), $(empty), $(TARGET_LIB)/libmod_lua.a modules/common/$(TARGET_LIB)/libcf.a  )
+
+linkedlist_test: $(SOURCE_TEST)/linkedlist_test.c | $(TARGET_BIN) $(MODULES) libmod_lua.a
+	$(call executable, $(empty), $(empty), $(empty), $(empty), $(TARGET_LIB)/libmod_lua.a modules/common/$(TARGET_LIB)/libcf.a  )
+
+arraylist_test: $(SOURCE_TEST)/arraylist_test.c | $(TARGET_BIN) $(MODULES) libmod_lua.a
+	$(call executable, $(empty), $(empty), $(empty), $(empty), $(TARGET_LIB)/libmod_lua.a modules/common/$(TARGET_LIB)/libcf.a  )
+
+test: hashmap_test linbkedlist_test arraylist_test record_udf_test
