@@ -77,6 +77,7 @@ TARGET_OBJ = $(TARGET_BASE)/obj
 #							  Relative paths are relative to the project root.
 #		libraries			- space separated list of libraries.
 #		flags 				- space separated list of linking flags.
+#		files 				- space separated list of files.
 #
 # You can optionally define variables, rather than arguments as:
 #
@@ -90,12 +91,12 @@ TARGET_OBJ = $(TARGET_BASE)/obj
 
 define build
 	$(if $(filter .o,$(suffix $@)), 
-		$(call object, $(1),$(2),$(3),$(4)),
+		$(call object, $(1),$(2),$(3),$(4),$(5)),
 		$(if $(filter .so,$(suffix $@)), 
-			$(call library, $(1),$(2),$(3),$(4)),
+			$(call library, $(1),$(2),$(3),$(4),$(5)),
 			$(if $(filter .a,$(suffix $@)), 
-				$(call archive, $(1),$(2),$(3),$(4)),
-				$(call executable, $(1),$(2),$(3),$(4))
+				$(call archive, $(1),$(2),$(3),$(4),$(5)),
+				$(call executable, $(1),$(2),$(3),$(4),$(5))
 			)
 		)
 	)
@@ -118,6 +119,7 @@ define executable
 		$($@_flags) \
 		-o $(TARGET_BIN)/$@ \
 		$^ \
+		$(5) \
 	)
 endef
 
@@ -142,6 +144,7 @@ define library
 		$($@_flags) \
 		-o $(TARGET_LIB)/$@ \
 		$^ \
+		$(5) \
 	)
 endef
 
@@ -162,6 +165,7 @@ define object
 		$($@_flags) \
 		-o $@ \
 		-c $^ \
+		$(5) \
 	)
 endef
 
