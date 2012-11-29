@@ -9,14 +9,15 @@
 #define LOG(m) \
     // printf("%s:%d  -- %s\n",__FILE__,__LINE__, m);
 
-#define MOD_LUA_RECORD "Record"
+#define MOD_LUA_RECORD_TABLE "record"
+#define MOD_LUA_RECORD_METATABLE "Record"
 
 /**
  * Read the item at index and convert to a record
  */
 as_rec * mod_lua_torecord(lua_State * l, int index) {
     as_rec * r = (as_rec *) lua_touserdata(l, index);
-    if (r == NULL) luaL_typerror(l, index, MOD_LUA_RECORD);
+    if (r == NULL) luaL_typerror(l, index, MOD_LUA_RECORD_METATABLE);
     return r;
 }
 
@@ -26,7 +27,7 @@ as_rec * mod_lua_torecord(lua_State * l, int index) {
 as_rec * mod_lua_pushrecord(lua_State * l, as_rec * r) {
     as_rec * lr = (as_rec *) lua_newuserdata(l, sizeof(as_rec));
     as_rec_update(lr, r->source, r->hooks);
-    luaL_getmetatable(l, MOD_LUA_RECORD);
+    luaL_getmetatable(l, MOD_LUA_RECORD_METATABLE);
     lua_setmetatable(l, -2);
     return r;
 }
@@ -37,8 +38,8 @@ as_rec * mod_lua_pushrecord(lua_State * l, as_rec * r) {
 static as_rec * mod_lua_checkrecord(lua_State * l, int index) {
     as_rec * r = NULL;
     luaL_checktype(l, index, LUA_TUSERDATA);
-    r = (as_rec *) luaL_checkudata(l, index, MOD_LUA_RECORD);
-    if (r == NULL) luaL_typerror(l, index, MOD_LUA_RECORD);
+    r = (as_rec *) luaL_checkudata(l, index, MOD_LUA_RECORD_METATABLE);
+    if (r == NULL) luaL_typerror(l, index, MOD_LUA_RECORD_METATABLE);
     return r;
 }
 
@@ -106,11 +107,11 @@ int mod_lua_record_register(lua_State * l) {
     int table, metatable;
 
     // register the table
-    luaL_register(l, MOD_LUA_RECORD, mod_lua_record_table);
+    luaL_register(l, MOD_LUA_RECORD_TABLE, mod_lua_record_table);
     table = lua_gettop(l);
 
     // register the metatable
-    luaL_newmetatable(l, MOD_LUA_RECORD);
+    luaL_newmetatable(l, MOD_LUA_RECORD_METATABLE);
     luaL_register(l, 0, mod_lua_record_metatable);
     metatable = lua_gettop(l);
 
