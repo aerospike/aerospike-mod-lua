@@ -22,7 +22,7 @@
 
 
 #define LOG(m) \
-    // printf("%s:%d  -- %s\n",__FILE__,__LINE__, m);
+    printf("%s:%d  -- %s\n",__FILE__,__LINE__, m);
 
 typedef struct mod_lua_context_s mod_lua_context;
 
@@ -164,6 +164,8 @@ static lua_State * create_state(as_module * m, const char * filename) {
     mod_lua_record_register(l);
     mod_lua_iterator_register(l);
     mod_lua_stream_register(l);
+    mod_lua_list_register(l);
+    // mod_lua_map_register(l);
 
     lua_getglobal(l, "require");
     lua_pushstring(l, "aerospike");
@@ -244,25 +246,7 @@ static int pushargs(lua_State * l, as_list * args) {
     int argc = 0;
     as_iterator * i = as_list_iterator(args);
     while( as_iterator_has_next(i) ) {
-        const as_val * arg = as_iterator_next(i);
-        switch ( as_val_type(arg) ) {
-            case AS_INTEGER : {
-                as_integer * i = as_integer_fromval(arg);
-                lua_pushinteger(l, as_integer_toint(i));
-                argc++;
-                i = NULL;
-                break;
-            }
-            case AS_STRING : {
-                as_string * s = as_string_fromval(arg);
-                lua_pushstring(l, as_string_tostring(s));
-                s = NULL;
-                argc++;
-                break;
-            }
-            default:
-                break;
-        }
+        argc += mod_lua_pushval(l, as_iterator_next(i));
     }
     return argc;
 }
@@ -287,7 +271,7 @@ static int apply_record(as_module * m, as_aerospike * as, const char * filename,
     int         argc    = 0;                    // Number of arguments pushed onto the stack
     as_val *    rv      = (as_val *) NULL;      // Return value from pcall
     int         rc      = 0;                    // Return code from pcall
-
+    
     LOG("BEGIN")
 
     // lease a context
