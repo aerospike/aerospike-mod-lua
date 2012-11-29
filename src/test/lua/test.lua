@@ -80,6 +80,16 @@ function one(r)
     return 1
 end
 
+function make_list(r,l)
+    info("@make_list")
+    list.new {1,2,4}
+    -- info("@make_list - l[1] = %s", l[1])
+    info("@make_list - %s", l[1] or "<null>")
+    info("@make_list - %d", list.size(l))
+    -- info("size: %d",list.size(l))
+    return list.size(l)
+end
+
 function failnil(r)
     warn('failnil')
     return r.empty
