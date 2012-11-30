@@ -110,7 +110,7 @@ static int configure(as_module * m, void * config) {
 
             if ( strcmp(&name[len-4],".lua") != 0 ) continue;
             
-            strncpy(filename, name, len-4);
+            memcpy(filename, name, len-4); filename[len-4]=0; 
 
             lua_State * l = create_state(m, filename);
 
