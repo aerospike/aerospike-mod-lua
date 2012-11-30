@@ -6,6 +6,8 @@ LDFLAGS = -fPIC
 
 MODULES += common
 
+INC_PATH += modules/msgpack/src
+
 as_types =  as_val.o
 as_types += as_boolean.o
 as_types += as_integer.o
@@ -24,6 +26,8 @@ as_types += as_stream.o
 as_types += as_result.o
 as_types += as_aerospike.o
 as_types += as_module.o
+
+as_types += as_msgpack.o
 
 mod_lua =  mod_lua.o
 mod_lua += mod_lua_reg.o
@@ -44,14 +48,26 @@ val_test_o += $(as_types)
 
 all: libmod_lua.a
 
-common: 
-	make -C modules/common all MEM_COUNT=$(MEM_COUNT)
+
 
 libmod_lua.so: $(call objects, $(as_types) $(mod_lua)) | $(TARGET_LIB) $(MODULES) common
 	$(call library, $(empty), $(empty), lua cf, $(empty))
 
 libmod_lua.a: $(call objects, $(as_types) $(mod_lua)) | $(TARGET_LIB) common
 	$(call archive, $(empty), $(empty), $(empty), $(empty))
+
+##
+## SUB-MODULES
+##
+
+common: 
+	make -C modules/common all MEM_COUNT=$(MEM_COUNT)
+
+modules/msgpack/Makefile: 
+	cd modules/msgpack && ./configure
+
+msgpack: modules/msgpack/Makefile
+	cd modules/msgpack && make
 
 
 ##
@@ -69,5 +85,8 @@ linkedlist_test: $(SOURCE_TEST)/linkedlist_test.c | $(TARGET_BIN) $(MODULES) lib
 
 arraylist_test: $(SOURCE_TEST)/arraylist_test.c | $(TARGET_BIN) $(MODULES) libmod_lua.a
 	$(call executable, $(empty), $(empty), $(empty), $(empty), $(TARGET_LIB)/libmod_lua.a modules/common/$(TARGET_LIB)/libcf.a  )
+
+msgpack_test: $(SOURCE_TEST)/msgpack_test.c | $(TARGET_BIN) $(MODULES) libmod_lua.a msgpack
+	$(call executable, $(empty), $(empty), $(empty), $(empty), $(TARGET_LIB)/libmod_lua.a modules/common/$(TARGET_LIB)/libcf.a modules/msgpack/src/.libs/libmsgpack.a  )
 
 test: hashmap_test linbkedlist_test arraylist_test record_udf_test
