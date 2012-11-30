@@ -96,8 +96,7 @@ static int mod_lua_aerospike_create(lua_State * l) {
     as_aerospike *  a   = mod_lua_checkaerospike(l, 1);
     as_rec *        r   = mod_lua_torecord(l, 2);
     
-    as_aerospike_create(a, r);
-    return 0;
+    return as_aerospike_create(a, r);
 }
 
 /**
@@ -107,8 +106,7 @@ static int mod_lua_aerospike_update(lua_State * l) {
     as_aerospike *  a   = mod_lua_checkaerospike(l, 1);
     as_rec *        r   = mod_lua_torecord(l, 2);
     
-    as_aerospike_update(a, r);
-    return 0;
+    return as_aerospike_update(a, r);
 }
 
 /**
@@ -118,8 +116,7 @@ static int mod_lua_aerospike_remove(lua_State * l) {
     as_aerospike *  a   = mod_lua_checkaerospike(l, 1);
     as_rec *        r   = mod_lua_torecord(l, 2);
     
-    as_aerospike_remove(a, r);
-    return 0;
+    return as_aerospike_remove(a, r);
 }
 
 /**
