@@ -50,10 +50,10 @@ all: libmod_lua.a
 
 
 
-libmod_lua.so: $(call objects, $(as_types) $(mod_lua)) | $(TARGET_LIB) $(MODULES) common
+libmod_lua.so: $(call objects, $(as_types) $(mod_lua)) | $(TARGET_LIB) $(MODULES) common msgpack
 	$(call library, $(empty), $(empty), lua cf, $(empty))
 
-libmod_lua.a: $(call objects, $(as_types) $(mod_lua)) | $(TARGET_LIB) common
+libmod_lua.a: $(call objects, $(as_types) $(mod_lua)) | $(TARGET_LIB) common msgpack
 	$(call archive, $(empty), $(empty), $(empty), $(empty))
 
 ##
