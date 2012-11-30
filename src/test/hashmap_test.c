@@ -1,6 +1,7 @@
 #include "test.h"
 #include "as_hashmap.h"
 #include "as_string.h"
+#include "as_pair.h"
 
 
 int main ( int argc, char ** argv ) {
@@ -21,19 +22,29 @@ int main ( int argc, char ** argv ) {
     log("b == %s", as_string_tostring((as_string *) as_map_get(m, (as_val*) b )));
     log("c == %s", as_string_tostring((as_string *) as_map_get(m, (as_val*) c )));
 
-    log("test...")
+    log("test...");
     
     log("a == %s", as_string_tostring((as_string *) as_map_get(m, (as_val*) as_string_new("a") )));
     log("b == %s", as_string_tostring((as_string *) as_map_get(m, (as_val*) as_string_new("b") )));
     log("c == %s", as_string_tostring((as_string *) as_map_get(m, (as_val*) as_string_new("c") )));
 
-    log("update...")
+    log("update...");
 
     as_map_set(m, as_string_toval(a), as_string_toval(c));
     
     log("a == %s", as_string_tostring((as_string *) as_map_get(m, (as_val*) a )));
     log("b == %s", as_string_tostring((as_string *) as_map_get(m, (as_val*) b )));
     log("c == %s", as_string_tostring((as_string *) as_map_get(m, (as_val*) c )));
+
+    log("iterate...");
+
+    as_iterator * i  = as_map_iterator(m);
+    while ( as_iterator_has_next(i) ) {
+        as_val * v = as_iterator_next(i);
+
+        log("%s",as_val_tostring(v));
+    }
+    as_iterator_free(i);
 
     log("END");
     return 0;

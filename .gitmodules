@@ -1,3 +1,6 @@
 [submodule "modules/common"]
 	path = modules/common
 	url = git@github.com:aerospike/aerospike-common.git
+[submodule "modules/msgpack"]
+	path = modules/msgpack
+	url = git@github.com:aerospike/msgpack.git
