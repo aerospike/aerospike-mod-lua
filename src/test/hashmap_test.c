@@ -6,7 +6,7 @@
 
 int main ( int argc, char ** argv ) {
 
-    log("BEGIN!");
+    LOG("BEGIN!");
 
     as_map *    m   = as_hashmap_new(64);
     as_string * a   = as_string_new("a");
@@ -18,34 +18,34 @@ int main ( int argc, char ** argv ) {
     as_map_set(m, as_string_toval(b), as_string_toval(c));
     as_map_set(m, as_string_toval(c), as_string_toval(a));
     
-    log("a == %s", as_string_tostring((as_string *) as_map_get(m, (as_val*) a )));
-    log("b == %s", as_string_tostring((as_string *) as_map_get(m, (as_val*) b )));
-    log("c == %s", as_string_tostring((as_string *) as_map_get(m, (as_val*) c )));
+    LOG("a == %s", as_string_tostring((as_string *) as_map_get(m, (as_val*) a )));
+    LOG("b == %s", as_string_tostring((as_string *) as_map_get(m, (as_val*) b )));
+    LOG("c == %s", as_string_tostring((as_string *) as_map_get(m, (as_val*) c )));
 
-    log("test...");
+    LOG("test...");
     
-    log("a == %s", as_string_tostring((as_string *) as_map_get(m, (as_val*) as_string_new("a") )));
-    log("b == %s", as_string_tostring((as_string *) as_map_get(m, (as_val*) as_string_new("b") )));
-    log("c == %s", as_string_tostring((as_string *) as_map_get(m, (as_val*) as_string_new("c") )));
+    LOG("a == %s", as_string_tostring((as_string *) as_map_get(m, (as_val*) as_string_new("a") )));
+    LOG("b == %s", as_string_tostring((as_string *) as_map_get(m, (as_val*) as_string_new("b") )));
+    LOG("c == %s", as_string_tostring((as_string *) as_map_get(m, (as_val*) as_string_new("c") )));
 
-    log("update...");
+    LOG("update...");
 
     as_map_set(m, as_string_toval(a), as_string_toval(c));
     
-    log("a == %s", as_string_tostring((as_string *) as_map_get(m, (as_val*) a )));
-    log("b == %s", as_string_tostring((as_string *) as_map_get(m, (as_val*) b )));
-    log("c == %s", as_string_tostring((as_string *) as_map_get(m, (as_val*) c )));
+    LOG("a == %s", as_string_tostring((as_string *) as_map_get(m, (as_val*) a )));
+    LOG("b == %s", as_string_tostring((as_string *) as_map_get(m, (as_val*) b )));
+    LOG("c == %s", as_string_tostring((as_string *) as_map_get(m, (as_val*) c )));
 
-    log("iterate...");
+    LOG("iterate...");
 
     as_iterator * i  = as_map_iterator(m);
     while ( as_iterator_has_next(i) ) {
         as_val * v = as_iterator_next(i);
 
-        log("%s",as_val_tostring(v));
+        LOG("%s",as_val_tostring(v));
     }
     as_iterator_free(i);
 
-    log("END");
+    LOG("END");
     return 0;
 }

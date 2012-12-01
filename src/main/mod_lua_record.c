@@ -20,7 +20,7 @@ as_rec * mod_lua_torecord(lua_State * l, int index) {
  */
 as_rec * mod_lua_pushrecord(lua_State * l, as_rec * r) {
     as_rec * lr = (as_rec *) lua_newuserdata(l, sizeof(as_rec));
-    as_rec_update(lr, r->source, r->hooks);
+    as_rec_init(lr, r->source, r->hooks);
     luaL_getmetatable(l, CLASS_NAME);
     lua_setmetatable(l, -2);
     return r;
@@ -77,8 +77,8 @@ static int mod_lua_record_newindex(lua_State * l) {
  * Garbage collection 
  */
 static int mod_lua_record_gc(lua_State * l) {
-    as_rec * r = mod_lua_checkrecord(l, 1);
-    as_rec_free(r);
+    // as_rec * r = mod_lua_checkrecord(l, 1);
+    // as_rec_free(r);
     return 0;
 }
 
@@ -107,7 +107,7 @@ static const luaL_reg class_table[] = {
 static const luaL_reg class_metatable[] = {
     {"__index",         mod_lua_record_index},
     {"__newindex",      mod_lua_record_newindex},
-    // {"__gc",            mod_lua_record_gc},
+    {"__gc",            mod_lua_record_gc},
     {0, 0}
 };
 
