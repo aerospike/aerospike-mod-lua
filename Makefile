@@ -8,7 +8,7 @@ MODULES += common
 
 INC_PATH += modules/msgpack/src
 
-as_types =  as_val.o
+as_types =
 as_types += as_boolean.o
 as_types += as_integer.o
 as_types += as_string.o
@@ -25,11 +25,11 @@ as_types += as_iterator.o
 as_types += as_stream.o
 as_types += as_result.o
 as_types += as_aerospike.o
-as_types += as_module.o
 
 as_types += as_msgpack.o
 
-mod_lua =  mod_lua.o
+mod_lua =
+mod_lua += mod_lua.o
 mod_lua += mod_lua_reg.o
 mod_lua += mod_lua_aerospike.o
 mod_lua += mod_lua_record.o
@@ -53,7 +53,7 @@ all: libmod_lua.a
 libmod_lua.so: $(call objects, $(as_types) $(mod_lua)) | $(TARGET_LIB) $(MODULES) common msgpack
 	$(call library, $(empty), $(empty), lua cf, $(empty))
 
-libmod_lua.a: $(call objects, $(as_types) $(mod_lua)) | $(TARGET_LIB) common msgpack
+libmod_lua.a: $(call objects, $(as_types) $(mod_lua)) | $(TARGET_LIB) common
 	$(call archive, $(empty), $(empty), $(empty), $(empty))
 
 ##

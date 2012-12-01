@@ -9,6 +9,7 @@
 
 #define LIMIT 1
 
+#define log(fmt, args...)
 
 static as_rec * maprecord_create() ;
 static as_val * maprecord_get(const as_rec *, const char *);
@@ -112,7 +113,7 @@ static void run_record(const char * filename, const char * function, as_list * a
     as_rec_set(rec, "i", (as_val *) as_integer_new(12345));
     as_rec_set(rec, "l", (as_val *) l);
     as_rec_set(rec, "m", (as_val *) m);
-    as_rec_set(rec, "p", (as_val *) as_pair_new((as_val*) as_string_new("five"), (as_val*)as_integer_new(5)));
+    as_rec_set(rec, "p", (as_val *) pair(as_string_new("five"),as_integer_new(5)));
     
     as_module_apply_record(&mod_lua, as, filename, function, rec, args, res);
 }
