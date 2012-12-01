@@ -4,20 +4,11 @@
 #include <inttypes.h>
 
 /******************************************************************************
- *
- * TYPE DECLARATIONS
- * 
+ * TYPES
  ******************************************************************************/
 
 typedef enum as_val_t as_val_t;
-
 typedef struct as_val_s as_val;
-
-/******************************************************************************
- *
- * TYPE DEFINITIONS
- * 
- ******************************************************************************/
 
 enum as_val_t {
     AS_UNKNOWN = 0,
@@ -32,17 +23,15 @@ enum as_val_t {
 };
 
 struct as_val_s {
-    as_val_t type;
-    size_t size;
-    int (*free)(as_val * v);
-    uint32_t (*hash)(as_val * v);
-    char * (*tostring)(as_val * v);
+    as_val_t type;                      // type identifier, specified in as_val_t
+    size_t size;                        // type size, should be sizeof(type)
+    int (*free)(as_val * v);            // free memory used by the value
+    uint32_t (*hash)(as_val * v);       // hash value for the value
+    char * (*tostring)(as_val * v);     // string value for the value
 };
 
 /******************************************************************************
- *
  * MACROS
- * 
  ******************************************************************************/
 
 #define as_val_free(v) \

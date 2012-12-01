@@ -1,6 +1,6 @@
 #include "mod_lua_reg.h"
 
-inline int mod_lua_reg_object(lua_State * l, const char * name, const luaL_reg * table, const luaL_reg * metatable) {
+int mod_lua_reg_object(lua_State * l, const char * name, const luaL_reg * table, const luaL_reg * metatable) {
 
     int tableId, metatableId;
 
@@ -25,7 +25,7 @@ inline int mod_lua_reg_object(lua_State * l, const char * name, const luaL_reg *
     return 0;
 }
 
-inline int mod_lua_reg_class(lua_State * l, const char * name, const luaL_reg * table, const luaL_reg * metatable) {
+int mod_lua_reg_class(lua_State * l, const char * name, const luaL_reg * table, const luaL_reg * metatable) {
 
     int tableId, metatableId;
 

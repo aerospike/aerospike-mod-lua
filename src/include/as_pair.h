@@ -5,18 +5,10 @@
 #include <sys/types.h>
 
 /******************************************************************************
- *
- * TYPE DECLARATIONS
- * 
+ * TYPES
  ******************************************************************************/
 
 typedef struct as_pair_s as_pair;
-
-/******************************************************************************
- *
- * TYPE DEFINITIONS
- * 
- ******************************************************************************/
 
 struct as_pair_s {
     as_val _;
@@ -25,12 +17,12 @@ struct as_pair_s {
 };
 
 /******************************************************************************
- *
- * FUNCTION DECLARATIONS
- * 
+ * FUNCTIONS
  ******************************************************************************/
 
-as_pair * as_pair_new(as_val * _1, as_val * _2);
+as_pair * as_pair_new(as_val *, as_val *);
+
+int as_pair_init(as_pair *, as_val *, as_val *);
 
 int as_pair_free(as_pair *);
 
@@ -39,9 +31,7 @@ as_val * as_pair_1(as_pair * p);
 as_val * as_pair_2(as_pair * p);
 
 /******************************************************************************
- *
- * INLINE FUNCTION DEFINITIONS – CONVERSIONS
- * 
+ * INLINE FUNCTIONS
  ******************************************************************************/
 
 inline as_val * as_pair_toval(const as_pair * p) {
@@ -53,9 +43,8 @@ inline as_pair * as_pair_fromval(const as_val * v) {
 }
 
 /******************************************************************************
- *
  * MACROS
- * 
  ******************************************************************************/
 
-#define pair(a,b) as_pair_new((as_val *) a, (as_val *) b)
+#define pair(a,b) \
+    as_pair_new((as_val *) a, (as_val *) b)

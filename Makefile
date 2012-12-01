@@ -1,6 +1,6 @@
 include project/build.makefile
 
-CFLAGS = -std=gnu99 -Wall -fPIC -fno-strict-aliasing
+CFLAGS = -std=gnu99 -Wall -fPIC -fno-common -fno-strict-aliasing -finline-functions -Winline
 #CFLAGS = -g -O3 -fno-common -fno-strict-aliasing -rdynamic  -Wall -D_FILE_OFFSET_BITS=64 -std=gnu99 -D_REENTRANT -D_GNU_SOURCE  -D MARCH_x86_64 -march=nocona  -DMEM_COUNT -MMD 
 LDFLAGS = -fPIC
 
@@ -74,7 +74,7 @@ msgpack: modules/msgpack/Makefile
 ## TEST
 ##
 
-record_udf_test: $(SOURCE_TEST)/record_udf_test.c | $(TARGET_BIN) libmod_lua.a
+record_udf: $(SOURCE_TEST)/record_udf.c | $(TARGET_BIN) libmod_lua.a
 	$(call executable, $(empty), $(empty), lua, $(empty), $(TARGET_LIB)/libmod_lua.a  modules/common/$(TARGET_LIB)/libcf.a )
 
 hashmap_test: $(SOURCE_TEST)/hashmap_test.c | $(TARGET_BIN) $(MODULES) libmod_lua.a
@@ -89,4 +89,4 @@ arraylist_test: $(SOURCE_TEST)/arraylist_test.c | $(TARGET_BIN) $(MODULES) libmo
 msgpack_test: $(SOURCE_TEST)/msgpack_test.c | $(TARGET_BIN) $(MODULES) libmod_lua.a msgpack
 	$(call executable, $(empty), $(empty), $(empty), $(empty), $(TARGET_LIB)/libmod_lua.a modules/common/$(TARGET_LIB)/libcf.a modules/msgpack/src/.libs/libmsgpack.a  )
 
-test: hashmap_test linbkedlist_test arraylist_test record_udf_test
+test: msgpack_test hashmap_test linkedlist_test arraylist_test record_udf

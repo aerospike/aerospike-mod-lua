@@ -14,7 +14,18 @@ typedef struct as_boolean_s as_boolean;
 
 /******************************************************************************
  *
- * FUNCTION DECLARATIONS
+ * TYPE DEFINITIONS
+ * 
+ ******************************************************************************/
+
+struct as_boolean_s {
+    as_val _;
+    bool value;
+};
+
+/******************************************************************************
+ *
+ * GLOBAL FUNCTION DECLARATIONS
  * 
  ******************************************************************************/
 
@@ -22,11 +33,13 @@ int as_boolean_free(as_boolean *);
 
 as_boolean * as_boolean_new(bool);
 
+int as_boolean_init(as_boolean *, bool);
+
 bool as_boolean_tobool(const as_boolean *);
 
 /******************************************************************************
  *
- * INLINE FUNCTION DEFINITIONS – CONVERSIONS
+ * INLINE FUNCTION DEFINITIONS 
  * 
  ******************************************************************************/
 

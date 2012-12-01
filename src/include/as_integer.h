@@ -5,31 +5,32 @@
 #include <inttypes.h>
 
 /******************************************************************************
- *
- * TYPE DECLARATIONS
- * 
+ * TYPES
  ******************************************************************************/
 
 typedef struct as_integer_s as_integer;
 
+struct as_integer_s {
+    as_val _;
+    int64_t value;
+};
+
 /******************************************************************************
- *
- * FUNCTION DECLARATIONS
- * 
+ * FUNCTIONS
  ******************************************************************************/
 
-int as_integer_free(as_integer *);
-
 as_integer * as_integer_new(int64_t);
+
+int as_integer_init(as_integer *, int64_t);
+
+int as_integer_free(as_integer *);
 
 int as_integer_inc(as_integer *);
 
 int64_t as_integer_toint(const as_integer *);
 
 /******************************************************************************
- *
- * INLINE FUNCTION DEFINITIONS – CONVERSIONS
- * 
+ * INLINE FUNCTIONS
  ******************************************************************************/
 
 inline as_val * as_integer_toval(const as_integer * i) {

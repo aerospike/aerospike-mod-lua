@@ -5,18 +5,10 @@
 #include <sys/types.h>
 
 /******************************************************************************
- *
- * TYPE DECLARATIONS
- * 
+ * TYPES
  ******************************************************************************/
 
 typedef struct as_string_s as_string;
-
-/******************************************************************************
- *
- * TYPE DEFINITIONS
- * 
- ******************************************************************************/
 
 struct as_string_s {
     as_val _;
@@ -25,23 +17,21 @@ struct as_string_s {
 };
 
 /******************************************************************************
- *
- * FUNCTION DECLARATIONS
- * 
+ * FUNCTIONS
  ******************************************************************************/
 
-int as_string_free(as_string *);
-
 as_string * as_string_new(char *);
+
+int as_string_init(as_string *, char *);
+
+int as_string_free(as_string *);
 
 char * as_string_tostring(const as_string *);
 
 size_t as_string_len(as_string *);
 
 /******************************************************************************
- *
- * INLINE FUNCTION DEFINITIONS - CONVERSIONS
- * 
+ * INLINE FUNCTIONS
  ******************************************************************************/
 
 inline as_val * as_string_toval(const as_string * s) {

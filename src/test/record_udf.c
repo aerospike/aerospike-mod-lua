@@ -90,7 +90,7 @@ static void show_result(as_result * res) {
 }
 
 static int aslog(as_aerospike * as, const char * file, int line, int level, const char * m) {
-    log_append(file,line,"%s",m);
+    LOG(file,line,"%s",m);
     return 0;
 }
 

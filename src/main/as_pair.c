@@ -3,8 +3,29 @@
 #include <stdlib.h>
 #include <string.h>
 
-static const as_val AS_PAIR_VAL;
+/******************************************************************************
+ * STATIC FUNCTIONS
+ ******************************************************************************/
 
+static int as_pair_val_free(as_val *);
+static uint32_t as_pair_val_hash(as_val *);
+static char * as_pair_val_tostring(as_val *);
+
+/******************************************************************************
+ * VARIABLES
+ ******************************************************************************/
+
+static const as_val AS_PAIR_VAL = {
+    .type       = AS_PAIR,
+    .size       = sizeof(as_pair),
+    .free       = as_pair_val_free,
+    .hash       = as_pair_val_hash,
+    .tostring   = as_pair_val_tostring
+};
+
+/******************************************************************************
+ * FUNCTIONS
+ ******************************************************************************/
 
 int as_pair_free(as_pair * p) {
     if ( p->_1 ) free(p->_1);
@@ -39,12 +60,16 @@ static uint32_t as_pair_hash(as_pair * p) {
 
 as_pair * as_pair_new(as_val * _1, as_val * _2) {
     as_pair * p = (as_pair *) malloc(sizeof(as_pair));
-    p->_ = AS_PAIR_VAL;
-    p->_1 = _1;
-    p->_2 = _2;
+    as_pair_init(p, _1, _2);
     return p;
 }
 
+int as_pair_init(as_pair * p, as_val * _1, as_val * _2) {
+    p->_ = AS_PAIR_VAL;
+    p->_1 = _1;
+    p->_2 = _2;
+    return 0;
+}
 
 as_val * as_pair_1(as_pair * p) {
     return p->_1;
@@ -53,9 +78,6 @@ as_val * as_pair_1(as_pair * p) {
 as_val * as_pair_2(as_pair * p) {
     return p->_2;
 }
-
-
-
 
 static int as_pair_val_free(as_val * v) {
     return as_val_type(v) == AS_PAIR ? as_pair_free((as_pair *) v) : 1;
@@ -69,11 +91,3 @@ static char * as_pair_val_tostring(as_val * v) {
     if ( as_val_type(v) != AS_PAIR ) return NULL;
     return as_pair_tostring((as_pair *) v);
 }
-
-static const as_val AS_PAIR_VAL = {
-    .type       = AS_PAIR,
-    .size       = sizeof(as_pair),
-    .free       = as_pair_val_free,
-    .hash       = as_pair_val_hash,
-    .tostring   = as_pair_val_tostring
-};

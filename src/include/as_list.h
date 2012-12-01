@@ -28,8 +28,8 @@ struct as_list_s {
 };
 
 struct as_list_hooks_s {
-    int (*free)(as_list *);
-    uint32_t (*hash)(as_list *);
+    int (* free)(as_list *);
+    uint32_t (* hash)(const as_list *);
     uint32_t (* size)(const as_list *);
     int (* append)(as_list *, as_val *);
     int (* prepend)(as_list *, as_val *);
@@ -48,21 +48,17 @@ struct as_list_hooks_s {
 
 as_list * as_list_new(void *, const as_list_hooks *);
 
+int as_list_init(as_list *, void *, const as_list_hooks *);
+
 /******************************************************************************
  *
- * INLINE FUNCTION DEFINITIONS – VALUES
+ * INLINE FUNCTION DEFINITIONS
  * 
  ******************************************************************************/
 
 inline void * as_list_source(const as_list * l) {
     return l->source;
 }
-
-/******************************************************************************
- *
- * INLINE FUNCTION DEFINITIONS – HOOKS
- * 
- ******************************************************************************/
 
 inline int as_list_free(as_list * l) {
     return as_util_hook(free, 1, l);
@@ -103,12 +99,6 @@ inline as_list * as_list_tail(const as_list * l) {
 inline as_iterator * as_list_iterator(const as_list * l) {
     return as_util_hook(iterator, NULL, l);
 }
-
-/******************************************************************************
- *
- * INLINE FUNCTION DEFINITIONS – CONVERSIONS
- * 
- ******************************************************************************/
 
 inline as_val * as_list_toval(const as_list * l) {
     return (as_val *) l;
