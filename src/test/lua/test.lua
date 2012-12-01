@@ -44,12 +44,11 @@ function rmbin(r,bin)
     return 1;
 end
 
-function setbins(r,b1,v1,b2,v2,b3)
-    r[b1] = v1;
-    r[b2] = v2;
-	r[b3] = nil;
+function example_lua(r,arg1,arg2,arg3,arg4)
+    r[arg1] = arg2;
+    r[arg3] = arg4;
     aerospike:update(r);
-    return r[b1];
+    return r['b'];
 end
 
 function cat(r,a,b,c,d,e,f)
