@@ -77,6 +77,16 @@ static int mod_lua_aerospike_update(lua_State * l) {
 }
 
 /**
+ * aerospike.exists(record) => result<bool>
+ */
+static int mod_lua_aerospike_exists(lua_State * l) {
+    as_aerospike *  a   = mod_lua_checkaerospike(l, 1);
+    as_rec *        r   = mod_lua_torecord(l, 2);
+
+    return as_aerospike_exists(a, r);
+}
+
+/**
  * aerospike.remove(namespace, set, key) => result<bool>
  */
 static int mod_lua_aerospike_remove(lua_State * l) {
@@ -118,6 +128,7 @@ static int mod_lua_aerospike_gc(lua_State * l) {
 static const luaL_reg mod_lua_aerospike_table[] = {
     {"create",      mod_lua_aerospike_create},
     {"update",      mod_lua_aerospike_update},
+    {"exists",       mod_lua_aerospike_exists},
     {"remove",      mod_lua_aerospike_remove},
     {"log",         mod_lua_aerospike_log},
     {0, 0}

@@ -49,23 +49,29 @@ function remove(r,name)
 end
 
 -- Create a record
--- @TODO not returning error response
 function create_record(r,b1,v1,b2,v2)
-     local rsp = aerospike:create(r);
-     if (rsp) then
- 	    info("not created record already exists");
- 	else 
+     if not aerospike:exists(r) then
+    	 aerospike:create(r);
  	    info("created");
+ 	 else 
+ 	     info("not created record already exists");
  	end
  	r[b1] = v1;
      r[b2] = v2;
      aerospike:update(r);
  end
 
--- @TODO delete a record
--- function delete(r)
-    -- return aerospike.update(r)
--- end
+-- delete a record
+function delete_record(r,name)
+    info ("here");
+    if aerospike:exist(r) then
+        info("exist. delete now");
+    	return aerospike.remove(r)
+    else
+        info("not exist, delete should do nothing");
+    	return aerospike.remove(r)
+    end
+ end
 
 -- @TODO return record as is
 -- function echo_record(record) 
