@@ -25,6 +25,7 @@ as_types += as_iterator.o
 as_types += as_stream.o
 as_types += as_result.o
 as_types += as_aerospike.o
+as_types += as_serializer.o
 
 as_types += as_msgpack.o
 
