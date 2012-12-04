@@ -43,3 +43,11 @@ function iterate(r,k,...)
 
     return 1
 end
+
+function newlist(r,a,b,c)
+    local l = list{a,b,c}
+    info("1 => %s",l[1] or "<nil>")
+    info("2 => %s",l[2] or "<nil>")
+    info("3 => %s", l[3] or "<nil>")
+    return l[2]
+end
