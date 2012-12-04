@@ -1,5 +1,6 @@
 #include "test.h"
 #include "as_msgpack.h"
+#include "as_types.h"
 #include "as_hashmap.h"
 #include "as_arraylist.h"
 
@@ -66,15 +67,27 @@ int serialize(as_val * v) {
 
     print_buffer(&b);
 
-    as_serializer_free(&s);
-    as_buffer_free(&b);
+    as_val * out = NULL;
+    as_serializer_deserialize(&s, &b, &out);
+
+    printf("out: %s\n",as_val_tostring(out));
+    printf("\n");
+
+    as_val_free(out);
+
+    as_serializer_destroy(&s);
+    as_buffer_destroy(&b);
 
     return 0;
 }
 
 
 int main(int argc, char ** argv) {
-    serialize((as_val *) make_map(0));
+    serialize((as_val *) as_boolean_new(true));
+    serialize((as_val *) as_boolean_new(false));
+    serialize((as_val *) as_integer_new(1));
+    serialize((as_val *) as_string_new("hello world"));
     serialize((as_val *) make_list(0));
+    serialize((as_val *) make_map(0));
     return 0;
 }
