@@ -35,3 +35,32 @@ function many_bins(record,count)
    return 0;
 end	
 
+function set_maplist_bins(record,a,b)
+    --  map{k1="v1",k2="v2"};
+    -- record[a] = map();
+    -- record[a]["k1"] = "v1";
+    -- record[a]["k2"] = "v2";
+    info("set_maplist_bins");
+    local m = map();
+    m["k1"] = "v1";
+    m["k2"] = "v2";
+    record[a] = m;
+    local l = list();
+    l[0] = "l1";
+    l[1] = "l2";    
+    record[b] = l;
+    aerospike:update(record);
+	return "OK"
+end
+
+function get_map_bin(record,a)
+    local m = record[a];
+    return m["k2"];
+end
+
+function get_list_bin(record,a)
+    local l = record[a];
+    return l[1];
+end
+
+
