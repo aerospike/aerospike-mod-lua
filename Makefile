@@ -1,14 +1,14 @@
 include project/build.makefile
 
-CFLAGS = -g -O3 -std=gnu99 -Wall -fPIC -fno-strict-aliasing -rdynamic -fno-common -fno-strict-aliasing -finline-functions -Winline
-#CFLAGS = -g -O3 -fno-common -fno-strict-aliasing -rdynamic  -Wall -D_FILE_OFFSET_BITS=64 -std=gnu99 -D_REENTRANT -D_GNU_SOURCE  -D MARCH_x86_64 -march=nocona  -DMEM_COUNT -MMD 
-LDFLAGS = -g -O3 -std=gnu99 -Wall -fPIC -fno-strict-aliasing -rdynamic -fno-common -fno-strict-aliasing -finline-functions -Winline
+CFLAGS 	= -g -O3 -std=gnu99 -Wall -fPIC -fno-common -fno-strict-aliasing -finline-functions -Winline -march=nocona
+LDFLAGS = -Wall -Winline -rdynamic 
 
 MODULES += common
 
 INC_PATH += modules/msgpack/src
 
 as_types =
+as_types += as_nil.o
 as_types += as_boolean.o
 as_types += as_integer.o
 as_types += as_string.o
