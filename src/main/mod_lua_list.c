@@ -53,6 +53,16 @@ static int mod_lua_list_size(lua_State * l) {
 
 static int mod_lua_list_new(lua_State * l) {
     as_list * list = as_linkedlist_new(NULL,NULL);
+    int n = lua_gettop(l);
+    if ( n == 2 && lua_type(l, 2) == LUA_TTABLE) {
+        lua_pushnil(l);
+        while ( lua_next(l, 2) != 0 ) {
+            if ( lua_type(l, -2) == LUA_TNUMBER ) {
+                as_list_append(list, mod_lua_toval(l, -1));
+            }
+            lua_pop(l, 1);
+        }
+    }
     mod_lua_pushlist(l, list);
     return 1;
 }

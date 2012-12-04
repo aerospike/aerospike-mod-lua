@@ -27,3 +27,21 @@ function get(r,bin,key)
     local m = r[bin]
     return m[key]
 end
+
+function newmap(r,bin,a,b,c)
+    local m = map {a=a,b=b,c=c}
+    info("%s => %s", "a", m.a or "<nil>")
+    info("%s => %s", "b", m.b or "<nil>")
+    info("%s => %s", "b", m.c or "<nil>")
+    return m["b"]
+end
+
+function putmap(r,bin,a,b,c)
+    r[bin] = map{a=a, b=b, c=c}
+    aerospike:create(r);
+    return r[bin]["a"]
+end
+
+function getmap(r,bin,key)
+    return r[bin][key]
+end
