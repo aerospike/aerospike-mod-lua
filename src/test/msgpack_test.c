@@ -48,6 +48,7 @@ int print_buffer(as_buffer * buff) {
     msgpack_object deserialized;
     msgpack_unpack(sbuf.data, sbuf.size, NULL, &mempool, &deserialized);
     
+    printf("b: ");
     msgpack_object_print(stdout, deserialized);
     puts("");
 
@@ -63,6 +64,8 @@ int serialize(as_val * v) {
     as_serializer s;
     as_msgpack_init(&s);
 
+    printf("a: %s\n",as_val_tostring(v));
+
     as_serializer_serialize(&s, v, &b);
 
     print_buffer(&b);
@@ -70,7 +73,7 @@ int serialize(as_val * v) {
     as_val * out = NULL;
     as_serializer_deserialize(&s, &b, &out);
 
-    printf("out: %s\n",as_val_tostring(out));
+    printf("c: %s\n",as_val_tostring(out));
     printf("\n");
 
     as_val_free(out);
