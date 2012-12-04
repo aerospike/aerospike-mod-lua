@@ -37,9 +37,7 @@ static int mod_lua_map_size(lua_State * l) {
 static int mod_lua_map_new(lua_State * l) {
     as_map * map = as_hashmap_new(320);
     int n = lua_gettop(l);
-    printf("mod_lua_map_new: %d\n",n);
     if ( n == 2 && lua_type(l, 2) == LUA_TTABLE) {
-        printf("iterating over table\n");
         lua_pushnil(l);
         while ( lua_next(l, 2) != 0 ) {
             as_val * k = mod_lua_toval(l, -2);
