@@ -35,3 +35,20 @@ function many_bins(record,count)
    return 0;
 end	
 
+function set_map_bin(record,a)
+--  map{k1="v1",k2="v2"};
+    info("set_table_bin");
+    local ttt = map();
+    ttt["k1"] = "v1";
+    ttt["k2"] = "v2";
+    record[a] = ttt;
+    -- record[a] = map();
+    -- record[a]["k1"] = "v1";
+    -- record[a]["k2"] = "v2";
+    aerospike:update(record);
+end
+
+function get_map_bin(record,a)
+    local ttt = record[a];
+    info(ttt["k2"]);
+end
