@@ -28,23 +28,30 @@ function example_lua(r,arg1,arg2,arg3,arg4)
 end
 
 -- Get a particular bin
-function get(r,name)
+function getbin(r,name)
     return r[name]
 end
 
 -- Set a particular bin
-function set(r,name,value)
+function setbin(r,name,value)
     local old = r[name]
     r[name] = value
-    aerospike.update(r)
+    aerospike:update(r)
     return old
+end
+
+-- Set a particular bin
+function set_and_get(r,name,value)
+    r[name] = value
+    aerospike:update(r)
+    return r[name]
 end
 
 -- Remove a paritcular bin
 function remove(r,name)
     local old = r[name]
     r[name] = nil
-    aerospike.update(r)
+    aerospike:update(r)
     return old
 end
 
@@ -57,8 +64,9 @@ function create_record(r,b1,v1,b2,v2)
  	     info("not created record already exists");
  	end
  	r[b1] = v1;
-     r[b2] = v2;
-     aerospike:update(r);
+    r[b2] = v2;
+    aerospike:update(r);
+    return r[b1]
  end
 
 -- delete a record

@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <stdarg.h>
 
-void log_append(const char * file, int line, const char * fmt, ...) {
+void __log_append(const char * file, int line, const char * fmt, ...) {
     char msg[128] = {0};
     va_list ap;
     va_start(ap, fmt);
@@ -13,5 +13,5 @@ void log_append(const char * file, int line, const char * fmt, ...) {
     printf("%s:%d – %s\n",file,line,msg);
 }
 
-#define log(fmt, args...) \
-    // log_append(__FILE__, __LINE__, fmt, ## args);
+#define LOG(fmt, args...) \
+    __log_append(__FILE__, __LINE__, fmt, ## args);

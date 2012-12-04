@@ -2,7 +2,7 @@
 
 int mod_lua_reg_object(lua_State * l, const char * name, const luaL_reg * table, const luaL_reg * metatable) {
 
-    int tableId, metatableId;
+    int tableId = 0, metatableId = 0;
 
     luaL_register(l, name, table);
     tableId = lua_gettop(l);
@@ -27,7 +27,7 @@ int mod_lua_reg_object(lua_State * l, const char * name, const luaL_reg * table,
 
 int mod_lua_reg_class(lua_State * l, const char * name, const luaL_reg * table, const luaL_reg * metatable) {
 
-    int tableId, metatableId;
+    int tableId = 0, metatableId = 0;
 
     if ( table ) {
         luaL_register(l, name, table);
