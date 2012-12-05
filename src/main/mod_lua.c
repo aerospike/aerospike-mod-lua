@@ -14,13 +14,14 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/types.h>
+#include <setjmp.h>         // needed for gracefully handling lua panics
+
+#include <fault.h>
 
 // LUA Shizzle
 #include <lua.h>
 #include <lauxlib.h>
 #include <lualib.h>
-
-#include <stdio.h>
 
 
 #define LOG(m) \
@@ -30,14 +31,20 @@ typedef struct mod_lua_context_s mod_lua_context;
 
 static const as_module_hooks hooks;
 
+static jmp_buf panic_jmp;
+
 static int init(as_module *);
 static int configure(as_module *, void *);
-static int apply_record(as_module *, as_aerospike * as, const char *, const char *, as_rec *, as_list *, as_result *);
-static int apply_stream(as_module *, as_aerospike * as, const char *, const char *, as_stream *, as_list *, as_result *);
+static int apply_record(as_module *, as_aerospike *, const char *, const char *, as_rec *, as_list *, as_result *);
+static int apply_stream(as_module *, as_aerospike *, const char *, const char *, as_stream *, as_list *, as_result *);
 
 static lua_State * create_state();
-static lua_State * open_state(as_module * m, const char * f);
-static int close_state(as_module * m, const char * f, lua_State * l);
+static lua_State * open_state(as_module *, const char *);
+static int close_state(as_module *, const char *, lua_State *);
+
+static void panic_setjmp(void);
+static int handle_error(lua_State *);
+static int handle_panic(lua_State *);
 
 /**
  * Lua Module Specific Data
@@ -158,7 +165,11 @@ static lua_State * create_state(as_module * m, const char * filename) {
     lua_State *         l   = NULL;
 
     l = lua_open();
+
     luaL_openlibs(l);
+
+    panic_setjmp();
+    lua_atpanic(l, handle_panic);
 
     package_path_set(l, ctx->system_path, ctx->user_path);
 
@@ -253,6 +264,49 @@ static int pushargs(lua_State * l, as_list * args) {
     return argc;
 }
 
+
+static void panic_setjmp(void) {
+    setjmp(panic_jmp);
+}
+
+static int handle_panic(lua_State * l) {
+    const char * msg = lua_tostring(l, 1);
+    cf_warning(AS_SPROC, (char *) msg);
+    longjmp(panic_jmp, 1);
+    return 0;
+}
+
+static int handle_error(lua_State * l) {
+    const char * msg = luaL_optstring(l, 1, 0);
+    cf_warning(AS_SPROC, (char *) msg);
+    return 0;
+}
+
+static int apply(lua_State * l, int err, int argc, as_result * res) {
+
+    // call apply_record(f, r, ...)
+    LOG("call apply_record()");
+    int rc = lua_pcall(l, argc, 1, err);
+
+    // Convert the return value from a lua type to a val type
+    LOG("convert lua type to val");
+    as_val * rv = mod_lua_toval(l, -1);
+
+    if ( rc == 0 ) {
+        as_result_tosuccess(res, rv);
+    }
+    else {
+        as_result_tofailure(res, rv);
+    }
+
+    // Pop the return value off the stack
+    LOG("pop return value from the stack");
+    lua_pop(l, -1);
+
+    return 0;
+}
+
+
 /**
  * Applies a record and arguments to the function specified by a fully-qualified name.
  *
@@ -271,14 +325,17 @@ static int apply_record(as_module * m, as_aerospike * as, const char * filename,
 
     lua_State * l       = (lua_State *) NULL;   // Lua State
     int         argc    = 0;                    // Number of arguments pushed onto the stack
-    as_val *    rv      = (as_val *) NULL;      // Return value from pcall
-    int         rc      = 0;                    // Return code from pcall
+    int         err     = 0;                    // Error handler
     
     LOG("BEGIN")
 
     // lease a context
     LOG("open context")
     l = open_state(m, filename);
+
+    // push error handler
+    // lua_pushcfunction(l, handle_error);
+    // int err = lua_gettop(l);
     
     // push aerospike into the global scope
     LOG("push aerospike into the global scope");
@@ -304,32 +361,17 @@ static int apply_record(as_module * m, as_aerospike * as, const char * filename,
     // function + stream + arglist
     argc = argc + 2;
     
-    // call apply_record(f, r, ...)
-    LOG("call apply_record()");
-    rc = lua_pcall(l, argc, 1, 0);
-
-    // Convert the return value from a lua type to a val type
-    LOG("convert lua type to val");
-    rv = mod_lua_toval(l, -1);
-
-    if ( rc == 0 ) {
-        as_result_tosuccess(res, rv);
-    }
-    else {
-        as_result_tofailure(res, rv);
-    }
-    
-    // Pop the return value off the stack
-    LOG("pop return value from the stack");
-    lua_pop(l, -1);
+    // apply the function
+    apply(l, err, argc, res);
 
     // release the context
     LOG("close the context");
     close_state(m, filename, l);
-
+    
     LOG("END");
     return 0;
 }
+
 
 
 /**
@@ -350,14 +392,17 @@ static int apply_stream(as_module * m, as_aerospike * as, const char * filename,
 
     lua_State * l       = (lua_State *) NULL;   // Lua State
     int         argc    = 0;                    // Number of arguments pushed onto the stack
-    as_val *    rv      = (as_val *) NULL;      // Return value from pcall
-    int         rc      = 0;                    // Return code from pcall
+    int         err     = 0;                    // Error handler
 
     LOG("apply_stream: BEGIN")
 
     // lease a context
     LOG("open context")
     l = open_state(m, filename);
+
+    // push error handler
+    // lua_pushcfunction(l, handle_error);
+    // int err = lua_gettop(l);
 
     // push aerospike into the global scope
     LOG("push aerospike into the global scope");
@@ -385,28 +430,13 @@ static int apply_stream(as_module * m, as_aerospike * as, const char * filename,
     
     // call apply_stream(f, s, ...)
     LOG("call apply_stream()");
-    rc = lua_pcall(l, argc, 1, 0);
-
-    // Convert the return value from a lua type to a val type
-    LOG("convert lua type to val");
-    rv = mod_lua_toval(l, -1);
-    
-    if ( rc == 0 ) {
-        as_result_tosuccess(res, rv);
-    }
-    else {
-        as_result_tofailure(res, rv);
-    }
-
-    // Pop the return value off the stack
-    LOG("pop return value from the stack");
-    lua_pop(l, -1);
+    apply(l, err, argc, res);
 
     // release the context
     LOG("close the context");
     close_state(m, filename, l);
 
-    LOG("apply_stream: END");
+    LOG("END");
     return 0;
 }
 
