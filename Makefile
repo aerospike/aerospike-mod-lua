@@ -3,9 +3,9 @@ include project/build.makefile
 CFLAGS 	= -g -O3 -std=gnu99 -Wall -fPIC -fno-common -fno-strict-aliasing -finline-functions -Winline -march=nocona
 LDFLAGS = -Wall -Winline -rdynamic 
 
-MODULES += common
+# MODULES += common
 
-INC_PATH += modules/msgpack/src
+INC_PATH += modules/msgpack/src modules/common/$(TARGET_INCL)/shared
 
 as_types =
 as_types += as_nil.o
@@ -49,12 +49,10 @@ val_test_o += $(as_types)
 
 all: libmod_lua.a
 
-
-
-libmod_lua.so: $(call objects, $(as_types) $(mod_lua)) | $(TARGET_LIB) $(MODULES) common msgpack
+libmod_lua.so: $(call objects, $(as_types) $(mod_lua)) | common msgpack $(TARGET_LIB) 
 	$(call library, $(empty), $(empty), lua cf, $(empty))
 
-libmod_lua.a: $(call objects, $(as_types) $(mod_lua)) | $(TARGET_LIB) common
+libmod_lua.a: $(call objects, $(as_types) $(mod_lua)) | common msgpack $(TARGET_LIB) 
 	$(call archive, $(empty), $(empty), $(empty), $(empty))
 
 ##

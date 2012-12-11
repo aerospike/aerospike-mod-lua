@@ -16,7 +16,7 @@
 #include <sys/types.h>
 #include <setjmp.h>         // needed for gracefully handling lua panics
 
-#include <fault.h>
+// #include <fault.h>
 
 // LUA Shizzle
 #include <lua.h>
@@ -270,15 +270,15 @@ static void panic_setjmp(void) {
 }
 
 static int handle_panic(lua_State * l) {
-    const char * msg = lua_tostring(l, 1);
-    cf_warning(AS_SPROC, (char *) msg);
+    // const char * msg = lua_tostring(l, 1);
+    // cf_warning(AS_SPROC, (char *) msg);
     longjmp(panic_jmp, 1);
     return 0;
 }
 
 static int handle_error(lua_State * l) {
-    const char * msg = luaL_optstring(l, 1, 0);
-    cf_warning(AS_SPROC, (char *) msg);
+    // const char * msg = luaL_optstring(l, 1, 0);
+    // cf_warning(AS_SPROC, (char *) msg);
     return 0;
 }
 
