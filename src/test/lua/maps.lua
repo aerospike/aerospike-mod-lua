@@ -36,12 +36,23 @@ function newmap(r,bin,a,b,c)
     return m["b"]
 end
 
-function putmap(r,bin,a,b,c)
-    r[bin] = map{a=a, b=b, c=c}
+function putmap(r,bin,m)
+    r[bin] = m
     aerospike:create(r);
-    return r[bin]["a"]
+    return r[bin]
 end
 
-function getmap(r,bin,key)
-    return r[bin][key]
+function getmap(r,bin)
+    return r[bin]
+end
+
+
+function mapput(r, map, k, v) 
+    map[k] = v
+    return map
+end
+
+function show(r, map, k) 
+    info("show: %s",map[k]);
+    return map;
 end
