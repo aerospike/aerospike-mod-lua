@@ -5,7 +5,7 @@ LDFLAGS = -Wall -Winline -rdynamic
 
 # MODULES += common
 
-INC_PATH += modules/msgpack/src modules/common/$(TARGET_INCL)/shared
+INC_PATH += modules/msgpack/src modules/common/$(TARGET_INCL)
 
 as_types =
 as_types += as_nil.o
