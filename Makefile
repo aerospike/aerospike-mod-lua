@@ -47,7 +47,7 @@ test_o += $(as_types) $(as_module) $(mod_lua)
 val_test_o =  val_test.o
 val_test_o += $(as_types)
 
-all: libmod_lua.a
+all: common libmod_lua.a
 
 libmod_lua.so: $(call objects, $(as_types) $(mod_lua)) | common msgpack $(TARGET_LIB) 
 	$(call library, $(empty), $(empty), lua cf, $(empty))
