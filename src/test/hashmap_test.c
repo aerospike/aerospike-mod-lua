@@ -46,6 +46,10 @@ int main ( int argc, char ** argv ) {
     }
     as_iterator_free(i);
 
+    LOG("print map");
+
+    LOG("%s", as_val_tostring((as_val *) m));
+
     LOG("END");
     return 0;
 }
