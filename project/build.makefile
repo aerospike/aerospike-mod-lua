@@ -116,6 +116,7 @@ define executable
 		$(addprefix -l, $($@_lib)) \
 		$(addprefix -l, $(3)) \
 		$(4) \
+		$(CFLAGS) \
 		$(LDFLAGS) \
 		$($@_flags) \
 		-o $(TARGET_BIN)/$@ \

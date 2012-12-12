@@ -1,6 +1,6 @@
 include project/build.makefile
 
-CFLAGS 	= -g -O3 -std=gnu99 -Wall -fPIC -fno-common -fno-strict-aliasing -finline-functions -Winline -march=nocona
+CFLAGS 	= -g -O3 -std=gnu99 -Wall -fPIC -fno-common -fno-strict-aliasing -finline-functions -Winline -march=nocona -DMARCH_$(ARCH) 
 LDFLAGS = -Wall -Winline -rdynamic 
 
 # MODULES += common
