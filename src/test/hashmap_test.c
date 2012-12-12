@@ -8,7 +8,7 @@ int main ( int argc, char ** argv ) {
 
     LOG("BEGIN!");
 
-    as_map *    m   = as_hashmap_new(64);
+    as_map *    m   = as_hashmap_new(3);
     as_string * a   = as_string_new("a");
     as_string * b   = as_string_new("b");
     as_string * c   = as_string_new("c");
