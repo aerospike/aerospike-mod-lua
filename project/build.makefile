@@ -56,6 +56,7 @@ TARGET_BIN = $(TARGET_BASE)/bin
 TARGET_DOC = $(TARGET_BASE)/doc
 TARGET_LIB = $(TARGET_BASE)/lib
 TARGET_OBJ = $(TARGET_BASE)/obj
+TARGET_INCL = $(TARGET_BASE)/include
 
 #
 # Builds an object, library, archive or executable using the dependencies specified for the target.
@@ -115,6 +116,7 @@ define executable
 		$(addprefix -l, $($@_lib)) \
 		$(addprefix -l, $(3)) \
 		$(4) \
+		$(CFLAGS) \
 		$(LDFLAGS) \
 		$($@_flags) \
 		-o $(TARGET_BIN)/$@ \

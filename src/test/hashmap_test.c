@@ -8,7 +8,7 @@ int main ( int argc, char ** argv ) {
 
     LOG("BEGIN!");
 
-    as_map *    m   = as_hashmap_new(64);
+    as_map *    m   = as_hashmap_new(3);
     as_string * a   = as_string_new("a");
     as_string * b   = as_string_new("b");
     as_string * c   = as_string_new("c");
@@ -45,6 +45,10 @@ int main ( int argc, char ** argv ) {
         LOG("%s",as_val_tostring(v));
     }
     as_iterator_free(i);
+
+    LOG("print map");
+
+    LOG("%s", as_val_tostring((as_val *) m));
 
     LOG("END");
     return 0;

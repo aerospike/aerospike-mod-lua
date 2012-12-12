@@ -44,6 +44,15 @@ function iterate(r,k,...)
     return 1
 end
 
+function lappend(r,l,...)
+    info("FUCK YEAH!")
+    -- local len = select('#',...)
+    -- for i=1, len do
+    list.append(l, "dug")
+    -- end
+    return l
+end
+
 function newlist(r,a,b,c)
     local l = list{a,b,c}
     info("1 => %s",l[1] or "<nil>")

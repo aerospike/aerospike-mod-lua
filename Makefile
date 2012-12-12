@@ -1,11 +1,11 @@
 include project/build.makefile
 
-CFLAGS 	= -g -O3 -std=gnu99 -Wall -fPIC -fno-common -fno-strict-aliasing -finline-functions -Winline -march=nocona
+CFLAGS 	= -g -O3 -std=gnu99 -Wall -fPIC -fno-common -fno-strict-aliasing -finline-functions -Winline -march=nocona -DMARCH_$(ARCH) 
 LDFLAGS = -Wall -Winline -rdynamic 
 
-MODULES += common
+# MODULES += common
 
-INC_PATH += modules/msgpack/src
+INC_PATH += modules/msgpack/src modules/common/$(TARGET_INCL)/shared
 
 as_types =
 as_types += as_nil.o
@@ -47,14 +47,12 @@ test_o += $(as_types) $(as_module) $(mod_lua)
 val_test_o =  val_test.o
 val_test_o += $(as_types)
 
-all: libmod_lua.a
+all: common libmod_lua.a
 
-
-
-libmod_lua.so: $(call objects, $(as_types) $(mod_lua)) | $(TARGET_LIB) $(MODULES) common msgpack
+libmod_lua.so: $(call objects, $(as_types) $(mod_lua)) | common msgpack $(TARGET_LIB) 
 	$(call library, $(empty), $(empty), lua cf, $(empty))
 
-libmod_lua.a: $(call objects, $(as_types) $(mod_lua)) | $(TARGET_LIB) common
+libmod_lua.a: $(call objects, $(as_types) $(mod_lua)) | common msgpack $(TARGET_LIB) 
 	$(call archive, $(empty), $(empty), $(empty), $(empty))
 
 ##
@@ -76,18 +74,18 @@ msgpack: modules/msgpack/Makefile
 ##
 
 record_udf: $(SOURCE_TEST)/record_udf.c | $(TARGET_BIN) libmod_lua.a
-	$(call executable, $(empty), $(empty), lua, $(empty), $(TARGET_LIB)/libmod_lua.a  modules/common/$(TARGET_LIB)/libcf.a )
+	$(call executable, $(empty), $(empty), lua, $(empty), $(TARGET_LIB)/libmod_lua.a  modules/common/$(TARGET_LIB)/libcf-client.a )
 
 hashmap_test: $(SOURCE_TEST)/hashmap_test.c | $(TARGET_BIN) $(MODULES) libmod_lua.a
-	$(call executable, $(empty), $(empty), $(empty), $(empty), $(TARGET_LIB)/libmod_lua.a modules/common/$(TARGET_LIB)/libcf.a  )
+	$(call executable, $(empty), $(empty), $(empty), $(empty), $(TARGET_LIB)/libmod_lua.a modules/common/$(TARGET_LIB)/libcf-client.a  )
 
 linkedlist_test: $(SOURCE_TEST)/linkedlist_test.c | $(TARGET_BIN) $(MODULES) libmod_lua.a
-	$(call executable, $(empty), $(empty), $(empty), $(empty), $(TARGET_LIB)/libmod_lua.a modules/common/$(TARGET_LIB)/libcf.a  )
+	$(call executable, $(empty), $(empty), $(empty), $(empty), $(TARGET_LIB)/libmod_lua.a modules/common/$(TARGET_LIB)/libcf-client.a  )
 
 arraylist_test: $(SOURCE_TEST)/arraylist_test.c | $(TARGET_BIN) $(MODULES) libmod_lua.a
-	$(call executable, $(empty), $(empty), $(empty), $(empty), $(TARGET_LIB)/libmod_lua.a modules/common/$(TARGET_LIB)/libcf.a  )
+	$(call executable, $(empty), $(empty), $(empty), $(empty), $(TARGET_LIB)/libmod_lua.a modules/common/$(TARGET_LIB)/libcf-client.a  )
 
 msgpack_test: $(SOURCE_TEST)/msgpack_test.c | $(TARGET_BIN) $(MODULES) libmod_lua.a msgpack
-	$(call executable, $(empty), $(empty), $(empty), $(empty), $(TARGET_LIB)/libmod_lua.a modules/common/$(TARGET_LIB)/libcf.a modules/msgpack/src/.libs/libmsgpack.a  )
+	$(call executable, $(empty), $(empty), $(empty), $(empty), $(TARGET_LIB)/libmod_lua.a modules/common/$(TARGET_LIB)/libcf-client.a modules/msgpack/src/.libs/libmsgpack.a  )
 
 test: msgpack_test hashmap_test linkedlist_test arraylist_test record_udf
