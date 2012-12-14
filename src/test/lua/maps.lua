@@ -38,11 +38,15 @@ end
 
 function putmap(r,bin,m)
     r[bin] = m
+    info("%s => %s", "A", m['A'] or "<nil>")
+    info("%s => %s", "B", m['B']  or "<nil>")
+    info("%s => %s", "C", m['C']  or "<nil>")
     aerospike:create(r);
     return r[bin]
 end
 
 function getmap(r,bin)
+    info("%s => %s", "A", r[bin]['A'] or "<nil>")
     return r[bin]
 end
 

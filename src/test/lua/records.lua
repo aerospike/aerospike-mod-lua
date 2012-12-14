@@ -34,9 +34,22 @@ end
 
 -- Set a particular bin
 function setbin(r,name,value)
+    if not aerospike:exists(r) then aerospike:create(r) end
     local old = r[name]
     r[name] = value
     aerospike:update(r)
+    return old
+end
+
+-- Set a particular bin
+function setbin2(r,name,value)
+    local old = r[name]
+    r[name] = value
+    if not aerospike:exists(r) then
+        aerospike:create(r)
+    else
+        aerospike:create(r)
+    end
     return old
 end
 
@@ -63,9 +76,14 @@ function create_record(r,b1,v1,b2,v2)
  	 else 
  	     info("not created record already exists");
  	end
- 	r[b1] = v1;
-    r[b2] = v2;
-    aerospike:update(r);
+ 	if b1 and v1 then 
+        r[b1] = v1
+        if b2 and v2 then 
+            r[b2] = v2
+        end
+        aerospike:update(r);
+        info("updated!")
+    end
     return r[b1]
  end
 
