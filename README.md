@@ -4,13 +4,34 @@ Adds support to Aerospike for executing Lua functions.
 
 ## Dependencies
 
-#### Lua 5.1.4
+### Linux Dependencies
 
-This project requires `lua` for executing lua scripts.
+#### Redhat Dependencies
 
-Redhat / CentOS
-		
-	$ yum install lua-devel.x86_64
+Redhat based Linux Distributions (Redhat, Fedora, CentOS, SUS, etc.)require the following packages:
+
+* `lua-devel.x86_64` - should install development resources for `lua-5.1.4` 
+
+If `yum` is your package manager, then you should be able to run the following command:
+
+	$ sudo yum install lua-devel.x86_64
+
+#### Debian Dependencies
+
+Debian based Linux Distributions (Debian, Ubuntu, etc.) require the following packages:
+
+* `liblua5.1-dev` - should install development resources for `lua-5.1.4` 
+
+If `apt-get` is your package manager, then you should be able to run the following command:
+
+	$ sudo apt-get install liblua5.1-dev
+
+
+### Library Dependencies
+
+#### mgspack-0.5.7
+
+mod-lua utilizes msgpack for serializing some types. We recommend you follow the instructions provided on the msgpacks's [QuickStart for C Language](http://wiki.msgpack.org/display/MSGPACK/QuickStart+for+C+Language).
 
 
 ## Build
