@@ -49,13 +49,15 @@ val_test_o += $(as_types)
 ## MAIN
 ##
 
-all: libmod_lua.a
+all: libmod_lua.a libmod_lua.so
 
-libmod_lua.so: $(call objects, $(as_types) $(mod_lua)) | common $(TARGET_LIB) 
-	$(call library, $(empty), $(empty), lua, $(empty))
+libmod_lua.o: $(call objects, $(as_types) $(mod_lua))
 
-libmod_lua.a: $(call objects, $(as_types) $(mod_lua)) | common $(TARGET_LIB) 
-	$(call archive, $(empty), $(empty), $(empty), $(empty))
+libmod_lua.so: | common libmod_lua.o $(TARGET_LIB) 
+	$(call library, $(empty), $(empty), lua, $(empty), $(TARGET_OBJ)/*.o)
+
+libmod_lua.a: | common libmod_lua.o $(TARGET_LIB) 
+	$(call archive, $(empty), $(empty), $(empty), $(empty), $(TARGET_OBJ)/*.o)
 
 ##
 ## SUB-MODULES
