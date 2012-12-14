@@ -45,6 +45,10 @@ test_o += $(as_types) $(as_module) $(mod_lua)
 val_test_o =  val_test.o
 val_test_o += $(as_types)
 
+##
+## MAIN
+##
+
 all: libmod_lua.a
 
 libmod_lua.so: $(call objects, $(as_types) $(mod_lua)) | common $(TARGET_LIB) 
@@ -58,7 +62,7 @@ libmod_lua.a: $(call objects, $(as_types) $(mod_lua)) | common $(TARGET_LIB)
 ##
 
 common: 
-	make -C modules/common all MEM_COUNT=$(MEM_COUNT)
+	make -C modules/common prepare MEM_COUNT=$(MEM_COUNT)
 
 ##
 ## TEST
