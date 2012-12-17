@@ -4,6 +4,7 @@ CFLAGS 	= -g -O3 -std=gnu99 -Wall -fPIC -fno-common -fno-strict-aliasing -finlin
 LDFLAGS = -Wall -Winline -rdynamic 
 
 INC_PATH += modules/common/$(TARGET_INCL)
+INC_PATH += modules/msgpack/src/
 
 as_types =
 as_types += as_nil.o
@@ -53,10 +54,10 @@ all: libmod_lua.a libmod_lua.so
 
 libmod_lua.o: $(call objects, $(as_types) $(mod_lua))
 
-libmod_lua.so: | common libmod_lua.o $(TARGET_LIB) 
+libmod_lua.so: | common msgpack libmod_lua.o $(TARGET_LIB) 
 	$(call library, $(empty), $(empty), lua, $(empty), $(TARGET_OBJ)/*.o)
 
-libmod_lua.a: | common libmod_lua.o $(TARGET_LIB) 
+libmod_lua.a: | common msgpack libmod_lua.o $(TARGET_LIB) 
 	$(call archive, $(empty), $(empty), $(empty), $(empty), $(TARGET_OBJ)/*.o)
 
 ##
@@ -65,6 +66,12 @@ libmod_lua.a: | common libmod_lua.o $(TARGET_LIB)
 
 common: 
 	make -C modules/common prepare MEM_COUNT=$(MEM_COUNT)
+
+modules/msgpack/Makefile: 
+	cd modules/msgpack && ./configure
+
+msgpack: modules/msgpack/Makefile
+	cd modules/msgpack && make
 
 ##
 ## TEST
