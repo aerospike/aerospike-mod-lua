@@ -45,11 +45,10 @@ function iterate(r,k,...)
 end
 
 function lappend(r,l,...)
-    info("FUCK YEAH!")
-    -- local len = select('#',...)
-    -- for i=1, len do
-    list.append(l, "dug")
-    -- end
+    local len = select('#',...)
+    for i=1, len do
+        list.append(l, select(i,...))
+    end
     return l
 end
 

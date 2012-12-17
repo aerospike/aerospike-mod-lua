@@ -78,7 +78,6 @@ TARGET_INCL = $(TARGET_BASE)/include
 #							  Relative paths are relative to the project root.
 #		libraries			- space separated list of libraries.
 #		flags 				- space separated list of linking flags.
-#		files 				- space separated list of files.
 #
 # You can optionally define variables, rather than arguments as:
 #
@@ -92,20 +91,21 @@ TARGET_INCL = $(TARGET_BASE)/include
 
 define build
 	$(if $(filter .o,$(suffix $@)), 
-		$(call object, $(1),$(2),$(3),$(4),$(5)),
+		$(call object, $(1),$(2),$(3),$(4)),
 		$(if $(filter .so,$(suffix $@)), 
-			$(call library, $(1),$(2),$(3),$(4),$(5)),
+			$(call library, $(1),$(2),$(3),$(4)),
 			$(if $(filter .a,$(suffix $@)), 
-				$(call archive, $(1),$(2),$(3),$(4),$(5)),
-				$(call executable, $(1),$(2),$(3),$(4),$(5))
+				$(call archive, $(1),$(2),$(3),$(4)),
+				$(call executable, $(1),$(2),$(3),$(4))
 			)
 		)
 	)
 endef
 
 define executable
+	@mkdir -p $(TARGET_BIN)/`dirname $@`
 	$(strip $(CC) \
-		$(addprefix -I, $(MODULES:%=modules/%/$(SOURCE_INCL))) \
+		$(addprefix -I, $(MODULES:%=modules/%/$(TARGET_INCL))) \
 		$(addprefix -I, $(INC_PATH)) \
 		$(addprefix -I, $($@_inc_path)) \
 		$(addprefix -I, $(1)) \
@@ -126,12 +126,14 @@ define executable
 endef
 
 define archive
-	$(strip $(AR) rcs $(ARFLAGS) $(4) $(TARGET_LIB)/$@ $^ )
+	@mkdir -p `dirname $@`
+	$(strip $(AR) rcs $(ARFLAGS) $(4) $(TARGET_LIB)/$@ $^ $(5))
 endef
 
 define library
+	@mkdir -p $(TARGET_LIB)/`dirname $@`
 	$(strip $(CC) -shared \
-		$(addprefix -I, $(MODULES:%=modules/%/$(SOURCE_INCL))) \
+		$(addprefix -I, $(MODULES:%=modules/%/$(TARGET_INCL))) \
 		$(addprefix -I, $(INC_PATH)) \
 		$(addprefix -I, $($@_inc_path)) \
 		$(addprefix -I, $(1)) \
@@ -141,9 +143,9 @@ define library
 		$(addprefix -L, $(2)) \
 		$(addprefix -l, $($@_lib)) \
 		$(addprefix -l, $(3)) \
-		$(4) \
 		$(LDFLAGS) \
 		$($@_flags) \
+		$(4) \
 		-o $(TARGET_LIB)/$@ \
 		$^ \
 		$(5) \
@@ -151,8 +153,9 @@ define library
 endef
 
 define object
+	@mkdir -p `dirname $@`
 	$(strip $(CC) \
-		$(addprefix -I, $(MODULES:%=modules/%/$(SOURCE_INCL))) \
+		$(addprefix -I, $(MODULES:%=modules/%/$(TARGET_INCL))) \
 		$(addprefix -I, $(INC_PATH)) \
 		$(addprefix -I, $($@_inc_path)) \
 		$(addprefix -I, $(1)) \
@@ -181,7 +184,7 @@ endef
 #
 
 define objects
-	$(addprefix $(TARGET_OBJ)/, $(1)) 
+	$(addprefix $(TARGET_OBJ)$(addprefix /, $(2)), $(addprefix /, $(1))) 
 endef
 
 
