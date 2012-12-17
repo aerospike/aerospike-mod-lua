@@ -4,6 +4,7 @@ CFLAGS 	= -g -O3 -std=gnu99 -Wall -fPIC -fno-common -fno-strict-aliasing -finlin
 LDFLAGS = -Wall -Winline -rdynamic 
 
 INC_PATH += modules/common/$(TARGET_INCL)
+INC_PATH += modules/msgpack/src/
 
 as_types =
 as_types += as_nil.o
