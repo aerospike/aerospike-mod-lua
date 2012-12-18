@@ -71,7 +71,6 @@ modules/msgpack/Makefile:
 	cd modules/msgpack && ./configure
 
 msgpack: modules/msgpack/Makefile
-	cd modules/msgpack && make
 
 ##
 ## TEST
