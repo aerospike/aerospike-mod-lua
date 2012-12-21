@@ -44,6 +44,22 @@ static int mod_lua_list_prepend(lua_State * l) {
     return 0;
 }
 
+static int mod_lua_list_drop(lua_State * l) {
+    as_list *   list    = mod_lua_checklist(l, 1);
+    lua_Integer n       = luaL_optinteger(l, 2, 0);
+    as_list *   sub     = as_list_drop(list, (uint32_t) n);
+    mod_lua_pushlist(l,sub);
+    return 1;
+}
+
+static int mod_lua_list_take(lua_State * l) {
+    as_list *   list    = mod_lua_checklist(l, 1);
+    lua_Integer n       = luaL_optinteger(l, 2, 0);
+    as_list *   sub     = as_list_take(list, (uint32_t) n);
+    mod_lua_pushlist(l,sub);
+    return 1;
+}
+
 static int mod_lua_list_size(lua_State * l) {
     as_list *   list    = mod_lua_checklist(l, 1);
     uint32_t    size    = as_list_size(list);

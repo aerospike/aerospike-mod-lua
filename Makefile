@@ -1,6 +1,6 @@
 include project/build.makefile
 
-CFLAGS 	= -g -O3 -std=gnu99 -Wall -fPIC -fno-common -fno-strict-aliasing -finline-functions -Winline -march=nocona -DMARCH_$(ARCH) 
+CFLAGS 	= -g -O3 -std=gnu99 -Wall -fPIC -fno-common -fno-strict-aliasing -finline-functions -Winline -march=nocona -DMARCH_$(ARCH) -DMEM_COUNT=1
 LDFLAGS = -Wall -Winline -rdynamic 
 
 INC_PATH += modules/common/$(TARGET_INCL)
@@ -65,30 +65,37 @@ libmod_lua.a: | common msgpack libmod_lua.o $(TARGET_LIB)
 ##
 
 common: 
-	make -C modules/common prepare MEM_COUNT=$(MEM_COUNT)
+	make -C modules/common prepare MEM_COUNT=1
+
+common-lib: 
+	make -C modules/common all MEM_COUNT=1
 
 modules/msgpack/Makefile: 
 	cd modules/msgpack && ./configure
 
 msgpack: modules/msgpack/Makefile
 
+msgpack-lib: modules/msgpack/Makefile
+	cd modules/msgpack && make
 ##
 ## TEST
 ##
 
-record_udf: $(SOURCE_TEST)/record_udf.c | $(TARGET_BIN) libmod_lua.a
-	$(call executable, $(empty), $(empty), lua, $(empty), $(TARGET_LIB)/libmod_lua.a  modules/common/$(TARGET_LIB)/libcf-client.a )
+test_flags = $(TARGET_LIB)/libmod_lua.a  modules/common/$(TARGET_LIB)/libcf-shared.a modules/common/$(TARGET_LIB)/libcf-client.a modules/msgpack/src/.libs/libmsgpack.a 
 
-hashmap_test: $(SOURCE_TEST)/hashmap_test.c | $(TARGET_BIN) $(MODULES) libmod_lua.a
-	$(call executable, $(empty), $(empty), $(empty), $(empty), $(TARGET_LIB)/libmod_lua.a modules/common/$(TARGET_LIB)/libcf-client.a  )
+record_udf: $(SOURCE_TEST)/record_udf.c | $(TARGET_BIN) libmod_lua.a common-lib msgpack-lib
+	$(call executable, $(empty), $(empty), lua, $(empty), $(test_flags))
 
-linkedlist_test: $(SOURCE_TEST)/linkedlist_test.c | $(TARGET_BIN) $(MODULES) libmod_lua.a
-	$(call executable, $(empty), $(empty), $(empty), $(empty), $(TARGET_LIB)/libmod_lua.a modules/common/$(TARGET_LIB)/libcf-client.a  )
+hashmap_test: $(SOURCE_TEST)/hashmap_test.c | $(TARGET_BIN) libmod_lua.a common-lib msgpack-lib
+	$(call executable, $(empty), $(empty), $(empty), $(empty), $(test_flags))
 
-arraylist_test: $(SOURCE_TEST)/arraylist_test.c | $(TARGET_BIN) $(MODULES) libmod_lua.a
-	$(call executable, $(empty), $(empty), $(empty), $(empty), $(TARGET_LIB)/libmod_lua.a modules/common/$(TARGET_LIB)/libcf-client.a  )
+linkedlist_test: $(SOURCE_TEST)/linkedlist_test.c | $(TARGET_BIN) libmod_lua.a common-lib msgpack-lib
+	$(call executable, $(empty), $(empty), $(empty), $(empty), $(test_flags))
 
-msgpack_test: $(SOURCE_TEST)/msgpack_test.c | $(TARGET_BIN) $(MODULES) libmod_lua.a msgpack
-	$(call executable, $(empty), $(empty), $(empty), $(empty), $(TARGET_LIB)/libmod_lua.a modules/common/$(TARGET_LIB)/libcf-client.a modules/msgpack/src/.libs/libmsgpack.a  )
+arraylist_test: $(SOURCE_TEST)/arraylist_test.c | $(TARGET_BIN) libmod_lua.a common-lib msgpack-lib
+	$(call executable, $(empty), $(empty), $(empty), $(empty), $(test_flags))
+
+msgpack_test: $(SOURCE_TEST)/msgpack_test.c | $(TARGET_BIN) libmod_lua.a common-lib msgpack-lib
+	$(call executable, $(empty), $(empty), $(empty), $(empty), $(test_flags))
 
 test: msgpack_test hashmap_test linkedlist_test arraylist_test record_udf
