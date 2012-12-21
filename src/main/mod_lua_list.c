@@ -122,6 +122,8 @@ static int mod_lua_list_newindex(lua_State * l) {
 static const luaL_reg object_table[] = {
     {"append",          mod_lua_list_append},
     {"prepend",         mod_lua_list_prepend},
+    {"take",            mod_lua_list_take},
+    {"drop",            mod_lua_list_drop},
     {"size",            mod_lua_list_size},
     {"iterator",        mod_lua_list_iterator},
     {0, 0}

@@ -1,6 +1,5 @@
 
 function append(r,bin,...)
-
     local l = r[bin] or list()
 
     local len = select('#',...)
@@ -10,11 +9,16 @@ function append(r,bin,...)
 
     r[bin] = l
 
-    return l[1]
+    if aerospike:exists(r) then
+        aerospike:update(r)
+    else
+        aerospike:create(r)
+    end
+
+    return r[bin]
 end
 
 function prepend(r,bin,...)
-
     local l = r[bin] or list()
 
     local len = select('#',...)
@@ -23,16 +27,24 @@ function prepend(r,bin,...)
     end
 
     r[bin] = l
+    
+    if aerospike:exists(r) then
+        aerospike:update(r)
+    else
+        aerospike:create(r)
+    end
 
-    return l[1]
+    return r[bin]
 end
 
 function drop(r,bin,n)
-    return list.drop(r[bin] or list(), n);
+    local l = r[bin] or list()
+    return list.drop(l, n)
 end
 
 function take(r,bin,n)
-    return list.take(r[bin] or list(), n);
+    local l = r[bin] or list()
+    return list.take(l, n)
 end
 
 function iterate(r,k,...)
