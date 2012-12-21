@@ -46,11 +46,38 @@ int main ( int argc, char ** argv ) {
     LOG("Iterate empty list");
 
     i = as_list_iterator(as_linkedlist_new(NULL,NULL));
-
     while ( as_iterator_has_next(i) ) {
         as_val * v = as_iterator_next(i);
         LOG("val %s", as_string_tostring((as_string *) v));
     }
+    as_iterator_free(i);
+    i = NULL;
+
+    LOG("");
+    LOG("Iterate take(2) list");
+
+    as_list * sub = NULL;
+
+    sub = as_list_take(l, 2);
+    i = as_list_iterator(sub);
+    while ( as_iterator_has_next(i) ) {
+        as_val * v = as_iterator_next(i);
+        LOG("val %s", as_string_tostring((as_string *) v));
+    }
+    as_iterator_free(i);
+    i = NULL;
+
+    LOG("");
+    LOG("Iterate drop(2) list");
+
+    sub = as_list_drop(l, 2);
+    i = as_list_iterator(sub);
+    while ( as_iterator_has_next(i) ) {
+        as_val * v = as_iterator_next(i);
+        LOG("val %s", as_string_tostring((as_string *) v));
+    }
+    as_iterator_free(i);
+    i = NULL;
 
     LOG("END");
 

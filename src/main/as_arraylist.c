@@ -37,6 +37,8 @@ static as_val * as_arraylist_get(const as_list *, const uint32_t);
 static int as_arraylist_set(as_list *, const uint32_t, as_val *);
 static as_val * as_arraylist_head(const as_list *);
 static as_list * as_arraylist_tail(const as_list *);
+static as_list * as_arraylist_drop(const as_list *, uint32_t);
+static as_list * as_arraylist_take(const as_list *, uint32_t);
 static as_iterator * as_arraylist_iterator(const as_list *);
 
 static const int as_arraylist_iterator_free(as_iterator *);
@@ -57,6 +59,8 @@ static const as_list_hooks as_arraylist_hooks = {
     .set        = as_arraylist_set,
     .head       = as_arraylist_head,
     .tail       = as_arraylist_tail,
+    .drop       = as_arraylist_drop,
+    .take       = as_arraylist_take,
     .iterator   = as_arraylist_iterator
 };
 
@@ -179,6 +183,36 @@ static as_list * as_arraylist_tail(const as_list * l) {
     al2->shadow = true;
 
     return as_list_new(al2, &as_arraylist_hooks);
+}
+
+static as_list * as_arraylist_drop(const as_list * l, uint32_t n) {
+
+    as_arraylist * sup  = (as_arraylist *) as_list_source(l);
+
+    uint32_t sz = as_list_size((as_list *)l);
+    uint32_t c = n < sz ? n : sz;
+
+    as_list * sub = as_arraylist_new(sz-c, sup->block_size);
+    for(int i = c; i < sz; i++) {
+        as_list_append(sub, as_list_get(l,i));
+    }
+
+    return sub;
+}
+
+static as_list * as_arraylist_take(const as_list * l, uint32_t n) {
+
+    as_arraylist * sup  = (as_arraylist *) as_list_source(l);
+
+    uint32_t sz = as_list_size((as_list *)l);
+    uint32_t c = n < sz ? n : sz;
+
+    as_list * sub = as_arraylist_new(c, sup->block_size);
+    for(int i = 0; i < c; i++) {
+        as_list_append(sub, as_list_get(l,i));
+    }
+
+    return sub;
 }
 
 static as_iterator * as_arraylist_iterator(const as_list * l) {
