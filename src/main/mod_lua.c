@@ -148,10 +148,33 @@ static void package_path_set(lua_State * l, char * system_path, char * user_path
     lua_pushstring(l, user_path);
     lua_pushstring(l, "/?.lua");
     stack += 3;
-
+    
     lua_concat(l, stack);
 
     lua_setfield(l, -2, "path");
+    lua_pop(l, 1);
+}
+
+static void package_cpath_set(lua_State * l, char * system_path, char * user_path) {
+    int stack = 0;
+
+    lua_getglobal(l, "package");
+    lua_getfield(l, -1, "cpath");
+    stack += 1;
+
+    lua_pushstring(l, ";");
+    lua_pushstring(l, system_path);
+    lua_pushstring(l, "/?.so");
+    stack += 3;
+    
+    lua_pushstring(l, ";");
+    lua_pushstring(l, user_path);
+    lua_pushstring(l, "/?.so");
+    stack += 3;
+    
+    lua_concat(l, stack);
+
+    lua_setfield(l, -2, "cpath");
     lua_pop(l, 1);
 }
 
@@ -172,6 +195,7 @@ static lua_State * create_state(as_module * m, const char * filename) {
     lua_atpanic(l, handle_panic);
 
     package_path_set(l, ctx->system_path, ctx->user_path);
+    package_cpath_set(l, ctx->system_path, ctx->user_path);
 
     mod_lua_aerospike_register(l);
     mod_lua_record_register(l);
