@@ -1,10 +1,14 @@
 include project/build.makefile
 
+ifndef MSGPACK_PATH
+MSGPACK_PATH = modules/msgpack
+endif
+
 CFLAGS 	= -g -O3 -std=gnu99 -Wall -fPIC -fno-common -fno-strict-aliasing -finline-functions -Winline -march=nocona -DMARCH_$(ARCH) -DMEM_COUNT=1
 LDFLAGS = -Wall -Winline -rdynamic 
 
 INC_PATH += modules/common/$(TARGET_INCL)
-INC_PATH += modules/msgpack/src/
+INC_PATH += $(MSGPACK_PATH)/src
 
 as_types =
 as_types += as_nil.o
@@ -52,6 +56,8 @@ val_test_o += $(as_types)
 
 all: libmod_lua.a libmod_lua.so
 
+libtypes.o: | common $(TARGET_OBJ) $(call objects, $(as_types))
+
 libmod_lua.o: $(call objects, $(as_types) $(mod_lua))
 
 libmod_lua.so: | common msgpack libmod_lua.o $(TARGET_LIB) 
@@ -71,17 +77,17 @@ common-lib:
 	make -C modules/common all MEM_COUNT=1
 
 modules/msgpack/Makefile: 
-	cd modules/msgpack && ./configure
+	cd $(MSGPACK_PATH) && ./configure
 
 msgpack: modules/msgpack/Makefile
 
 msgpack-lib: modules/msgpack/Makefile
-	cd modules/msgpack && make
+	cd $(MSGPACK_PATH) && make
 ##
 ## TEST
 ##
 
-test_flags = $(TARGET_LIB)/libmod_lua.a  modules/common/$(TARGET_LIB)/libcf-shared.a modules/common/$(TARGET_LIB)/libcf-client.a modules/msgpack/src/.libs/libmsgpack.a 
+test_flags = $(TARGET_LIB)/libmod_lua.a  modules/common/$(TARGET_LIB)/libcf-shared.a modules/common/$(TARGET_LIB)/libcf-client.a $(MSGPACK_PATH)/src/.libs/libmsgpack.a 
 
 record_udf: $(SOURCE_TEST)/record_udf.c | $(TARGET_BIN) libmod_lua.a common-lib msgpack-lib
 	$(call executable, $(empty), $(empty), lua, $(empty), $(test_flags))
