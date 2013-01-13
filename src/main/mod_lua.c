@@ -285,6 +285,7 @@ static int pushargs(lua_State * l, as_list * args) {
     while( as_iterator_has_next(i) ) {
         argc += mod_lua_pushval(l, as_iterator_next(i));
     }
+    as_iterator_free(i);
     return argc;
 }
 
