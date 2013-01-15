@@ -77,8 +77,8 @@ static int mod_lua_record_newindex(lua_State * l) {
  * Garbage collection 
  */
 static int mod_lua_record_gc(lua_State * l) {
-    // as_rec * r = mod_lua_checkrecord(l, 1);
-    // as_rec_free(r);
+    as_rec * r = mod_lua_checkrecord(l, 1);
+    as_rec_free(r);
     return 0;
 }
 

@@ -56,6 +56,8 @@ static int mod_lua_map_new(lua_State * l) {
 }
 
 static int mod_lua_map_gc(lua_State * l) {
+    as_map * map = mod_lua_checkmap(l, 1);
+    as_map_free(map);
     return 0;
 }
 

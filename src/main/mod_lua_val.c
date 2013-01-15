@@ -24,7 +24,8 @@ as_val * mod_lua_toval(lua_State * l, int i) {
             return (as_val *) as_boolean_new(lua_toboolean(l, i));
         }
         case LUA_TSTRING : {
-            return (as_val *) as_string_new(strdup(lua_tostring(l, i)));
+            // return (as_val *) as_string_new(strdup(lua_tostring(l, i)));
+            return (as_val *) as_string_new(lua_tostring(l, i));
         }
         case LUA_TUSERDATA : {
             as_val * val = (as_val *) lua_touserdata(l, i);

@@ -259,7 +259,7 @@ static lua_State * open_state(as_module * m, const char * filename) {
  * @return 0 on success, otherwise 1
  */
 static int close_state(as_module * m, const char * fqn, lua_State * l) {
-    mod_lua_context *   ctx = (mod_lua_context *) m->source;
+    mod_lua_context * ctx = (mod_lua_context *) m->source;
 
     if ( ctx->cache_enabled == true && ctx->lua_cache != NULL ) {
         lua_gc(l, LUA_GCCOLLECT, 0);

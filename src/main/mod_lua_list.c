@@ -90,6 +90,8 @@ static int mod_lua_list_iterator(lua_State * l) {
 }
 
 static int mod_lua_list_gc(lua_State * l) {
+    as_list * list = mod_lua_checklist(l, 1);
+    as_list_free(list);
     return 0;
 }
 
