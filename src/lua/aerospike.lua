@@ -33,36 +33,64 @@ end
 -- Creates a new environment for use in apply* functions
 --
 function env()
-    local e = {}
+    return {
 
-    -- standard lua
-    e["_G"] = {}
-    e["setfenv"] = setfenv
-    e["require"] = require
-    e["pairs"] = pairs
-    e["pcall"] = pcall
-    e["error"] = error
-    e["ipairs"] = ipairs
-    e["getmetatable"] = getmetatable
-    e["setmetatable"] = setmetatable
-    e["print"] = print
-    e['package'] = package
-    e['select'] = select
+        -- aerospike types
+        ["record"] = record,
+        ["iterator"] = iterator,
+        ["list"] = list,
+        ["map"] = map,
+        ["aerospike"] = aerospike,
 
-    -- aerospike types
-    e["record"] = record
-    e["iterator"] = iterator
-    e["list"] = list
-    e["map"] = map
-    e["aerospike"] = aerospike
+        -- logging functions
+        ["trace"] = trace,
+        ["debug"] = debug,
+        ["info"] = info,
+        ["warn"] = warn,
+        
+        -- standard lua functions
+        ["error"] = error,
+        ["getmetatable"] = getmetatable,
+        ["ipairs"] = ipairs,
+        ["load"] = load,
+        ["module"] = module,
+        ["next"] = next,
+        ["pairs"] = pairs,
+        ["print"] = print,
+        ["pcall"] = pcall,
+        ["rawequal"] = rawequal,
+        ["rawget"] = rawget,
+        ["rawset"] = rawset,
+        ["require"] = require,
+        ["require"] = require,
+        ["select"] = select,
+        ["setmetatable"] = setmetatable,
+        ["setfenv"] = setfenv,
+        ["tonumber"] = tonumber,
+        ["tostring"] = tostring,
+        ["type"] = type,
+        ["unpack"] = unpack,
+        ["xpcall"] = xpcall,
 
-    -- logging functions
-    e["trace"] = trace
-    e["debug"] = debug
-    e["info"] = info
-    e["warn"] = warn
+        -- standard lua objects
+        ["math"] = math,
+        ["io"] = io,
+        ["os"] = {
+            ['clock'] = os.clock,
+            ['date'] = os.date,
+            ['difftime'] = os.difftime,
+            ['getenv'] = os.getenv,
+            ['setlocale'] = os.setlocale,
+            ['time'] = os.time,
+            ['tmpname'] = os.tmpname
+        },
+        ["package"] = package,
+        ["string"] = string,
+        ["table"] = table,
 
-    return e
+        -- standard lua variables
+        ["_G"] = {}
+    }
 end
 
 --
