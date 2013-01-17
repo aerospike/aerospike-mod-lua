@@ -1,60 +1,43 @@
-/**
- * Provides a lua interface to the aerospike struct and functions
- *
- *
- *      aerospike.get(namespace, set, key): result<record>
- *      aerospike.put(namespace, set, key, table)
- *      aerospike.remove(namespace, set, key): result<bool>
- *
- *      aerospike.update(record): result<record>
- *
- *
- */
-
 #include "as_aerospike.h"
 #include "mod_lua_aerospike.h"
 #include "mod_lua_record.h"
+#include "mod_lua_val.h"
+#include "mod_lua_reg.h"
 
-#include <lua.h>
-#include <lauxlib.h>
-#include <lualib.h>
-
-
-
-#define MOD_LUA_AEROSPIKE "Aerospike"
+#define CLASS_NAME "Aerospike"
 
 /**
  * Read the item at index and convert to a aerospike
  */
 as_aerospike * mod_lua_toaerospike(lua_State * l, int index) {
-    as_aerospike * a = (as_aerospike *) lua_touserdata(l, index);
-    if (a == NULL) luaL_typerror(l, index, MOD_LUA_AEROSPIKE);
-    return a;
+    mod_lua_box * box = mod_lua_tobox(l, index, CLASS_NAME);
+    return (as_aerospike *) mod_lua_box_value(box);
 }
 
 /**
  * Push aerospike on to the lua stack
  */
-as_aerospike * mod_lua_pushaerospike(lua_State * l, as_aerospike * a) {
-    as_aerospike * la = (as_aerospike *) lua_newuserdata(l, sizeof(as_aerospike));
-    // *la = *a;
-    la->source = a->source;
-    la->hooks = a->hooks;
-    luaL_getmetatable(l, MOD_LUA_AEROSPIKE);
-    lua_setmetatable(l, -2);
-    return a;
+as_aerospike * mod_lua_pushaerospike(lua_State * l, mod_lua_scope scope, as_aerospike * a) {
+    mod_lua_box * box = mod_lua_pushbox(l, scope, (as_val *) a, CLASS_NAME);
+    return (as_aerospike *) mod_lua_box_value(box);
 }
 
 /**
  * Get aerospike from the stack at index
  */
 static as_aerospike * mod_lua_checkaerospike(lua_State * l, int index) {
-    as_aerospike * a = NULL;
-    luaL_checktype(l, index, LUA_TUSERDATA);
-    a = (as_aerospike *) luaL_checkudata(l, index, MOD_LUA_AEROSPIKE);
-    if (a == NULL) luaL_typerror(l, index, MOD_LUA_AEROSPIKE);
-    return a;
+    mod_lua_box * box = mod_lua_checkbox(l, index, CLASS_NAME);
+    return (as_aerospike *) mod_lua_box_value(box);
 }
+
+/**
+ * Garbage collection 
+ */
+static int mod_lua_aerospike_gc(lua_State * l) {
+    mod_lua_freebox(l, 1, CLASS_NAME);
+    return 0;
+}
+
 
 /**
  * aerospike.create(record) => result<bool>
@@ -62,8 +45,9 @@ static as_aerospike * mod_lua_checkaerospike(lua_State * l, int index) {
 static int mod_lua_aerospike_create(lua_State * l) {
     as_aerospike *  a   = mod_lua_checkaerospike(l, 1);
     as_rec *        r   = mod_lua_torecord(l, 2);
-    
-    return as_aerospike_create(a, r);
+    int             rc  = as_aerospike_create(a, r);
+    lua_pushinteger(l, rc);
+    return 1;
 }
 
 /**
@@ -72,8 +56,9 @@ static int mod_lua_aerospike_create(lua_State * l) {
 static int mod_lua_aerospike_update(lua_State * l) {
     as_aerospike *  a   = mod_lua_checkaerospike(l, 1);
     as_rec *        r   = mod_lua_torecord(l, 2);
-    
-    return as_aerospike_update(a, r);
+    int             rc  = as_aerospike_update(a, r);
+    lua_pushinteger(l, rc);
+    return 1;
 }
 
 /**
@@ -82,8 +67,9 @@ static int mod_lua_aerospike_update(lua_State * l) {
 static int mod_lua_aerospike_exists(lua_State * l) {
     as_aerospike *  a   = mod_lua_checkaerospike(l, 1);
     as_rec *        r   = mod_lua_torecord(l, 2);
-
-    return as_aerospike_exists(a, r);
+    int             rc  = as_aerospike_exists(a, r);
+    lua_pushinteger(l, rc);
+    return 1;
 }
 
 /**
@@ -92,8 +78,9 @@ static int mod_lua_aerospike_exists(lua_State * l) {
 static int mod_lua_aerospike_remove(lua_State * l) {
     as_aerospike *  a   = mod_lua_checkaerospike(l, 1);
     as_rec *        r   = mod_lua_torecord(l, 2);
-    
-    return as_aerospike_remove(a, r);
+    int             rc  = as_aerospike_remove(a, r);
+    lua_pushinteger(l, rc);
+    return 1;
 }
 
 /**
@@ -112,62 +99,29 @@ static int mod_lua_aerospike_log(lua_State * l) {
     return 0;
 }
 
+/*******************************************************************************
+ * ~~~ Class ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ ******************************************************************************/
 
-/**
- * Garbage collection 
- */
-static int mod_lua_aerospike_gc(lua_State * l) {
-    // as_aerospike * a = mod_lua_checkaerospike(l, 1);
-    // as_aerospike_free(a);
-    return 0;
-}
-
-/**
- * aerospike table
- */
-static const luaL_reg mod_lua_aerospike_table[] = {
+static const luaL_reg class_table[] = {
     {"create",      mod_lua_aerospike_create},
     {"update",      mod_lua_aerospike_update},
-    {"exists",       mod_lua_aerospike_exists},
+    {"exists",      mod_lua_aerospike_exists},
     {"remove",      mod_lua_aerospike_remove},
     {"log",         mod_lua_aerospike_log},
     {0, 0}
 };
 
-/**
- * aerospike metatable
- */
-static const luaL_reg mod_lua_aerospike_metatable[] = {
+static const luaL_reg class_metatable[] = {
     {"__gc",        mod_lua_aerospike_gc},
     {0, 0}
 };
 
+/*******************************************************************************
+ * ~~~ Register ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ ******************************************************************************/
 
-/**
- * Registers the aerospike library
- */
 int mod_lua_aerospike_register(lua_State * l) {
-
-    int table, metatable;
-
-    // register the table
-    luaL_register(l, MOD_LUA_AEROSPIKE, mod_lua_aerospike_table);
-    table = lua_gettop(l);
-
-    // register the metatable
-    luaL_newmetatable(l, MOD_LUA_AEROSPIKE);
-    luaL_register(l, 0, mod_lua_aerospike_metatable);
-    metatable = lua_gettop(l);
-
-    lua_pushliteral(l, "__index");
-    lua_pushvalue(l, table);
-    lua_rawset(l, metatable);
-
-    lua_pushliteral(l, "__metatable");
-    lua_pushvalue(l, table);
-    lua_rawset(l, metatable);
-    
-    lua_pop(l, 1);
-
+    mod_lua_reg_class(l, CLASS_NAME, class_table, class_metatable);
     return 1;
 }
