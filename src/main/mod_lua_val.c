@@ -43,7 +43,7 @@ as_val * mod_lua_retval(lua_State * l) {
                 }
             }
             else if ( box ) {
-                free(box);
+                box->scope = MOD_LUA_SCOPE_LUA;
             }
             else {
                 return (as_val *) NULL;
@@ -122,17 +122,23 @@ int mod_lua_pushval(lua_State * l, mod_lua_scope scope, const as_val * v) {
     switch( as_val_type(v) ) {
         case AS_BOOLEAN: {
             lua_pushboolean(l, as_boolean_tobool((as_boolean *) v) );
-            // as_val_free(v);
+            if ( scope == MOD_LUA_SCOPE_LUA ) {
+                as_val_free(v);
+            }
             return 1;
         }
         case AS_INTEGER: {
             lua_pushinteger(l, as_integer_toint((as_integer *) v) );
-            // as_val_free(v);
+            if ( scope == MOD_LUA_SCOPE_LUA ) {
+                as_val_free(v);
+            }
             return 1;
         }
         case AS_STRING: {
             lua_pushstring(l, as_string_tostring((as_string *) v) );
-            // as_val_free(v);
+            if ( scope == MOD_LUA_SCOPE_LUA ) {
+                as_val_free(v);
+            }
             return 1;   
         }
         case AS_LIST: {

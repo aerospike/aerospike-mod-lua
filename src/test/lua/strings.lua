@@ -21,3 +21,7 @@ end
 function echo(r,a)
     return a
 end
+
+function len(r, a)
+    return string.len(a)
+end

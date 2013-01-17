@@ -271,6 +271,21 @@ static int close_state(as_module * m, const char * fqn, lua_State * l) {
     return 0;
 }
 
+
+typedef struct {
+    lua_State * l;
+    uint32_t count;
+} pushargs_data;
+
+/**
+ * Pushes arguments into the Lua stack.
+ * We scope the arguments to Lua, so Lua is responsible for releasing them.
+ */
+static void pushargs_foreach(as_val * val, void * context) {
+    pushargs_data * data = (pushargs_data *) context;
+    data->count += mod_lua_pushval(data->l, MOD_LUA_SCOPE_LUA, val);
+}
+
 /**
  * Pushes arguments from a list on to the stack
  *
@@ -280,13 +295,24 @@ static int close_state(as_module * m, const char * fqn, lua_State * l) {
  */
 static int pushargs(lua_State * l, as_list * args) {
     LOG("pushargs()");
-    int argc = 0;
-    as_iterator * i = as_list_iterator(args);
-    while( as_iterator_has_next(i) ) {
-        argc += mod_lua_pushval(l, MOD_LUA_SCOPE_HOST, as_iterator_next(i));
-    }
-    as_iterator_free(i);
-    return argc;
+    pushargs_data data = {
+        .l = l,
+        .count = 0
+    };
+
+    as_list_foreach(args, &data, pushargs_foreach);
+
+    // int argc = 0;
+    // 
+    // as_iterator * i = as_list_iterator(args);
+    // while( as_iterator_has_next(i) ) {
+    //     argc += mod_lua_pushval(l, MOD_LUA_SCOPE_HOST, as_iterator_next(i));
+    // }
+    // as_iterator_free(i);
+    //
+    // return argc;
+
+    return data.count;
 }
 
 
