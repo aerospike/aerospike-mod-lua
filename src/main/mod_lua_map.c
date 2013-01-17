@@ -6,25 +6,23 @@
 #define CLASS_NAME  "Map"
 
 as_map * mod_lua_tomap(lua_State * l, int index) {
-    as_map * map = (as_map *) lua_touserdata(l, index);
-    if (map == NULL) luaL_typerror(l, index, CLASS_NAME);
-    return map;
+    mod_lua_box * box = mod_lua_tobox(l, index, CLASS_NAME);
+    return (as_map *) mod_lua_box_value(box);
 }
 
-as_map * mod_lua_pushmap(lua_State * l, as_map * i) {
-    as_map * map = (as_map *) lua_newuserdata(l, sizeof(as_map));
-    *map = *i;
-    luaL_getmetatable(l, CLASS_NAME);
-    lua_setmetatable(l, -2);
-    return map;
+as_map * mod_lua_pushmap(lua_State * l, mod_lua_scope scope, as_map * map) {
+    mod_lua_box * box = mod_lua_pushbox(l, scope, (as_val *) map, CLASS_NAME);
+    return (as_map *) mod_lua_box_value(box);
 }
 
 static as_map * mod_lua_checkmap(lua_State * l, int index) {
-    as_map * map = NULL;
-    luaL_checktype(l, index, LUA_TUSERDATA);
-    map = (as_map *) luaL_checkudata(l, index, CLASS_NAME);
-    if (map == NULL) luaL_typerror(l, index, CLASS_NAME);
-    return map;
+    mod_lua_box * box = mod_lua_checkbox(l, index, CLASS_NAME);
+    return (as_map *) mod_lua_box_value(box);
+}
+
+static int mod_lua_map_gc(lua_State * l) {
+    mod_lua_freebox(l, 1, CLASS_NAME);
+    return 0;
 }
 
 static int mod_lua_map_size(lua_State * l) {
@@ -51,19 +49,16 @@ static int mod_lua_map_new(lua_State * l) {
             lua_pop(l, 1);
         }
     }
-    mod_lua_pushmap(l, map);
+    mod_lua_pushmap(l, MOD_LUA_SCOPE_LUA, map);
     return 1;
 }
 
-static int mod_lua_map_gc(lua_State * l) {
-    return 0;
-}
-
 static int mod_lua_map_index(lua_State * l) {
-    as_map *    map     = mod_lua_checkmap(l, 1);
-    as_val *    key     = mod_lua_toval(l, 2);
-    as_val *    val     = as_map_get(map, key);
-    mod_lua_pushval(l, val);
+    mod_lua_box *   box     = mod_lua_checkbox(l, 1, CLASS_NAME);
+    as_map *        map     = (as_map *) mod_lua_box_value(box);
+    as_val *        key     = mod_lua_toval(l, 2);
+    as_val *        val     = as_map_get(map, key);
+    mod_lua_pushval(l, box->scope, val);
     return 1;
 }
 

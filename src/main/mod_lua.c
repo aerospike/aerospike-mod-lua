@@ -259,7 +259,7 @@ static lua_State * open_state(as_module * m, const char * filename) {
  * @return 0 on success, otherwise 1
  */
 static int close_state(as_module * m, const char * fqn, lua_State * l) {
-    mod_lua_context *   ctx = (mod_lua_context *) m->source;
+    mod_lua_context * ctx = (mod_lua_context *) m->source;
 
     if ( ctx->cache_enabled == true && ctx->lua_cache != NULL ) {
         lua_gc(l, LUA_GCCOLLECT, 0);
@@ -283,7 +283,7 @@ static int pushargs(lua_State * l, as_list * args) {
     int argc = 0;
     as_iterator * i = as_list_iterator(args);
     while( as_iterator_has_next(i) ) {
-        argc += mod_lua_pushval(l, as_iterator_next(i));
+        argc += mod_lua_pushval(l, MOD_LUA_SCOPE_HOST, as_iterator_next(i));
     }
     as_iterator_free(i);
     return argc;
@@ -315,7 +315,7 @@ static int apply(lua_State * l, int err, int argc, as_result * res) {
 
     // Convert the return value from a lua type to a val type
     LOG("convert lua type to val");
-    as_val * rv = mod_lua_toval(l, -1);
+    as_val * rv = mod_lua_retval(l);
 
     if ( rc == 0 ) {
         as_result_tosuccess(res, rv);
@@ -364,7 +364,7 @@ static int apply_record(as_module * m, as_aerospike * as, const char * filename,
     
     // push aerospike into the global scope
     LOG("push aerospike into the global scope");
-    mod_lua_pushaerospike(l, as);
+    mod_lua_pushaerospike(l, MOD_LUA_SCOPE_HOST, as);
     lua_setglobal(l, "aerospike");
     
     // push apply_record() onto the stack
@@ -377,7 +377,7 @@ static int apply_record(as_module * m, as_aerospike * as, const char * filename,
 
     // push the record onto the stack
     LOG("push the record onto the stack");
-    mod_lua_pushrecord(l, r);
+    mod_lua_pushrecord(l, MOD_LUA_SCOPE_HOST, r);
 
     // push each argument onto the stack
     LOG("push each argument onto the stack");
@@ -431,7 +431,7 @@ static int apply_stream(as_module * m, as_aerospike * as, const char * filename,
 
     // push aerospike into the global scope
     LOG("push aerospike into the global scope");
-    mod_lua_pushaerospike(l, as);
+    mod_lua_pushaerospike(l, MOD_LUA_SCOPE_HOST, as);
     lua_setglobal(l, "aerospike");
 
     // push apply_stream() onto the stack

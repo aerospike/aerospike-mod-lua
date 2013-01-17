@@ -10,38 +10,38 @@
  * Read the item at index and convert to a record
  */
 as_rec * mod_lua_torecord(lua_State * l, int index) {
-    as_rec * r = (as_rec *) lua_touserdata(l, index);
-    if (r == NULL) luaL_typerror(l, index, CLASS_NAME);
-    return r;
+    mod_lua_box * box = mod_lua_tobox(l, index, CLASS_NAME);
+    return (as_rec *) mod_lua_box_value(box);
 }
 
 /**
  * Push a record on to the lua stack
  */
-as_rec * mod_lua_pushrecord(lua_State * l, as_rec * r) {
-    as_rec * lr = (as_rec *) lua_newuserdata(l, sizeof(as_rec));
-    as_rec_init(lr, r->source, r->hooks);
-    luaL_getmetatable(l, CLASS_NAME);
-    lua_setmetatable(l, -2);
-    return r;
+as_rec * mod_lua_pushrecord(lua_State * l, mod_lua_scope scope, as_rec * r) {
+    mod_lua_box * box = mod_lua_pushbox(l, scope, (as_val *) r, CLASS_NAME);
+    return (as_rec *) mod_lua_box_value(box);
 }
 
 /**
  * Get the user record from the stack at index
  */
 static as_rec * mod_lua_checkrecord(lua_State * l, int index) {
-    as_rec * r = NULL;
-    luaL_checktype(l, index, LUA_TUSERDATA);
-    r = (as_rec *) luaL_checkudata(l, index, CLASS_NAME);
-    if (r == NULL) luaL_typerror(l, index, CLASS_NAME);
-    return r;
+    mod_lua_box * box = mod_lua_checkbox(l, index, CLASS_NAME);
+    return (as_rec *) mod_lua_box_value(box);
+}
+
+/**
+ * Garbage collection 
+ */
+static int mod_lua_record_gc(lua_State * l) {
+    mod_lua_freebox(l, 1, CLASS_NAME);
+    return 0;
 }
 
 /**
  * Get a record metadata
  */
 static int mod_lua_record_metadata(lua_State * l) {
-    lua_pushstring(l,"hi");
     return 0;
 }
 
@@ -49,10 +49,11 @@ static int mod_lua_record_metadata(lua_State * l) {
  * Get a value from the named bin
  */
 static int mod_lua_record_index(lua_State * l) {
-    as_rec * r = mod_lua_checkrecord(l, 1);
-    const char * n = luaL_optstring(l, 2, 0);
-    const as_val * v = as_rec_get(r, n);
-    mod_lua_pushval(l, v);
+    mod_lua_box *   box = mod_lua_checkbox(l, 1, CLASS_NAME);
+    as_rec *        rec = (as_rec *) mod_lua_box_value(box);
+    const char *    n   = luaL_optstring(l, 2, 0);
+    const as_val *  v   = as_rec_get(rec, n);
+    mod_lua_pushval(l, MOD_LUA_SCOPE_LUA, v);
     return 1;
 }
 
@@ -70,15 +71,6 @@ static int mod_lua_record_newindex(lua_State * l) {
     else {
         as_rec_set(r, name, value);
     }
-    return 0;
-}
-
-/**
- * Garbage collection 
- */
-static int mod_lua_record_gc(lua_State * l) {
-    // as_rec * r = mod_lua_checkrecord(l, 1);
-    // as_rec_free(r);
     return 0;
 }
 
