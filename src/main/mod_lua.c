@@ -43,7 +43,7 @@ static lua_State * open_state(as_module *, const char *);
 static int close_state(as_module *, const char *, lua_State *);
 
 static void panic_setjmp(void);
-static int handle_error(lua_State *);
+// static int handle_error(lua_State *);
 static int handle_panic(lua_State *);
 
 /**
@@ -327,11 +327,11 @@ static int handle_panic(lua_State * l) {
     return 0;
 }
 
-static int handle_error(lua_State * l) {
-    // const char * msg = luaL_optstring(l, 1, 0);
-    // cf_warning(AS_SPROC, (char *) msg);
-    return 0;
-}
+// static int handle_error(lua_State * l) {
+//     // const char * msg = luaL_optstring(l, 1, 0);
+//     // cf_warning(AS_SPROC, (char *) msg);
+//     return 0;
+// }
 
 static int apply(lua_State * l, int err, int argc, as_result * res) {
 

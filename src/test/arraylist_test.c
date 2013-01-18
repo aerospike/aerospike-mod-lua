@@ -7,7 +7,8 @@ int main ( int argc, char ** argv ) {
 
     LOG("BEGIN");
 
-    as_list * l = as_arraylist_new(1,1);
+    as_arraylist * a = as_arraylist_new(1,1);
+    as_list * l = as_list_new(a, &as_arraylist_list);
 
     LOG("size %d",as_list_size(l));
 
@@ -34,7 +35,7 @@ int main ( int argc, char ** argv ) {
     as_iterator * i = as_list_iterator(l);
 
     while ( as_iterator_has_next(i) ) {
-        as_val * v = as_iterator_next(i);
+        const as_val * v = as_iterator_next(i);
         LOG("val %s", as_string_tostring((as_string *) v));
     }
 
