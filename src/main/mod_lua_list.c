@@ -66,7 +66,8 @@ static int mod_lua_list_size(lua_State * l) {
 }
 
 static int mod_lua_list_new(lua_State * l) {
-    as_list * list = as_linkedlist_new(NULL,NULL);
+    as_linkedlist * ll = as_linkedlist_new(NULL,NULL);
+    as_list * list = as_list_new(ll, &as_linkedlist_list);
     int n = lua_gettop(l);
     if ( n == 2 && lua_type(l, 2) == LUA_TTABLE) {
         lua_pushnil(l);

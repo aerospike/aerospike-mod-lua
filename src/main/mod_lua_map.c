@@ -33,7 +33,7 @@ static int mod_lua_map_size(lua_State * l) {
 }
 
 static int mod_lua_map_new(lua_State * l) {
-    as_map * map = as_hashmap_new(320);
+    as_hashmap * map = as_hashmap_new(320);
     int n = lua_gettop(l);
     if ( n == 2 && lua_type(l, 2) == LUA_TTABLE) {
         lua_pushnil(l);
@@ -45,11 +45,11 @@ static int mod_lua_map_new(lua_State * l) {
                 as_val_free(v);
                 continue;
             }
-            as_map_set(map, k, v);
+            as_hashmap_set(map, k, v);
             lua_pop(l, 1);
         }
     }
-    mod_lua_pushmap(l, MOD_LUA_SCOPE_LUA, map);
+    mod_lua_pushmap(l, MOD_LUA_SCOPE_LUA, as_map_new(map, &as_hashmap_map));
     return 1;
 }
 
