@@ -39,10 +39,23 @@ static int mod_lua_record_gc(lua_State * l) {
 }
 
 /**
- * Get a record metadata
+ * Get a record ttl:
+ *      record.ttl(r)
  */
-static int mod_lua_record_metadata(lua_State * l) {
-    return 0;
+static int mod_lua_record_ttl(lua_State * l) {
+    as_rec * rec = (as_rec *) mod_lua_checkrecord(l, 1);
+    lua_pushinteger(l, as_rec_ttl(rec));
+    return 1;
+}
+
+/**
+ * Get a record generation:
+ *      record.gen(r)
+ */
+static int mod_lua_record_gen(lua_State * l) {
+    as_rec * rec = (as_rec *) mod_lua_checkrecord(l, 1);
+    lua_pushinteger(l, as_rec_gen(rec));
+    return 1;
 }
 
 /**
@@ -79,7 +92,8 @@ static int mod_lua_record_newindex(lua_State * l) {
  ******************************************************************************/
 
 static const luaL_reg object_table[] = {
-    {"metadata",        mod_lua_record_metadata},
+    {"ttl",        mod_lua_record_ttl},
+    {"gen",        mod_lua_record_gen},
     {0, 0}
 };
 
