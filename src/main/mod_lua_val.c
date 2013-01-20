@@ -11,8 +11,7 @@
 #define LOG(m) \
     printf("%s:%d  -- %s\n",__FILE__,__LINE__, m);
 
-as_val * mod_lua_retval(lua_State * l) {
-    int i = -1;
+as_val * mod_lua_takeval(lua_State * l, int i) {
     switch( lua_type(l, i) ) {
         case LUA_TNUMBER : {
             return (as_val *) as_integer_new((long) lua_tonumber(l, i));
@@ -35,7 +34,7 @@ as_val * mod_lua_retval(lua_State * l) {
                     case AS_PAIR: {
                         as_val * value = box->value;
                         box->value = NULL;
-                        box->scope = MOD_LUA_SCOPE_LUA;
+                        box->scope = MOD_LUA_SCOPE_HOST;
                         return value;
                     }
                     default:
@@ -61,6 +60,11 @@ as_val * mod_lua_retval(lua_State * l) {
             return (as_val *) NULL;
     }
 }
+
+as_val * mod_lua_retval(lua_State * l) {
+    return mod_lua_takeval(l, -1);
+}
+
 
 
 

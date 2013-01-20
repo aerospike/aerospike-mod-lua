@@ -34,7 +34,7 @@ static inline mod_lua_box * mod_lua_pushbox(lua_State * l, mod_lua_scope scope, 
 
 static inline mod_lua_box * mod_lua_tobox(lua_State * l, int index, const char * type) {
     mod_lua_box * box = (mod_lua_box *) lua_touserdata(l, index);
-    if (box == NULL) luaL_typerror(l, index, type);
+    if (box == NULL && type != NULL ) luaL_typerror(l, index, type);
     return box;
 }
 
@@ -59,6 +59,7 @@ static inline as_val * mod_lua_box_value(mod_lua_box * box) {
     return box ? box->value : NULL;
 }
 
+as_val * mod_lua_takeval(lua_State * l, int i);
 as_val * mod_lua_retval(lua_State * l);
 as_val * mod_lua_toval(lua_State *, int);
 int mod_lua_pushval(lua_State *, mod_lua_scope, const as_val *);
