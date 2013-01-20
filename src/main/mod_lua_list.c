@@ -73,7 +73,7 @@ static int mod_lua_list_new(lua_State * l) {
         lua_pushnil(l);
         while ( lua_next(l, 2) != 0 ) {
             if ( lua_type(l, -2) == LUA_TNUMBER ) {
-                as_list_append(list, mod_lua_toval(l, -1));
+                as_list_append(list, mod_lua_takeval(l, -1));
             }
             lua_pop(l, 1);
         }
@@ -100,7 +100,7 @@ static int mod_lua_list_index(lua_State * l) {
 static int mod_lua_list_newindex(lua_State * l) {
     as_list *   list    = mod_lua_checklist(l, 1);
     uint32_t    idx     = (uint32_t) luaL_optlong(l, 2, 0);
-    as_val *    val     = mod_lua_toval(l, 3);
+    as_val *    val     = mod_lua_takeval(l, 3);
     
     if ( val == NULL ) {
         // one day, we will remove values

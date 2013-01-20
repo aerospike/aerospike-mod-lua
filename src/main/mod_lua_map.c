@@ -38,8 +38,8 @@ static int mod_lua_map_new(lua_State * l) {
     if ( n == 2 && lua_type(l, 2) == LUA_TTABLE) {
         lua_pushnil(l);
         while ( lua_next(l, 2) != 0 ) {
-            as_val * k = mod_lua_toval(l, -2);
-            as_val * v = mod_lua_toval(l, -1);
+            as_val * k = mod_lua_takeval(l, -2);
+            as_val * v = mod_lua_takeval(l, -1);
             if ( !k || !v ) {
                 as_val_free(k);
                 as_val_free(v);
@@ -56,7 +56,7 @@ static int mod_lua_map_new(lua_State * l) {
 static int mod_lua_map_index(lua_State * l) {
     mod_lua_box *   box     = mod_lua_checkbox(l, 1, CLASS_NAME);
     as_map *        map     = (as_map *) mod_lua_box_value(box);
-    as_val *        key     = mod_lua_toval(l, 2);
+    as_val *        key     = mod_lua_takeval(l, 2);
     as_val *        val     = as_map_get(map, key);
     mod_lua_pushval(l, box->scope, val);
     return 1;
@@ -64,8 +64,8 @@ static int mod_lua_map_index(lua_State * l) {
 
 static int mod_lua_map_newindex(lua_State * l) {
     as_map *    map     = mod_lua_checkmap(l, 1);
-    as_val *    key     = mod_lua_toval(l, 2);
-    as_val *    val     = mod_lua_toval(l, 3);
+    as_val *    key     = mod_lua_takeval(l, 2);
+    as_val *    val     = mod_lua_takeval(l, 3);
     
     if ( val == NULL ) {
         // one day, we will remove values
