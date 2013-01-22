@@ -12,6 +12,7 @@ INC_PATH += $(MSGPACK_PATH)/src
 
 as_types =
 as_types += as_module.o
+as_types += as_buffer.o
 as_types += as_nil.o
 as_types += as_boolean.o
 as_types += as_integer.o
