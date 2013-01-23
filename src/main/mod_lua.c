@@ -23,15 +23,105 @@
 #include <lauxlib.h>
 #include <lualib.h>
 
+#include <pthread.h>
 
-#define LOG(m) \
-    // printf("%s:%d  -- %s\n",__FILE__,__LINE__, m);
+/******************************************************************************
+ * MACROS
+ ******************************************************************************/
 
-typedef struct mod_lua_context_s mod_lua_context;
+#define CACHE_TABLE_ENTRY_MAX 128
+#define CACHE_ENTRY_KEY_MAX 128
+#define CACHE_ENTRY_GEN_MAX 128
+#define CACHE_ENTRY_STATE_MAX 10
+#define CACHE_ENTRY_STATE_MIN 10
+
+
+static void __log_append(const char * file, int line, const char * fmt, ...) {
+    char msg[128] = {0};
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(msg, 128, fmt, ap);
+    va_end(ap);
+    printf("%s:%d – %s\n",file,line,msg);
+}
+
+#define LOG(fmt, args...) \
+    // __log_append(__FILE__, __LINE__, fmt, ## args);
+
+/******************************************************************************
+ * TYPES
+ ******************************************************************************/
+
+typedef struct context_s context;
+
+typedef struct cache_entry_s cache_entry;
+typedef struct cache_table_s cache_table;
+
+typedef struct cache_item_s cache_item;
+
+struct cache_entry_s {
+    char            key[CACHE_ENTRY_KEY_MAX];
+    char            gen[CACHE_ENTRY_GEN_MAX];
+    pthread_mutex_t lock;
+    lua_State *     states[CACHE_ENTRY_STATE_MAX];
+    uint32_t        size;
+};
+
+struct cache_table_s {
+    pthread_mutex_t lock;
+    cache_entry     entries[CACHE_TABLE_ENTRY_MAX];
+    uint32_t        size;
+};
+
+
+struct cache_item_s {
+    char            key[CACHE_ENTRY_KEY_MAX];
+    char            gen[CACHE_ENTRY_GEN_MAX];
+    lua_State *     state;
+};
+
+/******************************************************************************
+ * VARIABLES
+ ******************************************************************************/
+
+// static pthread_mutex_t cache_mutex;
+
+static cache_table ctable = { 
+    .lock           = PTHREAD_MUTEX_INITIALIZER,
+    .entries        = {{
+        .lock           = PTHREAD_MUTEX_INITIALIZER,
+        .key            = "",
+        .gen            = "",
+        .states         = {NULL}, 
+        .size           = 0
+    }},
+    .size           = 0
+};
+
+// static uint32_t cache_size = 0;
 
 static const as_module_hooks hooks;
 
 static jmp_buf panic_jmp;
+
+/**
+ * Lua Module Specific Data
+ * This will populate the module.source field
+ */
+static struct context_s {
+    lua_State * lua_cache;
+    bool        cache_enabled;
+    char *      system_path;
+    char *      user_path;
+} lua = {
+    .cache_enabled  = true,
+    .system_path    = NULL,
+    .user_path      = NULL
+};
+
+/******************************************************************************
+ * FUNCTION DECLS
+ ******************************************************************************/
 
 static int init(as_module *);
 static int configure(as_module *, void *);
@@ -39,28 +129,17 @@ static int apply_record(as_module *, as_aerospike *, const char *, const char *,
 static int apply_stream(as_module *, as_aerospike *, const char *, const char *, as_stream *, as_list *, as_result *);
 
 static lua_State * create_state();
-static lua_State * open_state(as_module *, const char *);
-static int close_state(as_module *, const char *, lua_State *);
+static int poll_state(context *, cache_item *);
+static int offer_state(context *, cache_item *);
 
 static void panic_setjmp(void);
 // static int handle_error(lua_State *);
 static int handle_panic(lua_State *);
 
-/**
- * Lua Module Specific Data
- * This will populate the module.source field
- */
-static struct mod_lua_context_s {
-    lua_State * lua_cache;
-    bool        cache_enabled;
-    char *      system_path;
-    char *      user_path;
-} lua = {
-    .lua_cache      = NULL,
-    .cache_enabled  = true,
-    .system_path    = NULL,
-    .user_path      = NULL
-};
+
+/******************************************************************************
+ * FUNCTIONS
+ ******************************************************************************/
 
 /**
  * Module Initializer.
@@ -73,6 +152,128 @@ static int init(as_module * m) {
     return 0;
 }
 
+
+/**
+ * Clear the cache entry. This means:
+ * - zero-out key and gen
+ * - release all states
+ */
+static inline int cache_entry_destroy(context * ctx, cache_entry * centry) {
+    pthread_mutex_lock(&centry->lock);
+    
+    for (int i = 0; i<centry->size; i++) {
+        if ( centry->states[i] != NULL ) {
+            lua_close(centry->states[i]);
+            centry->states[i] = NULL;
+        }
+    }
+
+    centry->key[0] = '\0';
+    centry->gen[0] = '\0';
+    centry->size = 0;
+
+    pthread_mutex_unlock(&centry->lock);
+    return 0;
+}
+
+/**
+ * Clear the table:
+ *  - destroy all entries
+ *  - set size to 0
+ */
+static inline int cache_table_destroy(context * ctx, cache_table * ctable) {
+    pthread_mutex_lock(&ctable->lock);
+    
+    for(int i = 0; i < ctable->size; i++ ) {
+        cache_entry_destroy(ctx, &ctable->entries[i]);
+    }
+    
+    ctable->size = 0;
+    
+    pthread_mutex_unlock(&ctable->lock);
+    return 0;
+}
+
+/**
+ * Clear the entry:
+ *  - truncate the key
+ *  - truncate the gen
+ *  - release all lua_States
+ *  - set size to 0
+ */
+static inline int cache_entry_init(context * ctx, cache_entry * centry, const char * key, const char * gen, const char * filename) {
+    pthread_mutex_lock(&centry->lock);
+
+    for ( int i = 0; i < CACHE_ENTRY_STATE_MIN; i++ ) {
+        if ( centry->states[i] == NULL ) {
+            centry->states[i] = create_state(ctx, filename);
+        }
+    }
+
+    strncpy(centry->key, key, CACHE_ENTRY_KEY_MAX);
+    strncpy(centry->gen, gen, CACHE_ENTRY_GEN_MAX);
+
+    pthread_mutex_unlock(&centry->lock);
+    return 0;
+}
+
+static inline int cache_table_initdir(context * ctx, cache_table * ctable, const char * directory) {
+
+    DIR *           dir     = NULL;
+    struct dirent * dentry  = NULL;
+
+    dir = opendir(directory);
+    
+    if ( dir == 0 ) return -1;
+
+    while ( (dentry = readdir(dir)) && dentry->d_name ) {
+
+        char *  filename                    = dentry->d_name;
+        char    key[CACHE_ENTRY_KEY_MAX]    = "";
+        char    gen[CACHE_ENTRY_GEN_MAX]    = "";
+
+        memcpy(key, filename, 128);
+        *(rindex(key, '.')) = '\0';
+
+        pthread_mutex_lock(&ctable->lock);
+
+        cache_entry_init(ctx, &ctable->entries[ctable->size], key, gen, filename);
+        ctable->size++;
+
+        pthread_mutex_unlock(&ctable->lock);
+    }
+
+    closedir(dir);
+
+    return 0;
+}
+
+static inline cache_entry * cache_table_getentry(cache_table * ctable, const char * key){
+    cache_entry * centry = NULL;
+
+    pthread_mutex_lock(&ctable->lock);
+
+    for(int i = 0; i < ctable->size; i++ ) {
+        cache_entry * e = &ctable->entries[i];
+        if ( strcmp(e->key, key) == 0 ) {
+            centry = e;
+            break;
+        }
+    }
+
+    pthread_mutex_unlock(&ctable->lock);
+
+    return centry;
+}
+
+/**
+ * Initialize the cache table
+ *  - For each file in the directory, 
+ */
+static inline int cache_table_init(context * ctx, cache_table * ctable) {
+    return cache_table_initdir(ctx, ctable, ctx->user_path);
+}
+
 /**
  * Module Configurator. 
  * This configures and reconfigures the module. This can be called an
@@ -82,7 +283,8 @@ static int init(as_module * m) {
  * @return 0 on success, otherwhise 1
  */
 static int configure(as_module * m, void * config) {
-    mod_lua_context *   ctx = (mod_lua_context *) m->source;
+
+    context *           ctx = (context *) m->source;
     mod_lua_config *    cfg = (mod_lua_config *) config;
     
     ctx->cache_enabled  = cfg->cache_enabled;
@@ -90,43 +292,8 @@ static int configure(as_module * m, void * config) {
     ctx->user_path      = strdup(cfg->user_path);
 
     if ( ctx->cache_enabled ) {
-        
-        if ( ctx->lua_cache ) {
-            lua_close(ctx->lua_cache);
-            ctx->lua_cache = NULL;
-        }
-
-        ctx->lua_cache = lua_open();
-
-        DIR *           dir             = NULL;
-        struct dirent * entry           = NULL;
-        char            filename[128]   = {0};
-
-        dir = opendir(ctx->user_path);
-        
-        if ( dir == 0 ) {
-            return -1;
-        }
-        
-        while ( (entry = readdir(dir)) && entry->d_name ) {
-
-            char * name = entry->d_name;
-            size_t len = strlen(name);
-
-            if ( len < 4 ) continue;
-
-            if ( strcmp(&name[len-4],".lua") != 0 ) continue;
-            
-            memcpy(filename, name, len-4); filename[len-4]=0; 
-
-            lua_State * l = create_state(m, filename);
-
-            lua_pushlightuserdata(ctx->lua_cache, l);
-            lua_setglobal(ctx->lua_cache, filename);
-        }
-
-        closedir(dir);
-        
+        cache_table_destroy(ctx, &ctable);
+        cache_table_init(ctx, &ctable);
     }
 
     return 0;
@@ -183,9 +350,8 @@ static void package_cpath_set(lua_State * l, char * system_path, char * user_pat
  *
  * @return a new lua_State
  */
-static lua_State * create_state(as_module * m, const char * filename) {
-    mod_lua_context *   ctx = (mod_lua_context *) m->source;
-    lua_State *         l   = NULL;
+static lua_State * create_state(context * ctx, const char * filename) {
+    lua_State * l   = NULL;
 
     l = lua_open();
 
@@ -220,54 +386,99 @@ static lua_State * create_state(as_module * m, const char * filename) {
  * existing context or create a new one as needed.
  *
  * @param m the module from which the context will be leased from.
- * @param fqn the fully qualified name of the function the context will be used for.
+ * @param filename name of the udf file
  * @return a lua_State to be used as the context.
  */
-static lua_State * open_state(as_module * m, const char * filename) {
+static int poll_state(context * ctx, cache_item * citem) {
 
-    mod_lua_context *   ctx = (mod_lua_context *) m->source;
+    if ( ctx->cache_enabled == true ) {
+        cache_entry * centry = cache_table_getentry(&ctable, citem->key);
 
-    if ( ctx->cache_enabled == true && ctx->lua_cache != NULL ) {
-        lua_getglobal(ctx->lua_cache, filename);
-        lua_State * root = (lua_State *) lua_touserdata(ctx->lua_cache, -1);
+        if ( centry != NULL ) {
+            LOG("[CACHE] entry found: %s (%d)", citem->key, centry->size);
+            pthread_mutex_lock(&centry->lock);
 
-        if ( root == NULL ) {
-            root = create_state(m, filename);
-            lua_pushlightuserdata(ctx->lua_cache, root);
-            lua_setglobal(ctx->lua_cache, filename);
+            if ( centry->size > 0 ) {
+                LOG("[CACHE] take state: %s (%d)", citem->key, centry->size);
+                
+                strncpy(citem->key, centry->key, CACHE_ENTRY_KEY_MAX);
+                strncpy(citem->gen, centry->gen, CACHE_ENTRY_GEN_MAX);
+                citem->state = centry->states[centry->size-1];
+                
+                centry->states[centry->size-1] = NULL;
+                centry->size--;
+
+                LOG("[CACHE] took state: %s (%d)", citem->key, centry->size);
+            }
+
+            pthread_mutex_unlock(&centry->lock);
         }
-
-        if ( root == NULL ) return NULL;
-
-        lua_State * node = lua_newthread(root);
-        lua_pop(ctx->lua_cache, -1);
-        lua_pop(root, -1);
-
-        return node;
+        else {
+            LOG("[CACHE] entry not found: %s", citem->key);
+        }
     }
     else {
-        return create_state(m, filename);
+        LOG("[CACHE] is disabled.");
     }
+
+    if ( citem->state == NULL ) {
+        citem->gen[0] = '\0';
+        citem->state = create_state(ctx, citem->key);
+
+        LOG("[CACHE] state created: %s", citem->key);
+    }
+
+    return 0;
 }
 
 /**
  * Release the context. 
  *
  * @param m the module from which the context was leased from.
- * @param fqn the fully qualified name of the function the context was leased to.
+ * @param filename name of the udf file
  * @param l the context being released
  * @return 0 on success, otherwise 1
  */
-static int close_state(as_module * m, const char * fqn, lua_State * l) {
-    mod_lua_context * ctx = (mod_lua_context *) m->source;
+static int offer_state(context * ctx, cache_item * citem) {
 
-    if ( ctx->cache_enabled == true && ctx->lua_cache != NULL ) {
-        lua_gc(l, LUA_GCCOLLECT, 0);
+    if ( ctx->cache_enabled == true ) {
+        cache_entry * centry = cache_table_getentry(&ctable, citem->key);
+
+        if ( centry != NULL ) {
+            LOG("[CACHE] found entry: %s (%d)", citem->key, centry->size);
+            pthread_mutex_lock(&centry->lock);
+
+            if ( centry->size < CACHE_ENTRY_STATE_MAX-1 ) {
+                LOG("[CACHE] returning state: %s (%d)", citem->key, centry->size);
+
+                lua_gc(citem->state, LUA_GCCOLLECT, 0);
+                centry->states[centry->size++] = citem->state;
+
+                // citem->key[0] = '\0';
+                // citem->gen[0] = '\0';
+                citem->state = NULL;
+                
+                LOG("[CACHE] returned state: %s (%d)", citem->key, centry->size);
+            }
+
+            pthread_mutex_unlock(&centry->lock);
+        }
+        else {
+            LOG("[CACHE] entry not found: %s", citem->key);
+        }
     }
     else {
-        lua_gc(l, LUA_GCCOLLECT, 0);
-        lua_close(l);
+        LOG("[CACHE] is disabled.");
     }
+    
+    // l is not NULL
+    // This means that it was not returned to the cache.
+    // So, we free it up.
+    if ( citem->state != NULL) {
+        lua_close(citem->state);
+        LOG("[CACHE] state closed: %s", citem->key);
+    }
+
     return 0;
 }
 
@@ -335,6 +546,8 @@ static int handle_panic(lua_State * l) {
 
 static int apply(lua_State * l, int err, int argc, as_result * res) {
 
+    LOG("apply");
+
     // call apply_record(f, r, ...)
     LOG("call apply_record()");
     int rc = lua_pcall(l, argc, 1, err);
@@ -374,53 +587,71 @@ static int apply(lua_State * l, int err, int argc, as_result * res) {
  */
 static int apply_record(as_module * m, as_aerospike * as, const char * filename, const char * function, as_rec * r, as_list * args, as_result * res) {
 
-    lua_State * l       = (lua_State *) NULL;   // Lua State
-    int         argc    = 0;                    // Number of arguments pushed onto the stack
-    int         err     = 0;                    // Error handler
+    context *   ctx     = (context *) m->source;    // mod-lua context
+    lua_State * l       = (lua_State *) NULL;       // Lua State
+    int         argc    = 0;                        // Number of arguments pushed onto the stack
+    int         err     = 0;                        // Error handler
+    int         rc      = 0;
     
-    LOG("BEGIN")
+    cache_item  citem   = {
+        .key    = "",
+        .gen    = "",
+        .state  = NULL
+    };
 
-    // lease a context
-    LOG("open context")
-    l = open_state(m, filename);
+    strncpy(citem.key, filename, CACHE_ENTRY_KEY_MAX);
+    
+    LOG("apply_record: BEGIN");
+
+    // lease a state
+    LOG("apply_record: poll state");
+    rc = poll_state(ctx, &citem);
+
+    if ( rc != 0 ) {
+        LOG("apply_record: Unable to poll a state");
+        return rc;
+    }
+
+    l = citem.state;
 
     // push error handler
     // lua_pushcfunction(l, handle_error);
     // int err = lua_gettop(l);
     
     // push aerospike into the global scope
-    LOG("push aerospike into the global scope");
+    LOG("apply_record: push aerospike into the global scope");
     mod_lua_pushaerospike(l, MOD_LUA_SCOPE_HOST, as);
     lua_setglobal(l, "aerospike");
     
     // push apply_record() onto the stack
-    LOG("push apply_record() onto the stack");
+    LOG("apply_record: push apply_record() onto the stack");
     lua_getglobal(l, "apply_record");
     
     // push function onto the stack
-    LOG("push function onto the stack");
+    LOG("apply_record: push function onto the stack");
     lua_getglobal(l, function);
 
     // push the record onto the stack
-    LOG("push the record onto the stack");
+    LOG("apply_record: push the record onto the stack");
     mod_lua_pushrecord(l, MOD_LUA_SCOPE_HOST, r);
 
     // push each argument onto the stack
-    LOG("push each argument onto the stack");
+    LOG("apply_record: push each argument onto the stack");
     argc = pushargs(l, args);
 
     // function + stream + arglist
     argc = argc + 2;
     
     // apply the function
+    LOG("apply_record: apply the function");
     apply(l, err, argc, res);
 
-    // release the context
-    LOG("close the context");
-    close_state(m, filename, l);
+    // return the state
+    LOG("apply_record: offer state");
+    offer_state(ctx, &citem);
     
-    LOG("END");
-    return 0;
+    LOG("apply_record: END");
+    return rc;
 }
 
 
@@ -441,54 +672,71 @@ static int apply_record(as_module * m, as_aerospike * as, const char * filename,
  */
 static int apply_stream(as_module * m, as_aerospike * as, const char * filename, const char * function, as_stream * s, as_list * args, as_result * res) {
 
+    context *   ctx     = (context *) m->source;    // mod-lua context
     lua_State * l       = (lua_State *) NULL;   // Lua State
     int         argc    = 0;                    // Number of arguments pushed onto the stack
     int         err     = 0;                    // Error handler
+    int         rc      = 0;
 
-    LOG("apply_stream: BEGIN")
+    cache_item  citem   = {
+        .key    = "",
+        .gen    = "",
+        .state  = NULL
+    };
 
-    // lease a context
-    LOG("open context")
-    l = open_state(m, filename);
+    strncpy(citem.key, filename, CACHE_ENTRY_KEY_MAX);
+
+    LOG("apply_stream: BEGIN");
+
+    // lease a state
+    LOG("apply_stream: poll state");
+    rc = poll_state(ctx, &citem);
+
+    if ( rc != 0 ) {
+        LOG("apply_stream: Unable to poll a state");
+        return rc;
+    }
+
+    l = citem.state;
 
     // push error handler
     // lua_pushcfunction(l, handle_error);
     // int err = lua_gettop(l);
 
     // push aerospike into the global scope
-    LOG("push aerospike into the global scope");
+    LOG("apply_stream: push aerospike into the global scope");
     mod_lua_pushaerospike(l, MOD_LUA_SCOPE_HOST, as);
     lua_setglobal(l, "aerospike");
 
     // push apply_stream() onto the stack
-    LOG("push apply_stream() onto the stack");
+    LOG("apply_stream: push apply_stream() onto the stack");
     lua_getglobal(l, "apply_stream");
     
     // push function onto the stack
-    LOG("push function onto the stack");
+    LOG("apply_stream: push function onto the stack");
     lua_getglobal(l, function);
 
     // push the stream onto the stack
-    LOG("push the stream iterator onto the stack");
+    LOG("apply_stream: push the stream iterator onto the stack");
     mod_lua_pushstream(l, s);
 
     // push each argument onto the stack
-    LOG("push each argument onto the stack");
+    LOG("apply_stream: push each argument onto the stack");
     argc = pushargs(l, args); 
 
     // function + stream + arglist
     argc = argc + 2;
     
     // call apply_stream(f, s, ...)
-    LOG("call apply_stream()");
+    LOG("apply_stream: apply the function");
     apply(l, err, argc, res);
 
     // release the context
-    LOG("close the context");
-    close_state(m, filename, l);
+    LOG("apply_stream: lose the context");
+    offer_state(ctx, &citem);
 
     LOG("END");
-    return 0;
+    return rc;
 }
 
 /**
