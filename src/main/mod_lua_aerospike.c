@@ -68,7 +68,7 @@ static int mod_lua_aerospike_exists(lua_State * l) {
     as_aerospike *  a   = mod_lua_checkaerospike(l, 1);
     as_rec *        r   = mod_lua_torecord(l, 2);
     int             rc  = as_aerospike_exists(a, r);
-    lua_pushinteger(l, rc);
+    lua_pushboolean(l, rc == 1);
     return 1;
 }
 
