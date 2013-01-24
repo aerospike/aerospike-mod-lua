@@ -62,11 +62,21 @@ static int mod_lua_record_gen(lua_State * l) {
  * Get a value from the named bin
  */
 static int mod_lua_record_index(lua_State * l) {
-    mod_lua_box *   box = mod_lua_checkbox(l, 1, CLASS_NAME);
-    as_rec *        rec = (as_rec *) mod_lua_box_value(box);
-    const char *    n   = luaL_optstring(l, 2, 0);
-    const as_val *  v   = as_rec_get(rec, n);
-    mod_lua_pushval(l, MOD_LUA_SCOPE_LUA, v);
+    mod_lua_box *   box     = mod_lua_checkbox(l, 1, CLASS_NAME);
+    as_rec *        rec     = (as_rec *) mod_lua_box_value(box);
+    const char *    name    = luaL_optstring(l, 2, 0);
+    if ( name != NULL ) {
+        const as_val *  value  = as_rec_get(rec, name);
+        if ( value != NULL ) {
+            mod_lua_pushval(l, MOD_LUA_SCOPE_LUA, value);
+        }
+        else {
+            lua_pushnil(l);
+        }
+    }
+    else {
+        lua_pushnil(l);
+    }
     return 1;
 }
 
@@ -74,15 +84,16 @@ static int mod_lua_record_index(lua_State * l) {
  * Set a value in the named bin
  */
 static int mod_lua_record_newindex(lua_State * l) {
-    as_rec * r = mod_lua_checkrecord(l, 1);
-    const char * name = luaL_optstring(l, 2, 0);
-    as_val * value = (as_val *) mod_lua_toval(l, 3);
-
-    if ( value == NULL ) {
-        as_rec_remove(r, name);
-    }
-    else {
-        as_rec_set(r, name, value);
+    as_rec *        rec     = mod_lua_checkrecord(l, 1);
+    const char *    name    = luaL_optstring(l, 2, 0);
+    if ( name != NULL ) {
+        as_val * value = (as_val *) mod_lua_toval(l, 3);
+        if ( value == NULL ) {
+            as_rec_remove(rec, name);
+        }
+        else {
+            as_rec_set(rec, name, value);
+        }
     }
     return 0;
 }
