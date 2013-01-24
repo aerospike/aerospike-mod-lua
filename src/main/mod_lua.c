@@ -111,12 +111,12 @@ static jmp_buf panic_jmp;
 static struct context_s {
     lua_State * lua_cache;
     bool        cache_enabled;
-    char *      system_path;
-    char *      user_path;
+    char        system_path[256];
+    char        user_path[256];
 } lua = {
     .cache_enabled  = true,
-    .system_path    = NULL,
-    .user_path      = NULL
+    .system_path    = "",
+    .user_path      = ""
 };
 
 /******************************************************************************
@@ -286,14 +286,43 @@ static int configure(as_module * m, void * config) {
 
     context *           ctx = (context *) m->source;
     mod_lua_config *    cfg = (mod_lua_config *) config;
-    
+    DIR *               dir = NULL;
+
     ctx->cache_enabled  = cfg->cache_enabled;
-    ctx->system_path    = strdup(cfg->system_path);
-    ctx->user_path      = strdup(cfg->user_path);
+
+    // Attempt to open the directory.
+    // If it opens, then set the ctx value.
+    // Otherwise, we alert the user of the error when a UDF is called. (for now)
+    dir = opendir(cfg->system_path);
+    if ( dir == 0 ) {
+        ctx->system_path[0] = '\0';
+        strncpy(ctx->system_path+1, cfg->system_path, 255);
+    }
+    else {
+        strncpy(ctx->system_path, cfg->system_path, 256);
+        closedir(dir);
+    }
+    dir = NULL;
+
+    // Attempt to open the directory.
+    // If it opens, then set the ctx value.
+    // Otherwise, we alert the user of the error when a UDF is called. (for now)
+    dir = opendir(cfg->user_path);
+    if ( dir == 0 ) {
+        ctx->user_path[0] = '\0';
+        strncpy(ctx->user_path+1, cfg->user_path, 255);
+    }
+    else {
+        strncpy(ctx->user_path, cfg->user_path, 256);
+        closedir(dir);
+    }
+    dir = NULL;
 
     if ( ctx->cache_enabled ) {
         cache_table_destroy(ctx, &ctable);
-        cache_table_init(ctx, &ctable);
+        if ( ctx->system_path[0] != '\0' && ctx->user_path[0] != '\0' ) {
+            cache_table_init(ctx, &ctable);
+        }
     }
 
     return 0;
@@ -570,6 +599,29 @@ static int apply(lua_State * l, int err, int argc, as_result * res) {
     return 0;
 }
 
+static int verify_environment(context * ctx) {
+    int rc = 0;
+
+    if ( ctx->system_path[0] == '\0' ) {
+        char * p = ctx->system_path;
+        char msg[256] = {'\0'};
+        strcpy(msg, "system-path is invalid: ");
+        strncpy(msg+24, p+1, 230);
+        as_aerospike_log(as, __FILE__, __LINE__, 1, msg);
+        rc += 1;
+    }
+
+    if ( ctx->user_path[0] == '\0' ) {
+        char * p = ctx->user_path;
+        char msg[256] = {'\0'};
+        strcpy(msg, "user-path is invalid: ");
+        strncpy(msg+22, p+1, 233);
+        as_aerospike_log(as, __FILE__, __LINE__, 1, msg);
+        rc += 2;
+    }
+
+    return rc;
+}
 
 /**
  * Applies a record and arguments to the function specified by a fully-qualified name.
@@ -593,6 +645,11 @@ static int apply_record(as_module * m, as_aerospike * as, const char * filename,
     int         err     = 0;                        // Error handler
     int         rc      = 0;
     
+    rc = verify_environment(ctx);
+    if ( rc ) {
+        return rc;
+    }
+
     cache_item  citem   = {
         .key    = "",
         .gen    = "",
@@ -678,6 +735,11 @@ static int apply_stream(as_module * m, as_aerospike * as, const char * filename,
     int         err     = 0;                    // Error handler
     int         rc      = 0;
 
+    rc = verify_environment(ctx);
+    if ( rc ) {
+        return rc;
+    }
+    
     cache_item  citem   = {
         .key    = "",
         .gen    = "",
