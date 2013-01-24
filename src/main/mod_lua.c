@@ -599,7 +599,7 @@ static int apply(lua_State * l, int err, int argc, as_result * res) {
     return 0;
 }
 
-static int verify_environment(context * ctx) {
+static int verify_environment(context * ctx, as_aerospike * as) {
     int rc = 0;
 
     if ( ctx->system_path[0] == '\0' ) {
@@ -645,7 +645,7 @@ static int apply_record(as_module * m, as_aerospike * as, const char * filename,
     int         err     = 0;                        // Error handler
     int         rc      = 0;
     
-    rc = verify_environment(ctx);
+    rc = verify_environment(ctx, as);
     if ( rc ) {
         return rc;
     }
@@ -735,11 +735,11 @@ static int apply_stream(as_module * m, as_aerospike * as, const char * filename,
     int         err     = 0;                    // Error handler
     int         rc      = 0;
 
-    rc = verify_environment(ctx);
+    rc = verify_environment(ctx, as);
     if ( rc ) {
         return rc;
     }
-    
+
     cache_item  citem   = {
         .key    = "",
         .gen    = "",
