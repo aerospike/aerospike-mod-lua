@@ -17,8 +17,8 @@ as_aerospike * mod_lua_toaerospike(lua_State * l, int index) {
 /**
  * Push aerospike on to the lua stack
  */
-as_aerospike * mod_lua_pushaerospike(lua_State * l, mod_lua_scope scope, as_aerospike * a) {
-    mod_lua_box * box = mod_lua_pushbox(l, scope, (as_val *) a, CLASS_NAME);
+as_aerospike * mod_lua_pushaerospike(lua_State * l, as_aerospike * a) {
+    mod_lua_box * box = mod_lua_pushbox(l, MOD_LUA_SCOPE_HOST, a, CLASS_NAME);
     return (as_aerospike *) mod_lua_box_value(box);
 }
 
@@ -34,7 +34,8 @@ static as_aerospike * mod_lua_checkaerospike(lua_State * l, int index) {
  * Garbage collection 
  */
 static int mod_lua_aerospike_gc(lua_State * l) {
-    mod_lua_freebox(l, 1, CLASS_NAME);
+    // Currently a stack allocated value. So no reason to GC.
+    // mod_lua_freebox(l, 1, CLASS_NAME);
     return 0;
 }
 

@@ -11,8 +11,8 @@ as_list * mod_lua_tolist(lua_State * l, int index) {
     return (as_list *) mod_lua_box_value(box);
 }
 
-as_list * mod_lua_pushlist(lua_State * l, mod_lua_scope scope, as_list * list) {
-    mod_lua_box * box = mod_lua_pushbox(l, scope, (as_val *) list, CLASS_NAME);
+as_list * mod_lua_pushlist(lua_State * l, as_list * list) {
+    mod_lua_box * box = mod_lua_pushbox(l, MOD_LUA_SCOPE_LUA, list, CLASS_NAME);
     return (as_list *) mod_lua_box_value(box);
 }
 
@@ -27,40 +27,75 @@ static int mod_lua_list_gc(lua_State * l) {
 }
 
 static int mod_lua_list_append(lua_State * l) {
-    as_list *   list    = mod_lua_checklist(l, 1);
-    as_val *    value   = mod_lua_toval(l, 2);
-    as_list_append(list,value);
+    as_list * list = mod_lua_checklist(l, 1);
+    if ( list ) {
+        as_val * value = mod_lua_toval(l, 2);
+        if ( value ) {
+            as_list_append(list,value);
+        }
+    }
     return 0;
 }
 
 static int mod_lua_list_prepend(lua_State * l) {
-    as_list *   list    = mod_lua_checklist(l, 1);
-    as_val *    value   = mod_lua_toval(l, 2);
-    as_list_prepend(list,value);
+    as_list * list = mod_lua_checklist(l, 1);
+    if ( list ) {
+        as_val * value = mod_lua_toval(l, 2);
+        if ( value ) {
+            as_list_prepend(list,value);
+        }
+    }
     return 0;
 }
 
 static int mod_lua_list_drop(lua_State * l) {
     mod_lua_box *   box     = mod_lua_checkbox(l, 1, CLASS_NAME);
     as_list *       list    = (as_list *) mod_lua_box_value(box);
-    lua_Integer     n       = luaL_optinteger(l, 2, 0);
-    as_list *       sub     = as_list_drop(list, (uint32_t) n);
-    mod_lua_pushlist(l, box->scope, sub);
+    as_list *       sub     = NULL;
+
+    if ( list ) {
+        lua_Integer n = luaL_optinteger(l, 2, 0);
+        sub = as_list_drop(list, (uint32_t) n);
+    }
+
+    if ( sub ) {
+        mod_lua_pushlist(l, sub);
+    }
+    else {
+        lua_pushnil(l);
+    }
+
     return 1;
 }
 
 static int mod_lua_list_take(lua_State * l) {
     mod_lua_box *   box     = mod_lua_checkbox(l, 1, CLASS_NAME);
     as_list *       list    = (as_list *) mod_lua_box_value(box);
-    lua_Integer     n       = luaL_optinteger(l, 2, 0);
-    as_list *       sub     = as_list_take(list, (uint32_t) n);
-    mod_lua_pushlist(l, box->scope, sub);
+    as_list *       sub     = NULL;
+
+    if ( list ) {
+        lua_Integer n = luaL_optinteger(l, 2, 0);
+        sub = as_list_take(list, (uint32_t) n);
+    }
+
+    if ( sub ) {
+        mod_lua_pushlist(l, sub);
+    }
+    else {
+        lua_pushnil(l);
+    }
+
     return 1;
 }
 
 static int mod_lua_list_size(lua_State * l) {
-    as_list *   list    = mod_lua_checklist(l, 1);
-    uint32_t    size    = as_list_size(list);
+    as_list * list = mod_lua_checklist(l, 1);
+    uint32_t size = 0;
+    
+    if ( list ) {
+        size = as_list_size(list);
+    }
+
     lua_pushinteger(l, size);
     return 1;
 }
@@ -78,7 +113,7 @@ static int mod_lua_list_new(lua_State * l) {
             lua_pop(l, 1);
         }
     }
-    mod_lua_pushlist(l, MOD_LUA_SCOPE_LUA, list);
+    mod_lua_pushlist(l, list);
     return 1;
 }
 
@@ -91,24 +126,67 @@ static int mod_lua_list_iterator(lua_State * l) {
 static int mod_lua_list_index(lua_State * l) {
     mod_lua_box *   box     = mod_lua_checkbox(l, 1, CLASS_NAME);
     as_list *       list    = (as_list *) mod_lua_box_value(box);
-    const uint32_t  idx     = (uint32_t) luaL_optlong(l, 2, 0);
-    const as_val *  val     = as_list_get(list, idx-1);
-    mod_lua_pushval(l, box->scope, val);
+    as_val *        val     = NULL;
+
+    if ( list ) {
+        const uint32_t  idx = (uint32_t) luaL_optlong(l, 2, 0);
+        val = as_list_get(list, idx-1);
+    }
+
+    if ( val ) {
+        mod_lua_pushval(l, val);
+    }
+    else {
+        lua_pushnil(l);
+    }
+
     return 1;
 }
 
 static int mod_lua_list_newindex(lua_State * l) {
     as_list *   list    = mod_lua_checklist(l, 1);
-    uint32_t    idx     = (uint32_t) luaL_optlong(l, 2, 0);
-    as_val *    val     = mod_lua_takeval(l, 3);
-    
-    if ( val == NULL ) {
-        // one day, we will remove values
+
+    if ( list ) {
+        uint32_t idx = (uint32_t) luaL_optlong(l, 2, 0);
+        as_val * val = mod_lua_takeval(l, 3);
+        if ( val ) {
+            as_list_set(list, idx, val);
+        }
+    }
+
+    return 0;
+}
+
+static int mod_lua_list_len(lua_State * l) {
+    mod_lua_box *   box     = mod_lua_checkbox(l, 1, CLASS_NAME);
+    as_list *       list    = (as_list *) mod_lua_box_value(box);
+    if ( list ) {
+        lua_pushinteger(l, as_list_size(list));
     }
     else {
-        as_list_set(list, idx, val);
+        lua_pushinteger(l, 0);
     }
-    return 0;
+    return 1;
+}
+
+static int mod_lua_list_tostring(lua_State * l) {
+    mod_lua_box *   box     = mod_lua_checkbox(l, 1, CLASS_NAME);
+    as_val *        val     = mod_lua_box_value(box);
+    char *          str     = NULL;
+
+    if ( val ) {
+        str = as_val_tostring(val);
+    }
+
+    if ( str ) {
+        lua_pushstring(l, str);
+        free(str);
+    }
+    else {
+        lua_pushstring(l, "Map()");
+    }
+    
+    return 1;
 }
 
 /*******************************************************************************
@@ -141,6 +219,8 @@ static const luaL_reg class_table[] = {
 static const luaL_reg class_metatable[] = {
     {"__index",         mod_lua_list_index},
     {"__newindex",      mod_lua_list_newindex},
+    {"__len",           mod_lua_list_len},
+    {"__tostring",      mod_lua_list_tostring},
     {"__gc",            mod_lua_list_gc},
     {0, 0}
 };

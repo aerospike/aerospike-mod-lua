@@ -10,8 +10,8 @@ as_map * mod_lua_tomap(lua_State * l, int index) {
     return (as_map *) mod_lua_box_value(box);
 }
 
-as_map * mod_lua_pushmap(lua_State * l, mod_lua_scope scope, as_map * map) {
-    mod_lua_box * box = mod_lua_pushbox(l, scope, (as_val *) map, CLASS_NAME);
+as_map * mod_lua_pushmap(lua_State * l, as_map * map) {
+    mod_lua_box * box = mod_lua_pushbox(l, MOD_LUA_SCOPE_LUA, map, CLASS_NAME);
     return (as_map *) mod_lua_box_value(box);
 }
 
@@ -49,31 +49,76 @@ static int mod_lua_map_new(lua_State * l) {
             lua_pop(l, 1);
         }
     }
-    mod_lua_pushmap(l, MOD_LUA_SCOPE_LUA, as_map_new(map, &as_hashmap_map));
+    mod_lua_pushmap(l, as_map_new(map, &as_hashmap_map));
     return 1;
 }
 
 static int mod_lua_map_index(lua_State * l) {
     mod_lua_box *   box     = mod_lua_checkbox(l, 1, CLASS_NAME);
     as_map *        map     = (as_map *) mod_lua_box_value(box);
-    as_val *        key     = mod_lua_takeval(l, 2);
-    as_val *        val     = as_map_get(map, key);
-    mod_lua_pushval(l, box->scope, val);
+    as_val *        val     = NULL;
+
+    if ( map ) {
+        as_val * key = mod_lua_takeval(l, 2);
+        if ( key ) {
+            val = as_map_get(map, key);
+        }
+    }
+
+    if ( val ) {
+        mod_lua_pushval(l, val);
+    }
+    else {
+        lua_pushnil(l);
+    }
+
     return 1;
 }
 
 static int mod_lua_map_newindex(lua_State * l) {
-    as_map *    map     = mod_lua_checkmap(l, 1);
-    as_val *    key     = mod_lua_takeval(l, 2);
-    as_val *    val     = mod_lua_takeval(l, 3);
-    
-    if ( val == NULL ) {
-        // one day, we will remove values
-    }
-    else {
-        as_map_set(map, key, val);
+    as_map * map = mod_lua_checkmap(l, 1);
+    if ( map ) {
+        as_val * key = mod_lua_takeval(l, 2);
+        if ( key ) {
+            as_val * val = mod_lua_takeval(l, 3);
+            if ( val ) {
+                as_map_set(map, key, val);
+            }
+        }
     }
     return 0;
+}
+
+static int mod_lua_map_len(lua_State * l) {
+    mod_lua_box *   box     = mod_lua_checkbox(l, 1, CLASS_NAME);
+    as_map *        map     = (as_map *) mod_lua_box_value(box);
+    if ( map ) {
+        lua_pushinteger(l, as_map_size(map));
+    }
+    else {
+        lua_pushinteger(l, 0);
+    }
+    return 1;
+}
+
+static int mod_lua_map_tostring(lua_State * l) {
+    mod_lua_box *   box     = mod_lua_checkbox(l, 1, CLASS_NAME);
+    as_val *        val     = mod_lua_box_value(box);
+    char *          str     = NULL;
+
+    if ( val ) {
+        str = as_val_tostring(val);
+    }
+
+    if ( str ) {
+        lua_pushstring(l, str);
+        free(str);
+    }
+    else {
+        lua_pushstring(l, "Map()");
+    }
+
+    return 1;
 }
 
 /*******************************************************************************
@@ -101,6 +146,8 @@ static const luaL_reg class_table[] = {
 static const luaL_reg class_metatable[] = {
     {"__index",         mod_lua_map_index},
     {"__newindex",      mod_lua_map_newindex},
+    {"__len",           mod_lua_map_len},
+    {"__tostring",      mod_lua_map_tostring},
     {"__gc",            mod_lua_map_gc},
     {0, 0}
 };

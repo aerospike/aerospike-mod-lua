@@ -6,6 +6,6 @@
 
 int mod_lua_map_register(lua_State *);
 
-as_map * mod_lua_pushmap(lua_State *, mod_lua_scope, as_map * );
+as_map * mod_lua_pushmap(lua_State *, as_map * );
 
 as_map * mod_lua_tomap(lua_State *, int);

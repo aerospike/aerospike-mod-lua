@@ -5,19 +5,19 @@
 -- ######################################################################################
 
 function trace(m, ...)
-    return aerospike:log(4, string.format(m, ...))
+    -- return aerospike:log(4, string.format(m, ...))
 end
 
 function debug(m, ...)
-    return aerospike:log(3, string.format(m, ...))
+    -- return aerospike:log(3, string.format(m, ...))
 end
 
 function info(m, ...)
-    return aerospike:log(2, string.format(m, ...))
+    return aerospike:log(2, m)
 end
 
 function warn(m, ...)
-    return aerospike:log(1, string.format(m, ...))
+    -- return aerospike:log(1, string.format(m, ...))
 end
 
 -- ######################################################################################
