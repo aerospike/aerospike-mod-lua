@@ -2,6 +2,7 @@
 #include "mod_lua_list.h"
 #include "mod_lua_iterator.h"
 #include "mod_lua_reg.h"
+#include "internal.h"
 
 #define OBJECT_NAME "list"
 #define CLASS_NAME  "List"
@@ -22,7 +23,9 @@ static as_list * mod_lua_checklist(lua_State * l, int index) {
 }
 
 static int mod_lua_list_gc(lua_State * l) {
+    LOG("mod_lua_list_gc: begin");
     mod_lua_freebox(l, 1, CLASS_NAME);
+    LOG("mod_lua_list_gc: end");
     return 0;
 }
 
@@ -200,6 +203,7 @@ static const luaL_reg object_table[] = {
     {"drop",            mod_lua_list_drop},
     {"size",            mod_lua_list_size},
     {"iterator",        mod_lua_list_iterator},
+    {"tostring",        mod_lua_list_tostring},
     {0, 0}
 };
 

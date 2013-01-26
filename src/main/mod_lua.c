@@ -9,6 +9,7 @@
 #include "mod_lua_val.h"
 #include "as_aerospike.h"
 #include "as_types.h"
+#include "internal.h"
 
 #include <dirent.h>
 #include <stdio.h>
@@ -34,19 +35,6 @@
 #define CACHE_ENTRY_GEN_MAX 128
 #define CACHE_ENTRY_STATE_MAX 10
 #define CACHE_ENTRY_STATE_MIN 10
-
-
-static void __log_append(const char * file, int line, const char * fmt, ...) {
-    char msg[128] = {0};
-    va_list ap;
-    va_start(ap, fmt);
-    vsnprintf(msg, 128, fmt, ap);
-    va_end(ap);
-    printf("%s:%d – %s\n",file,line,msg);
-}
-
-#define LOG(fmt, args...) \
-    // __log_append(__FILE__, __LINE__, fmt, ## args);
 
 /******************************************************************************
  * TYPES
@@ -524,7 +512,6 @@ typedef struct {
 static void pushargs_foreach(as_val * val, void * context) {
     pushargs_data * data = (pushargs_data *) context;
     data->count += mod_lua_pushval(data->l, val);
-    as_val_free(val);
 }
 
 /**
@@ -535,13 +522,13 @@ static void pushargs_foreach(as_val * val, void * context) {
  * @return the number of arguments pushed onto the stack.
  */
 static int pushargs(lua_State * l, as_list * args) {
-    LOG("pushargs()");
     pushargs_data data = {
         .l = l,
         .count = 0
     };
 
     as_list_foreach(args, &data, pushargs_foreach);
+    LOG("pushargs: %d", data.count);
     return data.count;
 }
 

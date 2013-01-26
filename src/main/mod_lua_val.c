@@ -1,6 +1,7 @@
 #include "mod_lua_val.h"
 #include "mod_lua_list.h"
 #include "mod_lua_map.h"
+#include "internal.h"
 
 #include <lua.h>
 #include <lauxlib.h>
@@ -8,8 +9,7 @@
 #include <string.h>
 #include <stdio.h>
 
-#define LOG(m) \
-    printf("%s:%d  -- %s\n",__FILE__,__LINE__, m);
+
 
 as_val * mod_lua_takeval(lua_State * l, int i) {
     return mod_lua_toval(l, i);
@@ -48,8 +48,10 @@ as_val * mod_lua_toval(lua_State * l, int i) {
                     case AS_MAP:
                         switch (box->scope) {
                             case MOD_LUA_SCOPE_LUA:
+                                LOG("mod_lua_toval: sope is Lua, returning value ref");
                                 return as_val_ref(box->value);
                             case MOD_LUA_SCOPE_HOST:
+                                LOG("mod_lua_toval: scope is Host, returning value");
                                 return box->value;
                         }
                     default:
@@ -142,11 +144,15 @@ mod_lua_box * mod_lua_checkbox(lua_State * l, int index, const char * type) {
 }
 
 int mod_lua_freebox(lua_State * l, int index, const char * type) {
+    LOG("mod_lua_freebox: begin (%s)",type);
     mod_lua_box * box = mod_lua_checkbox(l, index, type);
     if ( box != NULL && box->scope == MOD_LUA_SCOPE_LUA && box->value != NULL ) {
+        LOG("mod_lua_freebox: scope is Lua, free (%s)",type);
         as_val_free(box->value);
         box->value = NULL;
+        LOG("mod_lua_freebox: free (%s)",type);
     }
+    LOG("mod_lua_freebox: end (%s)",type);
     return 0;
 }
 

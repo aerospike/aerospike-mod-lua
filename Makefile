@@ -4,13 +4,15 @@ ifndef MSGPACK_PATH
 MSGPACK_PATH = modules/msgpack
 endif
 
-CFLAGS 	= -g -O3 -std=gnu99 -Wall -fPIC -fno-common -fno-strict-aliasing -finline-functions -Winline -march=nocona -DMARCH_$(ARCH) -DMEM_COUNT=1
+# CFLAGS 	= -g -O3 -std=gnu99 -Wall -fPIC -fno-common -fno-strict-aliasing -finline-functions -Winline -march=nocona -DMARCH_$(ARCH) -DMEM_COUNT=1
+CFLAGS 	= -g -std=gnu99 -Wall -fPIC -fno-common -fno-strict-aliasing -finline-functions -Winline -march=nocona -DMARCH_$(ARCH) -DMEM_COUNT=1
 LDFLAGS = -Wall -Winline -rdynamic 
 
 INC_PATH += modules/common/$(TARGET_INCL)
 INC_PATH += $(MSGPACK_PATH)/src
 
 as_types =
+as_types += as_val.o
 as_types += as_module.o
 as_types += as_buffer.o
 as_types += as_nil.o
@@ -33,6 +35,7 @@ as_types += as_aerospike.o
 as_types += as_serializer.o
 
 as_types += as_msgpack.o
+as_types += internal.o
 
 mod_lua =
 mod_lua += mod_lua.o
@@ -63,7 +66,7 @@ libtypes.o: | common $(TARGET_OBJ) $(call objects, $(as_types))
 libmod_lua.o: $(call objects, $(as_types) $(mod_lua))
 
 libmod_lua.so: | common msgpack libmod_lua.o $(TARGET_LIB) 
-	$(call library, $(empty), $(empty), lua, $(empty), $(TARGET_OBJ)/*.o)
+	$(call library, $(empty), $(empty), lua pthread, $(empty), $(TARGET_OBJ)/*.o)
 
 libmod_lua.a: | common msgpack libmod_lua.o $(TARGET_LIB) 
 	$(call archive, $(empty), $(empty), $(empty), $(empty), $(TARGET_OBJ)/*.o)

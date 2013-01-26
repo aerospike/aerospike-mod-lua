@@ -2,21 +2,10 @@
 #include "mod_lua_val.h"
 #include "as_rec.h"
 #include "mod_lua_reg.h"
+#include "internal.h"
 
 #define OBJECT_NAME "record"
 #define CLASS_NAME  "Record"
-
-static void __log_append(const char * file, int line, const char * fmt, ...) {
-    char msg[128] = {0};
-    va_list ap;
-    va_start(ap, fmt);
-    vsnprintf(msg, 128, fmt, ap);
-    va_end(ap);
-    printf("%s:%d – %s\n",file,line,msg);
-}
-
-#define LOG(fmt, args...) \
-    __log_append(__FILE__, __LINE__, fmt, ## args);
 
 /**
  * Read the item at index and convert to a record
@@ -46,8 +35,7 @@ static as_rec * mod_lua_checkrecord(lua_State * l, int index) {
  * Garbage collection 
  */
 static int mod_lua_record_gc(lua_State * l) {
-    // Currently a stack allocated value. So no reason to GC.
-    // mod_lua_freebox(l, 1, CLASS_NAME);
+    mod_lua_freebox(l, 1, CLASS_NAME);
     return 0;
 }
 
@@ -75,29 +63,29 @@ static int mod_lua_record_gen(lua_State * l) {
  * Get a value from the named bin
  */
 static int mod_lua_record_index(lua_State * l) {
-    LOG("mod_lua_record_index - begin");
+    LOG("mod_lua_record_index: begin");
     mod_lua_box *   box     = mod_lua_checkbox(l, 1, CLASS_NAME);
     as_rec *        rec     = (as_rec *) mod_lua_box_value(box);
     const char *    name    = luaL_optstring(l, 2, 0);
     int             rc      = 0;
     if ( name != NULL ) {
-        LOG("mod_lua_record_index - name is not null");
+        LOG("mod_lua_record_index: name is not null");
         as_val * value  = (as_val *) as_rec_get(rec, name);
         if ( value != NULL ) {
-            LOG("mod_lua_record_index - value is not null");
+            LOG("mod_lua_record_index: value is not null, returning value");
             mod_lua_pushval(l, value);
             rc = 1;
         }
         else {
-            LOG("mod_lua_record_index - value is null");
+            LOG("mod_lua_record_index: value is null, returning nil");
             lua_pushnil(l);
         }
     }
     else {
-        LOG("mod_lua_record_index - name is null");
+        LOG("mod_lua_record_index: name is null, returning nil");
         lua_pushnil(l);
     }
-    LOG("mod_lua_record_index - end");
+    LOG("mod_lua_record_index: end");
     return rc;
 }
 
@@ -105,25 +93,25 @@ static int mod_lua_record_index(lua_State * l) {
  * Set a value in the named bin
  */
 static int mod_lua_record_newindex(lua_State * l) {
-    LOG("mod_lua_record_newindex - begin");
+    LOG("mod_lua_record_newindex: begin");
     as_rec *        rec     = mod_lua_checkrecord(l, 1);
     const char *    name    = luaL_optstring(l, 2, 0);
     if ( name != NULL ) {
-        LOG("mod_lua_record_newindex - name is not null");
+        LOG("mod_lua_record_newindex: name is not null");
         as_val * value = (as_val *) mod_lua_toval(l, 3);
         if ( value != NULL ) {
-            LOG("mod_lua_record_newindex - value is not null");
+            LOG("mod_lua_record_newindex: value is not null, setting bin");
             as_rec_set(rec, name, value);
         }
         else {
-            LOG("mod_lua_record_newindex - value is null");
+            LOG("mod_lua_record_newindex: value is null, removing bin");
             as_rec_remove(rec, name);
         }
     }
     else {
-        LOG("mod_lua_record_newindex - name is null");
+        LOG("mod_lua_record_newindex: name is null");
     }
-    LOG("mod_lua_record_newindex - end");
+    LOG("mod_lua_record_newindex: end");
     return 0;
 }
 

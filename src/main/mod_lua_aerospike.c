@@ -3,6 +3,7 @@
 #include "mod_lua_record.h"
 #include "mod_lua_val.h"
 #include "mod_lua_reg.h"
+#include "internal.h"
 
 #define CLASS_NAME "Aerospike"
 
@@ -34,8 +35,9 @@ static as_aerospike * mod_lua_checkaerospike(lua_State * l, int index) {
  * Garbage collection 
  */
 static int mod_lua_aerospike_gc(lua_State * l) {
-    // Currently a stack allocated value. So no reason to GC.
-    // mod_lua_freebox(l, 1, CLASS_NAME);
+    LOG("mod_lua_aerospike_gc: begin");
+    mod_lua_freebox(l, 1, CLASS_NAME);
+    LOG("mod_lua_aerospike_gc: end");
     return 0;
 }
 

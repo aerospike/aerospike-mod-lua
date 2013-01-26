@@ -1,6 +1,7 @@
 #include "mod_lua_val.h"
 #include "mod_lua_map.h"
 #include "mod_lua_reg.h"
+#include "internal.h"
 
 #define OBJECT_NAME "map"
 #define CLASS_NAME  "Map"
@@ -21,7 +22,9 @@ static as_map * mod_lua_checkmap(lua_State * l, int index) {
 }
 
 static int mod_lua_map_gc(lua_State * l) {
+    LOG("mod_lua_map_gc: begin");
     mod_lua_freebox(l, 1, CLASS_NAME);
+    LOG("mod_lua_map_gc: end");
     return 0;
 }
 
@@ -127,6 +130,7 @@ static int mod_lua_map_tostring(lua_State * l) {
 
 static const luaL_reg object_table[] = {
     {"size",            mod_lua_map_size},
+    {"tostring",        mod_lua_map_tostring},
     {0, 0}
 };
 
