@@ -3,6 +3,7 @@
 #include "mod_lua_record.h"
 #include "mod_lua_val.h"
 #include "mod_lua_reg.h"
+#include "internal.h"
 
 #define CLASS_NAME "Aerospike"
 
@@ -17,8 +18,8 @@ as_aerospike * mod_lua_toaerospike(lua_State * l, int index) {
 /**
  * Push aerospike on to the lua stack
  */
-as_aerospike * mod_lua_pushaerospike(lua_State * l, mod_lua_scope scope, as_aerospike * a) {
-    mod_lua_box * box = mod_lua_pushbox(l, scope, (as_val *) a, CLASS_NAME);
+as_aerospike * mod_lua_pushaerospike(lua_State * l, as_aerospike * a) {
+    mod_lua_box * box = mod_lua_pushbox(l, MOD_LUA_SCOPE_HOST, a, CLASS_NAME);
     return (as_aerospike *) mod_lua_box_value(box);
 }
 
@@ -34,7 +35,9 @@ static as_aerospike * mod_lua_checkaerospike(lua_State * l, int index) {
  * Garbage collection 
  */
 static int mod_lua_aerospike_gc(lua_State * l) {
+    LOG("mod_lua_aerospike_gc: begin");
     mod_lua_freebox(l, 1, CLASS_NAME);
+    LOG("mod_lua_aerospike_gc: end");
     return 0;
 }
 

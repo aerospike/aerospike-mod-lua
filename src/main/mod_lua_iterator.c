@@ -1,6 +1,7 @@
 #include "mod_lua_val.h"
 #include "mod_lua_reg.h"
 #include "mod_lua_iterator.h"
+#include "internal.h"
 
 #include <lua.h>
 #include <lauxlib.h>
@@ -57,7 +58,7 @@ static int mod_lua_iterator_next(lua_State * l) {
     as_iterator * i = mod_lua_checkiterator(l, 1);
     as_val * v = (as_val *) as_iterator_next(i);
     if ( v != NULL ) {
-        mod_lua_pushval(l,MOD_LUA_SCOPE_LUA,v);
+        mod_lua_pushval(l,v);
     }
     else {
         lua_pushnil(l);

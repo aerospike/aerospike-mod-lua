@@ -9,6 +9,7 @@
 #include "mod_lua_val.h"
 #include "as_aerospike.h"
 #include "as_types.h"
+#include "internal.h"
 
 #include <dirent.h>
 #include <stdio.h>
@@ -34,19 +35,6 @@
 #define CACHE_ENTRY_GEN_MAX 128
 #define CACHE_ENTRY_STATE_MAX 10
 #define CACHE_ENTRY_STATE_MIN 10
-
-
-static void __log_append(const char * file, int line, const char * fmt, ...) {
-    char msg[128] = {0};
-    va_list ap;
-    va_start(ap, fmt);
-    vsnprintf(msg, 128, fmt, ap);
-    va_end(ap);
-    printf("%s:%d – %s\n",file,line,msg);
-}
-
-#define LOG(fmt, args...) \
-    // __log_append(__FILE__, __LINE__, fmt, ## args);
 
 /******************************************************************************
  * TYPES
@@ -523,7 +511,7 @@ typedef struct {
  */
 static void pushargs_foreach(as_val * val, void * context) {
     pushargs_data * data = (pushargs_data *) context;
-    data->count += mod_lua_pushval(data->l, MOD_LUA_SCOPE_LUA, val);
+    data->count += mod_lua_pushval(data->l, val);
 }
 
 /**
@@ -534,24 +522,13 @@ static void pushargs_foreach(as_val * val, void * context) {
  * @return the number of arguments pushed onto the stack.
  */
 static int pushargs(lua_State * l, as_list * args) {
-    LOG("pushargs()");
     pushargs_data data = {
         .l = l,
         .count = 0
     };
 
     as_list_foreach(args, &data, pushargs_foreach);
-
-    // int argc = 0;
-    // 
-    // as_iterator * i = as_list_iterator(args);
-    // while( as_iterator_has_next(i) ) {
-    //     argc += mod_lua_pushval(l, MOD_LUA_SCOPE_HOST, as_iterator_next(i));
-    // }
-    // as_iterator_free(i);
-    //
-    // return argc;
-
+    LOG("pushargs: %d", data.count);
     return data.count;
 }
 
@@ -677,7 +654,7 @@ static int apply_record(as_module * m, as_aerospike * as, const char * filename,
     
     // push aerospike into the global scope
     LOG("apply_record: push aerospike into the global scope");
-    mod_lua_pushaerospike(l, MOD_LUA_SCOPE_HOST, as);
+    mod_lua_pushaerospike(l, as);
     lua_setglobal(l, "aerospike");
     
     // push apply_record() onto the stack
@@ -690,7 +667,7 @@ static int apply_record(as_module * m, as_aerospike * as, const char * filename,
 
     // push the record onto the stack
     LOG("apply_record: push the record onto the stack");
-    mod_lua_pushrecord(l, MOD_LUA_SCOPE_HOST, r);
+    mod_lua_pushrecord(l, r);
 
     // push each argument onto the stack
     LOG("apply_record: push each argument onto the stack");
@@ -767,7 +744,7 @@ static int apply_stream(as_module * m, as_aerospike * as, const char * filename,
 
     // push aerospike into the global scope
     LOG("apply_stream: push aerospike into the global scope");
-    mod_lua_pushaerospike(l, MOD_LUA_SCOPE_HOST, as);
+    mod_lua_pushaerospike(l, as);
     lua_setglobal(l, "aerospike");
 
     // push apply_stream() onto the stack
