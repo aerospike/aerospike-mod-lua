@@ -68,3 +68,16 @@ function rollup(s)
 
     return s : map(_map) : reduce(_reduce)
 end
+
+
+-- LAMO tests for RUSS
+function sum_test(s)
+    local function _map(a)
+        return a.bin1;
+    end
+    local function _sum(a, b)
+        return a + b;
+    end
+    return s : map(_map) : reduce(_sum);
+end
+
