@@ -75,6 +75,17 @@ static int mod_lua_aerospike_rec_update(lua_State * l) {
 }
 
 /**
+ * aerospike.unique(record) => result<bool>
+ */
+static int mod_lua_aerospike_rec_unique(lua_State * l) {
+	as_aerospike *  a   = mod_lua_checkaerospike(l, 1);
+	as_rec *        r   = mod_lua_torecord(l, 2);
+	char *          rc  = as_aerospike_rec_unique(a, r);
+	lua_pushstring(l, rc);
+	return 1;
+}
+
+/**
  * aerospike.exists(record) => result<bool>
  */
 static int mod_lua_aerospike_rec_exists(lua_State * l) {
@@ -119,6 +130,7 @@ static int mod_lua_aerospike_log(lua_State * l) {
 static const luaL_reg class_table[] = {
     {"create",      mod_lua_aerospike_rec_create},
     {"update",      mod_lua_aerospike_rec_update},
+    {"unique",      mod_lua_aerospike_rec_unique},
     {"exists",      mod_lua_aerospike_rec_exists},
     {"remove",      mod_lua_aerospike_rec_remove},
     {"log",         mod_lua_aerospike_log},
