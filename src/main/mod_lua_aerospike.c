@@ -75,14 +75,26 @@ static int mod_lua_aerospike_rec_update(lua_State * l) {
 }
 
 /**
- * aerospike.unique(record) => result<bool>
+ * aerospike.unique(record) => result<char *>
  */
 static int mod_lua_aerospike_rec_unique(lua_State * l) {
-	as_aerospike *  a   = mod_lua_checkaerospike(l, 1);
-	as_rec *        r   = mod_lua_torecord(l, 2);
-	char *          rc  = as_aerospike_rec_unique(a, r);
-	lua_pushstring(l, rc);
-	return 1;
+    as_aerospike *  a   = mod_lua_checkaerospike(l, 1);
+    as_rec *        r   = mod_lua_torecord(l, 2);
+    char *          rc  = as_aerospike_rec_unique(a, r);
+    lua_pushstring(l, rc);
+    return 1;
+}
+
+/**
+ * aerospike.get(digest) => result<record>
+ */
+static int mod_lua_aerospike_rec_get(lua_State * l) {
+    as_aerospike *  a      = mod_lua_checkaerospike(l, 1);
+    const char *    digest = lua_tostring(l, 2);
+    as_rec *        rc     = as_aerospike_rec_get(a, digest);
+    if (!rc) return 0;
+    mod_lua_pushrecord(l, rc);
+    return 1;
 }
 
 /**
@@ -131,6 +143,7 @@ static const luaL_reg class_table[] = {
     {"create",      mod_lua_aerospike_rec_create},
     {"update",      mod_lua_aerospike_rec_update},
     {"unique",      mod_lua_aerospike_rec_unique},
+    {"get",         mod_lua_aerospike_rec_get},
     {"exists",      mod_lua_aerospike_rec_exists},
     {"remove",      mod_lua_aerospike_rec_remove},
     {"log",         mod_lua_aerospike_log},
