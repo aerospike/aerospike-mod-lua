@@ -1,22 +1,23 @@
 include project/build.makefile
 
 ###############################################################################
-##  FLAGS                                                                    ##
+##  SETTING                                                                  ##
 ###############################################################################
 
 ifndef MSGPACK_PATH
 MSGPACK_PATH = modules/msgpack
 endif
 
-# CFLAGS 	= -g -O3 -std=gnu99 -Wall -fPIC -fno-common -fno-strict-aliasing -finline-functions -Winline -march=nocona -DMARCH_$(ARCH) -DMEM_COUNT=1
-CFLAGS 	= -g -std=gnu99 -Wall -fPIC -fno-common -fno-strict-aliasing -finline-functions -Winline -march=nocona -DMARCH_$(ARCH) -DMEM_COUNT=1
-LDFLAGS = -Wall -Winline -rdynamic 
+CFLAGS = -O3
+
+CC_FLAGS = $(CFLAGS) -g -std=gnu99 -Wall -Winline -fPIC 
+CC_FLAGS += -fno-common -fno-strict-aliasing -finline-functions 
+CC_FLAGS += -march=nocona -DMARCH_$(ARCH) -DMEM_COUNT
+
+LD_FLAGS = -Wall -Winline -rdynamic 
 
 INC_PATH += modules/common/$(TARGET_INCL)
-# INC_PATH += modules/common/$(TARGET_INCL)
 INC_PATH += $(MSGPACK_PATH)/src
-
-MODULES := common msgpack
 
 ###############################################################################
 ##  OBJECTS                                                                  ##
@@ -73,7 +74,7 @@ VAL_TEST += $(as_types)
 all: modules build prepare
 
 .PHONY: modules
-modules: $(MODULES:%=modules/%)
+modules: modules/common modules/msgpack
 
 .PHONY: build 
 build: libmod_lua.a libmod_lua.so libas_types.a libas_types.so
@@ -92,16 +93,16 @@ libmod_lua.a: $(TARGET_LIB)/libmod_lua.a
 ###############################################################################
 
 $(TARGET_LIB)/libas_types.a: $(AS_TYPES:%=$(TARGET_OBJ)/%) | $(TARGET_LIB) modules
-	$(call archive, $(empty), $(empty), $(empty), $(empty))
+	$(archive)
 
 $(TARGET_LIB)/libas_types.so: $(AS_TYPES:%=$(TARGET_OBJ)/%) | $(TARGET_LIB) modules
-	$(call library, $(empty), $(empty), $(empty), $(empty))
+	$(library)
 
 $(TARGET_LIB)/libmod_lua.a: $(MOD_LUA:%=$(TARGET_OBJ)/%) $(AS_TYPES:%=$(TARGET_OBJ)/%) | $(TARGET_LIB) modules
-	$(call archive, $(empty), $(empty), $(empty), $(empty), $(empty))
+	$(archive)
 
 $(TARGET_LIB)/libmod_lua.so: $(MOD_LUA:%=$(TARGET_OBJ)/%) $(AS_TYPES:%=$(TARGET_OBJ)/%) | $(TARGET_LIB) modules
-	$(call library, $(empty), $(empty), lua pthread, $(empty), $(empty))
+	$(library)
 
 $(TARGET_INCL):
 	mkdir -p $(TARGET_INCL)
@@ -113,7 +114,7 @@ $(TARGET_INCL):
 
 .PHONY: modules/common
 modules/common:
-	make -C modules/common all MEM_COUNT=1
+	$(MAKE) -C $@ prepare
 
 modules/msgpack/Makefile: 
 	cd $(MSGPACK_PATH) && ./configure
@@ -128,21 +129,26 @@ modules/msgpack: modules/msgpack/src/.libs/libmsgpackc.a
 ##  TEST TARGETS                                                      		 ##
 ###############################################################################
 
-test_flags = $(TARGET_LIB)/libmod_lua.a  modules/common/$(TARGET_LIB)/libcf-shared.a modules/common/$(TARGET_LIB)/libcf-client.a $(MSGPACK_PATH)/src/.libs/libmsgpack.a 
+TEST_FLAGS = $(TARGET_LIB)/libmod_lua.a  modules/common/$(TARGET_LIB)/libcf-shared.a modules/common/$(TARGET_LIB)/libcf-client.a $(MSGPACK_PATH)/src/.libs/libmsgpack.a 
 
+record_udf: LDFLAGS += $(TEST_FLAGS)
 record_udf: $(SOURCE_TEST)/record_udf.c | $(TARGET_BIN) libmod_lua.a common-lib msgpack-lib
-	$(call executable, $(empty), $(empty), lua, $(empty), $(test_flags))
+	$(executable)
 
+hashmap_test: LDFLAGS += $(TEST_FLAGS)
 hashmap_test: $(SOURCE_TEST)/hashmap_test.c | $(TARGET_BIN) libmod_lua.a common-lib msgpack-lib
-	$(call executable, $(empty), $(empty), $(empty), $(empty), $(test_flags))
+	$(executable)
 
+linkedlist_test: LDFLAGS += $(TEST_FLAGS)
 linkedlist_test: $(SOURCE_TEST)/linkedlist_test.c | $(TARGET_BIN) libmod_lua.a common-lib msgpack-lib
-	$(call executable, $(empty), $(empty), $(empty), $(empty), $(test_flags))
+	$(executable)
 
+arraylist_test: LDFLAGS += $(TEST_FLAGS)
 arraylist_test: $(SOURCE_TEST)/arraylist_test.c | $(TARGET_BIN) libmod_lua.a common-lib msgpack-lib
-	$(call executable, $(empty), $(empty), $(empty), $(empty), $(test_flags))
+	$(executable)
 
+msgpack_test: LDFLAGS += $(TEST_FLAGS)
 msgpack_test: $(SOURCE_TEST)/msgpack_test.c | $(TARGET_BIN) libmod_lua.a common-lib msgpack-lib
-	$(call executable, $(empty), $(empty), $(empty), $(empty), $(test_flags))
+	$(executable)
 
 test: msgpack_test hashmap_test linkedlist_test arraylist_test record_udf
