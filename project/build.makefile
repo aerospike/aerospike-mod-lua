@@ -103,9 +103,9 @@ define build
 endef
 
 define executable
-	@mkdir -p $(TARGET_BIN)/`dirname $@`
+	@if [ ! -d `dirname $@` ]; then mkdir -p `dirname $@`; fi
 	$(strip $(CC) \
-		$(addprefix -I, $(MODULES:%=modules/%/$(TARGET_INCL))) \
+		$(addprefix -I, $(MODULES:%=modules/%/$(SOURCE_INCL))) \
 		$(addprefix -I, $(INC_PATH)) \
 		$(addprefix -I, $($@_inc_path)) \
 		$(addprefix -I, $(1)) \
@@ -116,24 +116,22 @@ define executable
 		$(addprefix -l, $($@_lib)) \
 		$(addprefix -l, $(3)) \
 		$(4) \
-		$(CFLAGS) \
 		$(LDFLAGS) \
 		$($@_flags) \
-		-o $(TARGET_BIN)/$@ \
+		-o $@ \
 		$^ \
-		$(5) \
 	)
 endef
 
 define archive
-	@mkdir -p `dirname $@`
-	$(strip $(AR) rcs $(ARFLAGS) $(4) $(TARGET_LIB)/$@ $^ $(5))
+	@if [ ! -d `dirname $@` ]; then mkdir -p `dirname $@`; fi
+	$(strip $(AR) rcs $(ARFLAGS) $(4) $@ $^ )
 endef
 
 define library
-	@mkdir -p $(TARGET_LIB)/`dirname $@`
+	@if [ ! -d `dirname $@` ]; then mkdir -p `dirname $@`; fi
 	$(strip $(CC) -shared \
-		$(addprefix -I, $(MODULES:%=modules/%/$(TARGET_INCL))) \
+		$(addprefix -I, $(MODULES:%=modules/%/$(SOURCE_INCL))) \
 		$(addprefix -I, $(INC_PATH)) \
 		$(addprefix -I, $($@_inc_path)) \
 		$(addprefix -I, $(1)) \
@@ -143,19 +141,19 @@ define library
 		$(addprefix -L, $(2)) \
 		$(addprefix -l, $($@_lib)) \
 		$(addprefix -l, $(3)) \
+		$(4) \
 		$(LDFLAGS) \
 		$($@_flags) \
-		$(4) \
-		-o $(TARGET_LIB)/$@ \
+		-o $@ \
 		$^ \
-		$(5) \
 	)
 endef
 
 define object
-	@mkdir -p `dirname $@`
+	@if [ ! -d `dirname $@` ]; then mkdir -p `dirname $@`; fi
 	$(strip $(CC) \
-		$(addprefix -I, $(MODULES:%=modules/%/$(TARGET_INCL))) \
+		-MD \
+		$(addprefix -I, $(MODULES:%=modules/%/$(SOURCE_INCL))) \
 		$(addprefix -I, $(INC_PATH)) \
 		$(addprefix -I, $($@_inc_path)) \
 		$(addprefix -I, $(1)) \
@@ -170,7 +168,6 @@ define object
 		$($@_flags) \
 		-o $@ \
 		-c $^ \
-		$(5) \
 	)
 endef
 
@@ -198,8 +195,9 @@ endef
 # Common Targets
 #
 
+# .PHONY: $(TARGET)
 $(TARGET):
-	mkdir -p $@
+	mkdir $@
 
 $(TARGET_BASE): | $(TARGET)
 	mkdir $@
@@ -216,6 +214,7 @@ $(TARGET_LIB): | $(TARGET_BASE)
 $(TARGET_OBJ): | $(TARGET_BASE)
 	mkdir $@
 
+.PHONY: info
 info:
 	@echo
 	@echo "  NAME:     " $(NAME) 
@@ -238,12 +237,15 @@ info:
 	@echo "      flags:      " $(LDFLAGS)
 	@echo
 
+.PHONY: clean
 clean: 
 	@rm -rf $(TARGET)
 	$(call make_each, $(MODULES:%=modules/%), clean)
 
-$(MODULES): 
-	make -C modules/$@ all
 
+.PHONY: $(TARGET_OBJ)/%.o
 $(TARGET_OBJ)/%.o : %.c | $(TARGET_OBJ) 
 	$(call object)
+
+
+.DEFAULT_GOAL := all

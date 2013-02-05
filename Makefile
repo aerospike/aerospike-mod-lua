@@ -1,5 +1,9 @@
 include project/build.makefile
 
+###############################################################################
+##  FLAGS                                                                    ##
+###############################################################################
+
 ifndef MSGPACK_PATH
 MSGPACK_PATH = modules/msgpack
 endif
@@ -9,88 +13,120 @@ CFLAGS 	= -g -std=gnu99 -Wall -fPIC -fno-common -fno-strict-aliasing -finline-fu
 LDFLAGS = -Wall -Winline -rdynamic 
 
 INC_PATH += modules/common/$(TARGET_INCL)
+# INC_PATH += modules/common/$(TARGET_INCL)
 INC_PATH += $(MSGPACK_PATH)/src
 
-as_types =
-as_types += as_val.o
-as_types += as_module.o
-as_types += as_buffer.o
-as_types += as_nil.o
-as_types += as_boolean.o
-as_types += as_integer.o
-as_types += as_string.o
-as_types += as_list.o
-as_types += as_map.o
-as_types += as_rec.o
-as_types += as_pair.o
+MODULES := common msgpack
 
-as_types += as_linkedlist.o
-as_types += as_arraylist.o
-as_types += as_hashmap.o
+###############################################################################
+##  OBJECTS                                                                  ##
+###############################################################################
 
-as_types += as_iterator.o
-as_types += as_stream.o
-as_types += as_result.o
-as_types += as_aerospike.o
-as_types += as_serializer.o
+AS_TYPES =
+AS_TYPES += as_val.o
+AS_TYPES += as_module.o
+AS_TYPES += as_buffer.o
+AS_TYPES += as_nil.o
+AS_TYPES += as_boolean.o
+AS_TYPES += as_integer.o
+AS_TYPES += as_string.o
+AS_TYPES += as_list.o
+AS_TYPES += as_map.o
+AS_TYPES += as_rec.o
+AS_TYPES += as_pair.o
+AS_TYPES += as_linkedlist.o
+AS_TYPES += as_arraylist.o
+AS_TYPES += as_hashmap.o
+AS_TYPES += as_iterator.o
+AS_TYPES += as_stream.o
+AS_TYPES += as_result.o
+AS_TYPES += as_aerospike.o
+AS_TYPES += as_serializer.o
+AS_TYPES += as_msgpack.o
+AS_TYPES += internal.o
 
-as_types += as_msgpack.o
-as_types += internal.o
 
-mod_lua =
-mod_lua += mod_lua.o
-mod_lua += mod_lua_reg.o
-mod_lua += mod_lua_aerospike.o
-mod_lua += mod_lua_record.o
-mod_lua += mod_lua_iterator.o
-mod_lua += mod_lua_list.o
-mod_lua += mod_lua_map.o
-mod_lua += mod_lua_stream.o
-mod_lua += mod_lua_val.o
-mod_lua += mod_lua_config.o
+MOD_LUA =
+MOD_LUA += mod_lua.o
+MOD_LUA += mod_lua_reg.o
+MOD_LUA += mod_lua_aerospike.o
+MOD_LUA += mod_lua_record.o
+MOD_LUA += mod_lua_iterator.o
+MOD_LUA += mod_lua_list.o
+MOD_LUA += mod_lua_map.o
+MOD_LUA += mod_lua_stream.o
+MOD_LUA += mod_lua_val.o
+MOD_LUA += mod_lua_config.o
 
-test_o =  test.o
-test_o += $(as_types) $(as_module) $(mod_lua)
 
-val_test_o =  val_test.o
-val_test_o += $(as_types)
+TEST =  test.o
+TEST += $(as_types) $(as_module) $(mod_lua)
 
-##
-## MAIN
-##
 
-all: libmod_lua.a libmod_lua.so
+VAL_TEST = val_test.o
+VAL_TEST += $(as_types)
 
-libtypes.o: | common $(TARGET_OBJ) $(call objects, $(as_types))
+###############################################################################
+##  MAIN TARGETS                                                             ##
+###############################################################################
 
-libmod_lua.o: $(call objects, $(as_types) $(mod_lua))
+all: modules build prepare
 
-libmod_lua.so: | common msgpack libmod_lua.o $(TARGET_LIB) 
-	$(call library, $(empty), $(empty), lua pthread, $(empty), $(TARGET_OBJ)/*.o)
+.PHONY: modules
+modules: $(MODULES:%=modules/%)
 
-libmod_lua.a: | common msgpack libmod_lua.o $(TARGET_LIB) 
-	$(call archive, $(empty), $(empty), $(empty), $(empty), $(TARGET_OBJ)/*.o)
+.PHONY: build 
+build: libmod_lua.a libmod_lua.so libas_types.a libas_types.so
 
-##
-## SUB-MODULES
-##
+.PHONY: prepare
+prepare: $(TARGET_INCL)
 
-common: 
-	make -C modules/common prepare MEM_COUNT=1
+.PHONY: libas_types.so libas_types.a libmod_lua.so libmod_lua.a
+libas_types.so: $(TARGET_LIB)/libas_types.so
+libas_types.a: $(TARGET_LIB)/libas_types.a
+libmod_lua.so: $(TARGET_LIB)/libmod_lua.so
+libmod_lua.a: $(TARGET_LIB)/libmod_lua.a
 
-common-lib: 
+###############################################################################
+##  BUILD TARGETS                                                            ##
+###############################################################################
+
+$(TARGET_LIB)/libas_types.a: $(AS_TYPES:%=$(TARGET_OBJ)/%) | $(TARGET_LIB) modules
+	$(call archive, $(empty), $(empty), $(empty), $(empty))
+
+$(TARGET_LIB)/libas_types.so: $(AS_TYPES:%=$(TARGET_OBJ)/%) | $(TARGET_LIB) modules
+	$(call library, $(empty), $(empty), $(empty), $(empty))
+
+$(TARGET_LIB)/libmod_lua.a: $(MOD_LUA:%=$(TARGET_OBJ)/%) $(AS_TYPES:%=$(TARGET_OBJ)/%) | $(TARGET_LIB) modules
+	$(call archive, $(empty), $(empty), $(empty), $(empty), $(empty))
+
+$(TARGET_LIB)/libmod_lua.so: $(MOD_LUA:%=$(TARGET_OBJ)/%) $(AS_TYPES:%=$(TARGET_OBJ)/%) | $(TARGET_LIB) modules
+	$(call library, $(empty), $(empty), lua pthread, $(empty), $(empty))
+
+$(TARGET_INCL):
+	mkdir -p $(TARGET_INCL)
+	cp -p $(SOURCE_INCL)/*.h $(TARGET_INCL)/.
+
+###############################################################################
+##  SUB-MODULES TARGETS                                                      ##
+###############################################################################
+
+.PHONY: modules/common
+modules/common:
 	make -C modules/common all MEM_COUNT=1
 
 modules/msgpack/Makefile: 
 	cd $(MSGPACK_PATH) && ./configure
 
-msgpack: modules/msgpack/Makefile
-
-msgpack-lib: modules/msgpack/Makefile
+modules/msgpack/src/.libs/libmsgpackc.a: modules/msgpack/Makefile
 	cd $(MSGPACK_PATH) && make
-##
-## TEST
-##
+
+.PHONY: modules/msgpack
+modules/msgpack: modules/msgpack/src/.libs/libmsgpackc.a
+
+###############################################################################
+##  TEST TARGETS                                                      		 ##
+###############################################################################
 
 test_flags = $(TARGET_LIB)/libmod_lua.a  modules/common/$(TARGET_LIB)/libcf-shared.a modules/common/$(TARGET_LIB)/libcf-client.a $(MSGPACK_PATH)/src/.libs/libmsgpack.a 
 
