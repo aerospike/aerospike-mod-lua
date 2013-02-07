@@ -101,6 +101,7 @@ static struct context_s {
     bool        cache_enabled;
     char        system_path[256];
     char        user_path[256];
+    pthread_rwlock_t *lock;
 } lua = {
     .cache_enabled  = true,
     .system_path    = "",
@@ -269,6 +270,7 @@ static inline int cache_table_init(context * ctx, cache_table * ctable) {
  *
  * @param m the module being configured.
  * @return 0 on success, otherwhise 1
+ * @sychronization: Caller should have a write lock
  */
 static int configure(as_module * m, void * config) {
 
@@ -277,6 +279,7 @@ static int configure(as_module * m, void * config) {
     DIR *               dir = NULL;
 
     ctx->cache_enabled  = cfg->cache_enabled;
+    ctx->lock           = &cfg->lock;
 
     // Attempt to open the directory.
     // If it opens, then set the ctx value.
@@ -463,12 +466,20 @@ static int offer_state(context * ctx, cache_item * citem) {
 
         if ( centry != NULL ) {
             LOG("[CACHE] found entry: %s (%d)", citem->key, centry->size);
+
+			// Runnig GCCOLLECT is overkill because with every execution
+			// lua itself does a garbage collection. Also do garbage 
+			// collection outside the spinlock. arg for GCSTEP 2 is a 
+			// random number. Experiment to get better number.
+            lua_gc(citem->state, LUA_GCSTEP, 2);
             pthread_mutex_lock(&centry->lock);
 
-            if ( centry->size < CACHE_ENTRY_STATE_MAX-1 ) {
+			// Do not cache it back if cache size is maxed out of the 
+			// cache is of new generation
+            if (( centry->size < CACHE_ENTRY_STATE_MAX-1 )
+				&& ( !strncmp(citem->gen, centry->gen, CACHE_ENTRY_GEN_MAX) ))   {
                 LOG("[CACHE] returning state: %s (%d)", citem->key, centry->size);
 
-                lua_gc(citem->state, LUA_GCCOLLECT, 0);
                 centry->states[centry->size++] = citem->state;
 
                 // citem->key[0] = '\0';
@@ -579,6 +590,7 @@ static int apply(lua_State * l, int err, int argc, as_result * res) {
 static int verify_environment(context * ctx, as_aerospike * as) {
     int rc = 0;
 
+    pthread_rwlock_rdlock(ctx->lock);
     if ( ctx->system_path[0] == '\0' ) {
         char * p = ctx->system_path;
         char msg[256] = {'\0'};
@@ -596,6 +608,7 @@ static int verify_environment(context * ctx, as_aerospike * as) {
         as_aerospike_log(as, __FILE__, __LINE__, 1, msg);
         rc += 2;
     }
+    pthread_rwlock_unlock(ctx->lock);
 
     return rc;
 }
@@ -622,8 +635,10 @@ static int apply_record(as_module * m, as_aerospike * as, const char * filename,
     int         err     = 0;                        // Error handler
     int         rc      = 0;
     
+    pthread_rwlock_rdlock(ctx->lock);
     rc = verify_environment(ctx, as);
     if ( rc ) {
+        pthread_rwlock_unlock(ctx->lock);
         return rc;
     }
 
@@ -640,6 +655,7 @@ static int apply_record(as_module * m, as_aerospike * as, const char * filename,
     // lease a state
     LOG("apply_record: poll state");
     rc = poll_state(ctx, &citem);
+    pthread_rwlock_unlock(ctx->lock);
 
     if ( rc != 0 ) {
         LOG("apply_record: Unable to poll a state");
@@ -681,8 +697,10 @@ static int apply_record(as_module * m, as_aerospike * as, const char * filename,
     apply(l, err, argc, res);
 
     // return the state
+    pthread_rwlock_rdlock(ctx->lock);
     LOG("apply_record: offer state");
     offer_state(ctx, &citem);
+    pthread_rwlock_unlock(ctx->lock);
     
     LOG("apply_record: END");
     return rc;
@@ -712,8 +730,10 @@ static int apply_stream(as_module * m, as_aerospike * as, const char * filename,
     int         err     = 0;                    // Error handler
     int         rc      = 0;
 
+    pthread_rwlock_rdlock(ctx->lock);
     rc = verify_environment(ctx, as);
     if ( rc ) {
+    	pthread_rwlock_unlock(ctx->lock);
         return rc;
     }
 
@@ -730,6 +750,7 @@ static int apply_stream(as_module * m, as_aerospike * as, const char * filename,
     // lease a state
     LOG("apply_stream: poll state");
     rc = poll_state(ctx, &citem);
+    pthread_rwlock_unlock(ctx->lock);
 
     if ( rc != 0 ) {
         LOG("apply_stream: Unable to poll a state");
@@ -771,8 +792,10 @@ static int apply_stream(as_module * m, as_aerospike * as, const char * filename,
     apply(l, err, argc, res);
 
     // release the context
+    pthread_rwlock_rdlock(ctx->lock);
     LOG("apply_stream: lose the context");
     offer_state(ctx, &citem);
+    pthread_rwlock_unlock(ctx->lock);
 
     LOG("END");
     return rc;
