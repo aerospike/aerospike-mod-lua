@@ -441,7 +441,7 @@ static int poll_state(context * ctx, cache_item * citem) {
                 if (centry->max_cache_size > CACHE_ENTRY_STATE_MAX)
                     centry->max_cache_size = CACHE_ENTRY_STATE_MAX; 
             }
-			fprintf(stderr, " %d : %d \n", miss, total);
+			LOG("Cache Miss %d : Total %d \n", miss, total);
         } else {
             centry = NULL;
         }
