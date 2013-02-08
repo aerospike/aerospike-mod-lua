@@ -89,8 +89,9 @@ static struct context_s {
 } lua = {
     .cache_enabled  = true,
     .system_path    = "",
-    .user_path      = ""
+    .user_path      = "",
 };
+
 
 /******************************************************************************
  * FUNCTION DECLS
@@ -470,6 +471,10 @@ static int poll_state(context * ctx, cache_item * citem) {
 static int offer_state(context * ctx, cache_item * citem) {
 
     if ( ctx->cache_enabled == true ) {
+		// Runnig GCCOLLECT is overkill because with every execution
+		// lua itself does a garbage collection. Also do garbage 
+		// collection outside the spinlock. arg for GCSTEP 2 is a 
+		// random number. Experiment to get better number.
         lua_gc(citem->state, LUA_GCSTEP, 2);
         cache_entry *centry = NULL;
         if (CF_RCHASH_OK == cf_rchash_get(centry_hash, (void *)citem->key, strlen(citem->key), (void *)&centry) ) {
