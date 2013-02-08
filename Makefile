@@ -10,13 +10,24 @@ ifndef MSGPACK_PATH
 MSGPACK_PATH = modules/msgpack
 endif
 
+ifeq ($(DOPROFILE), 1)
 CFLAGS = -O3
+else 
+CFLAGS = -O0
+endif
 
 CC_FLAGS = $(CFLAGS) -g -std=gnu99 -Wall -Winline -fPIC 
 CC_FLAGS += -fno-common -fno-strict-aliasing -finline-functions 
 CC_FLAGS += -march=nocona -DMARCH_$(ARCH) -DMEM_COUNT
 
 LD_FLAGS = -Wall -Winline -rdynamic 
+
+ifeq ($(DOPROFILE), 1)
+CC_FLAGS += -pg -fprofile-arcs -ftest-coverage -g2
+LD_FLAGS += -pg -fprofile-arcs -lgcov
+endif
+
+
 
 INC_PATH += modules/common/$(TARGET_INCL)
 INC_PATH += $(MSGPACK_PATH)/src
