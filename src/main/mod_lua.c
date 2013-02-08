@@ -10,6 +10,9 @@
 #include "as_aerospike.h"
 #include "as_types.h"
 #include "internal.h"
+#include "cf_queue.h"
+#include "cf_rchash.h"
+#include "cf_alloc.h"
 
 #include <dirent.h>
 #include <stdio.h>
@@ -33,7 +36,7 @@
 #define CACHE_TABLE_ENTRY_MAX 128
 #define CACHE_ENTRY_KEY_MAX 128
 #define CACHE_ENTRY_GEN_MAX 128
-#define CACHE_ENTRY_STATE_MAX 10
+#define CACHE_ENTRY_STATE_MAX 128
 #define CACHE_ENTRY_STATE_MIN 10
 
 /******************************************************************************
@@ -43,22 +46,16 @@
 typedef struct context_s context;
 
 typedef struct cache_entry_s cache_entry;
-typedef struct cache_table_s cache_table;
-
+cf_rchash *centry_hash;
 typedef struct cache_item_s cache_item;
 
 struct cache_entry_s {
     char            key[CACHE_ENTRY_KEY_MAX];
     char            gen[CACHE_ENTRY_GEN_MAX];
-    pthread_mutex_t lock;
-    lua_State *     states[CACHE_ENTRY_STATE_MAX];
-    uint32_t        size;
-};
-
-struct cache_table_s {
-    pthread_mutex_t lock;
-    cache_entry     entries[CACHE_TABLE_ENTRY_MAX];
-    uint32_t        size;
+    uint32_t        max_cache_size;
+    cf_queue      * lua_state_q;
+    cf_atomic32     cache_miss;
+    cf_atomic32     total;
 };
 
 
@@ -71,20 +68,6 @@ struct cache_item_s {
 /******************************************************************************
  * VARIABLES
  ******************************************************************************/
-
-// static pthread_mutex_t cache_mutex;
-
-static cache_table ctable = { 
-    .lock           = PTHREAD_MUTEX_INITIALIZER,
-    .entries        = {{
-        .lock           = PTHREAD_MUTEX_INITIALIZER,
-        .key            = "",
-        .gen            = "",
-        .states         = {NULL}, 
-        .size           = 0
-    }},
-    .size           = 0
-};
 
 // static uint32_t cache_size = 0;
 
@@ -101,6 +84,8 @@ static struct context_s {
     bool        cache_enabled;
     char        system_path[256];
     char        user_path[256];
+    char        filename[256];
+    pthread_rwlock_t *lock;
 } lua = {
     .cache_enabled  = true,
     .system_path    = "",
@@ -116,7 +101,7 @@ static int configure(as_module *, void *);
 static int apply_record(as_module *, as_aerospike *, const char *, const char *, as_rec *, as_list *, as_result *);
 static int apply_stream(as_module *, as_aerospike *, const char *, const char *, as_stream *, as_list *, as_result *);
 
-static lua_State * create_state();
+static lua_State * create_state(context *, const char *filename);
 static int poll_state(context *, cache_item *);
 static int offer_state(context *, cache_item *);
 
@@ -129,6 +114,17 @@ static int handle_panic(lua_State *);
  * FUNCTIONS
  ******************************************************************************/
 
+// Raj (todo) fix stupid hash function
+uint32_t        
+filename_hash_fn(void *filename, uint32_t len) {   
+    char *b = filename;
+    uint32_t acc = 0;
+    for (int i=0;i<len;i++) {
+        acc += *(b+i);
+    }
+    return(acc);
+}
+
 /**
  * Module Initializer.
  * This sets up the module before use. This is called only once on startup.
@@ -137,48 +133,28 @@ static int handle_panic(lua_State *);
  * @return 0 on success, otherwhise 1
  */
 static int init(as_module * m) {
+    if (CF_RCHASH_OK != cf_rchash_create(&centry_hash, filename_hash_fn, NULL, 
+                            0, 64, CF_RCHASH_CR_MT_LOCKPOOL)) {
+        return 1;
+    }
     return 0;
 }
 
 
-/**
- * Clear the cache entry. This means:
- * - zero-out key and gen
- * - release all states
- */
-static inline int cache_entry_destroy(context * ctx, cache_entry * centry) {
-    pthread_mutex_lock(&centry->lock);
-    
-    for (int i = 0; i<centry->size; i++) {
-        if ( centry->states[i] != NULL ) {
-            lua_close(centry->states[i]);
-            centry->states[i] = NULL;
-        }
+static inline int cache_entry_cleanup(cache_entry * centry) {
+    lua_State *l = NULL;
+    while(cf_queue_pop(centry->lua_state_q, &l, CF_QUEUE_NOWAIT) == CF_QUEUE_OK) {
+        lua_close(l);
     }
-
-    centry->key[0] = '\0';
-    centry->gen[0] = '\0';
-    centry->size = 0;
-
-    pthread_mutex_unlock(&centry->lock);
     return 0;
 }
 
-/**
- * Clear the table:
- *  - destroy all entries
- *  - set size to 0
- */
-static inline int cache_table_destroy(context * ctx, cache_table * ctable) {
-    pthread_mutex_lock(&ctable->lock);
-    
-    for(int i = 0; i < ctable->size; i++ ) {
-        cache_entry_destroy(ctx, &ctable->entries[i]);
+static inline int cache_entry_populate(context *ctx, cache_entry *centry, const char *key) {
+    lua_State *l = NULL;
+    for ( int i = 0; i < CACHE_ENTRY_STATE_MIN; i++ ) {
+        l = create_state(ctx, key);
+        cf_queue_push(centry->lua_state_q, &l);
     }
-    
-    ctable->size = 0;
-    
-    pthread_mutex_unlock(&ctable->lock);
     return 0;
 }
 
@@ -189,23 +165,72 @@ static inline int cache_table_destroy(context * ctx, cache_table * ctable) {
  *  - release all lua_States
  *  - set size to 0
  */
-static inline int cache_entry_init(context * ctx, cache_entry * centry, const char * key, const char * gen, const char * filename) {
-    pthread_mutex_lock(&centry->lock);
-
-    for ( int i = 0; i < CACHE_ENTRY_STATE_MIN; i++ ) {
-        if ( centry->states[i] == NULL ) {
-            centry->states[i] = create_state(ctx, filename);
-        }
-    }
-
+static inline int cache_entry_init(context * ctx, cache_entry * centry, const char *key, const char *gen) {
+    cache_entry_cleanup(centry);
+    cache_entry_populate(ctx, centry, key);
     strncpy(centry->key, key, CACHE_ENTRY_KEY_MAX);
     strncpy(centry->gen, gen, CACHE_ENTRY_GEN_MAX);
-
-    pthread_mutex_unlock(&centry->lock);
     return 0;
 }
 
-static inline int cache_table_initdir(context * ctx, cache_table * ctable, const char * directory) {
+int cache_rm(context * ctx, const char *key) {
+    if (strlen(key) == 0) return 0;
+    cache_entry     * centry = NULL;
+    if (CF_RCHASH_OK != cf_rchash_get(centry_hash, (void *)key, strlen(key), (void *)&centry)) {
+        return 0;
+    }
+    cache_entry_cleanup(centry);
+    cf_queue_destroy(centry->lua_state_q);
+    cf_rc_release(centry);
+    cf_rchash_delete(centry_hash, (void *)key, strlen(key));
+    cf_free(centry);    
+	return 0;
+}
+
+int cache_init(context * ctx, const char *key, const char * gen) {
+    if (strlen(key) == 0) return 0;
+    cache_entry     * centry = NULL;
+    if (CF_RCHASH_OK != cf_rchash_get(centry_hash, (void *)key, strlen(key), (void *)&centry)) {
+        centry = cf_malloc(sizeof(cache_entry)); 
+        cf_atomic32_set(&centry->total, 0);
+        cf_atomic32_set(&centry->cache_miss, 0);
+        centry->max_cache_size = CACHE_ENTRY_STATE_MAX;
+        centry->lua_state_q = cf_queue_create(sizeof(lua_State *), true);
+        cache_entry_init(ctx, centry, key, gen);
+        int retval = cf_rchash_put(centry_hash, (void *)key, strlen(key), (void *)centry);
+        if (retval != CF_RCHASH_OK) {
+            // weird should not happen
+            cf_queue_destroy(centry->lua_state_q);
+            cf_free(centry);
+            return 1;
+        } else {
+            LOG( "Added [%s:%p] \n", key, centry);
+        }
+    } else { 
+        cache_entry_init(ctx, centry, key, gen);
+        cf_rc_release(centry);
+    }
+	return 0;
+}
+
+static inline int cache_rmfile(context * ctx, const char * filename) {
+    char    key[CACHE_ENTRY_KEY_MAX]    = "";
+    memcpy(key, filename, CACHE_ENTRY_KEY_MAX);
+    *(rindex(key, '.')) = '\0';
+    cache_rm(ctx, key);
+    return 0;
+}
+
+static inline int cache_initfile(context * ctx, const char * filename) {
+    char    key[CACHE_ENTRY_KEY_MAX]    = "";
+    char    gen[CACHE_ENTRY_GEN_MAX]    = "";
+    memcpy(key, filename, CACHE_ENTRY_KEY_MAX);
+    *(rindex(key, '.')) = '\0';
+    cache_init(ctx, key, gen);
+    return 0;
+}
+
+static inline int cache_initdir(context * ctx, const char * directory) {
 
     DIR *           dir     = NULL;
     struct dirent * dentry  = NULL;
@@ -220,46 +245,14 @@ static inline int cache_table_initdir(context * ctx, cache_table * ctable, const
         char    key[CACHE_ENTRY_KEY_MAX]    = "";
         char    gen[CACHE_ENTRY_GEN_MAX]    = "";
 
-        memcpy(key, filename, 128);
+        memcpy(key, filename, CACHE_ENTRY_KEY_MAX);
         *(rindex(key, '.')) = '\0';
-
-        pthread_mutex_lock(&ctable->lock);
-
-        cache_entry_init(ctx, &ctable->entries[ctable->size], key, gen, filename);
-        ctable->size++;
-
-        pthread_mutex_unlock(&ctable->lock);
+        cache_init(ctx, key, gen);
     }
 
     closedir(dir);
 
     return 0;
-}
-
-static inline cache_entry * cache_table_getentry(cache_table * ctable, const char * key){
-    cache_entry * centry = NULL;
-
-    pthread_mutex_lock(&ctable->lock);
-
-    for(int i = 0; i < ctable->size; i++ ) {
-        cache_entry * e = &ctable->entries[i];
-        if ( strcmp(e->key, key) == 0 ) {
-            centry = e;
-            break;
-        }
-    }
-
-    pthread_mutex_unlock(&ctable->lock);
-
-    return centry;
-}
-
-/**
- * Initialize the cache table
- *  - For each file in the directory, 
- */
-static inline int cache_table_init(context * ctx, cache_table * ctable) {
-    return cache_table_initdir(ctx, ctable, ctx->user_path);
 }
 
 /**
@@ -269,14 +262,17 @@ static inline int cache_table_init(context * ctx, cache_table * ctable) {
  *
  * @param m the module being configured.
  * @return 0 on success, otherwhise 1
+ * @sychronization: Caller should have a write lock
  */
-static int configure(as_module * m, void * config) {
+static int configure(as_module * m, void * config_op) {
 
     context *           ctx = (context *) m->source;
-    mod_lua_config *    cfg = (mod_lua_config *) config;
+    mod_lua_config_op * op  = (mod_lua_config_op *) config_op;
+    mod_lua_config *    cfg = op->config;
     DIR *               dir = NULL;
 
     ctx->cache_enabled  = cfg->cache_enabled;
+    ctx->lock           = &cfg->lock;
 
     // Attempt to open the directory.
     // If it opens, then set the ctx value.
@@ -307,9 +303,24 @@ static int configure(as_module * m, void * config) {
     dir = NULL;
 
     if ( ctx->cache_enabled ) {
-        cache_table_destroy(ctx, &ctable);
-        if ( ctx->system_path[0] != '\0' && ctx->user_path[0] != '\0' ) {
-            cache_table_init(ctx, &ctable);
+        if (op->optype == MOD_LUA_CONFIG_OP_INIT) {
+            if ( ctx->system_path[0] != '\0' && ctx->user_path[0] != '\0' ) {
+                cache_initdir(ctx, ctx->user_path);
+            }
+        } else if (op->optype == MOD_LUA_CONFIG_OP_ADD_FILE) {
+            if (op->arg) {
+                cache_initfile(ctx, (const char *) op->arg);
+            } else {
+                return 1;
+            }
+        } else if (op->optype == MOD_LUA_CONFIG_OP_REM_FILE) {
+            if (op->arg) {
+                cache_rmfile(ctx, (const char *)op->arg);
+            } else {
+                return 1;
+            }
+        } else {
+            return 1;
         }
     }
 
@@ -407,31 +418,31 @@ static lua_State * create_state(context * ctx, const char * filename) {
  * @return a lua_State to be used as the context.
  */
 static int poll_state(context * ctx, cache_item * citem) {
-
+    uint32_t miss = 0;
+    uint32_t total = 1;
     if ( ctx->cache_enabled == true ) {
-        cache_entry * centry = cache_table_getentry(&ctable, citem->key);
-
-        if ( centry != NULL ) {
-            LOG("[CACHE] entry found: %s (%d)", citem->key, centry->size);
-            pthread_mutex_lock(&centry->lock);
-
-            if ( centry->size > 0 ) {
-                LOG("[CACHE] take state: %s (%d)", citem->key, centry->size);
-                
+        cache_entry     * centry = NULL;
+        int retval = cf_rchash_get(centry_hash, (void *)citem->key, strlen(citem->key), (void *)&centry);
+        if (CF_RCHASH_OK == retval ) {
+            if (cf_queue_pop(centry->lua_state_q, &citem->state, CF_QUEUE_NOWAIT) != CF_QUEUE_EMPTY) {
                 strncpy(citem->key, centry->key, CACHE_ENTRY_KEY_MAX);
                 strncpy(citem->gen, centry->gen, CACHE_ENTRY_GEN_MAX);
-                citem->state = centry->states[centry->size-1];
-                
-                centry->states[centry->size-1] = NULL;
-                centry->size--;
-
+                cf_rc_release(centry);
                 LOG("[CACHE] took state: %s (%d)", citem->key, centry->size);
+            } else {
+                miss = cf_atomic32_incr(&centry->cache_miss);
+                citem->state = NULL;
             }
-
-            pthread_mutex_unlock(&centry->lock);
-        }
-        else {
-            LOG("[CACHE] entry not found: %s", citem->key);
+            total = cf_atomic32_incr(&centry->total);
+            if (((miss * 100 / total) > 1) && 
+                    (total > 100000)) {
+                centry->max_cache_size++;
+                if (centry->max_cache_size > CACHE_ENTRY_STATE_MAX)
+                    centry->max_cache_size = CACHE_ENTRY_STATE_MAX; 
+            }
+			fprintf(stderr, " %d : %d \n", miss, total);
+        } else {
+            centry = NULL;
         }
     }
     else {
@@ -459,26 +470,17 @@ static int poll_state(context * ctx, cache_item * citem) {
 static int offer_state(context * ctx, cache_item * citem) {
 
     if ( ctx->cache_enabled == true ) {
-        cache_entry * centry = cache_table_getentry(&ctable, citem->key);
-
-        if ( centry != NULL ) {
+        lua_gc(citem->state, LUA_GCSTEP, 2);
+        cache_entry *centry = NULL;
+        if (CF_RCHASH_OK == cf_rchash_get(centry_hash, (void *)citem->key, strlen(citem->key), (void *)&centry) ) {
             LOG("[CACHE] found entry: %s (%d)", citem->key, centry->size);
-            pthread_mutex_lock(&centry->lock);
-
-            if ( centry->size < CACHE_ENTRY_STATE_MAX-1 ) {
+            if (( CF_Q_SZ(centry->lua_state_q) < centry->max_cache_size ) 
+                && ( !strncmp(centry->gen, citem->gen, CACHE_ENTRY_GEN_MAX) )) {
+                cf_queue_push(centry->lua_state_q, &citem->state);
                 LOG("[CACHE] returning state: %s (%d)", citem->key, centry->size);
-
-                lua_gc(citem->state, LUA_GCCOLLECT, 0);
-                centry->states[centry->size++] = citem->state;
-
-                // citem->key[0] = '\0';
-                // citem->gen[0] = '\0';
                 citem->state = NULL;
-                
-                LOG("[CACHE] returned state: %s (%d)", citem->key, centry->size);
             }
-
-            pthread_mutex_unlock(&centry->lock);
+            cf_rc_release(centry);
         }
         else {
             LOG("[CACHE] entry not found: %s", citem->key);
@@ -579,6 +581,7 @@ static int apply(lua_State * l, int err, int argc, as_result * res) {
 static int verify_environment(context * ctx, as_aerospike * as) {
     int rc = 0;
 
+    pthread_rwlock_rdlock(ctx->lock);
     if ( ctx->system_path[0] == '\0' ) {
         char * p = ctx->system_path;
         char msg[256] = {'\0'};
@@ -596,6 +599,7 @@ static int verify_environment(context * ctx, as_aerospike * as) {
         as_aerospike_log(as, __FILE__, __LINE__, 1, msg);
         rc += 2;
     }
+    pthread_rwlock_unlock(ctx->lock);
 
     return rc;
 }
@@ -622,8 +626,10 @@ static int apply_record(as_module * m, as_aerospike * as, const char * filename,
     int         err     = 0;                        // Error handler
     int         rc      = 0;
     
+    pthread_rwlock_rdlock(ctx->lock);
     rc = verify_environment(ctx, as);
     if ( rc ) {
+        pthread_rwlock_unlock(ctx->lock);
         return rc;
     }
 
@@ -640,6 +646,7 @@ static int apply_record(as_module * m, as_aerospike * as, const char * filename,
     // lease a state
     LOG("apply_record: poll state");
     rc = poll_state(ctx, &citem);
+    pthread_rwlock_unlock(ctx->lock);
 
     if ( rc != 0 ) {
         LOG("apply_record: Unable to poll a state");
@@ -681,8 +688,10 @@ static int apply_record(as_module * m, as_aerospike * as, const char * filename,
     apply(l, err, argc, res);
 
     // return the state
+    pthread_rwlock_rdlock(ctx->lock);
     LOG("apply_record: offer state");
     offer_state(ctx, &citem);
+    pthread_rwlock_unlock(ctx->lock);
     
     LOG("apply_record: END");
     return rc;
@@ -712,8 +721,10 @@ static int apply_stream(as_module * m, as_aerospike * as, const char * filename,
     int         err     = 0;                    // Error handler
     int         rc      = 0;
 
+    pthread_rwlock_rdlock(ctx->lock);
     rc = verify_environment(ctx, as);
     if ( rc ) {
+        pthread_rwlock_unlock(ctx->lock);
         return rc;
     }
 
@@ -730,6 +741,7 @@ static int apply_stream(as_module * m, as_aerospike * as, const char * filename,
     // lease a state
     LOG("apply_stream: poll state");
     rc = poll_state(ctx, &citem);
+    pthread_rwlock_unlock(ctx->lock);
 
     if ( rc != 0 ) {
         LOG("apply_stream: Unable to poll a state");
@@ -771,8 +783,10 @@ static int apply_stream(as_module * m, as_aerospike * as, const char * filename,
     apply(l, err, argc, res);
 
     // release the context
+    pthread_rwlock_rdlock(ctx->lock);
     LOG("apply_stream: lose the context");
     offer_state(ctx, &citem);
+    pthread_rwlock_unlock(ctx->lock);
 
     LOG("END");
     return rc;
