@@ -16,11 +16,12 @@ else
 CFLAGS = -O0
 endif
 
-CC_FLAGS = $(CFLAGS) -g -std=gnu99 -Wall -Winline -fPIC 
+CC_FLAGS = -g -std=gnu99 -Wall -Winline -fPIC 
 CC_FLAGS += -fno-common -fno-strict-aliasing -finline-functions 
 CC_FLAGS += -march=nocona -DMARCH_$(ARCH) -DMEM_COUNT
 
-LD_FLAGS = -Wall -Winline -rdynamic 
+LD_FLAGS = -Wall -Winline -rdynamic
+# -fPIC -lm
 
 ifeq ($(DOPROFILE), 1)
 CC_FLAGS += -pg -fprofile-arcs -ftest-coverage -g2
@@ -138,13 +139,13 @@ modules-clean:
 ## 
 
 modules/common/$(TARGET_LIB)/libcf-shared.a:
-	$(MAKE) -e -C modules/common libcf-shared.a MEM_COUNT=1
+	$(MAKE) -e -C modules/common libcf-shared.a
 
 modules/common/$(TARGET_LIB)/libcf-server.a:
-	$(MAKE) -e -C modules/common libcf-server.a MEM_COUNT=1
+	$(MAKE) -e -C modules/common libcf-server.a
 
 modules/common/$(TARGET_INCL)/*.h:
-	$(MAKE) -e -C modules/common prepare MEM_COUNT=1
+	$(MAKE) -e -C modules/common prepare
 
 .PHONY: modules/common
 modules/common: modules/common/$(TARGET_LIB)/libcf-shared.a modules/common/$(TARGET_LIB)/libcf-server.a modules/common/$(TARGET_INCL)/*.h
@@ -166,30 +167,58 @@ modules/msgpack: modules/msgpack/src/.libs/libmsgpackc.a
 ##  TEST TARGETS                                                      		 ##
 ###############################################################################
 
-TEST_DEPS = $(TARGET_LIB)/libmod_lua.a modules/common/$(TARGET_LIB)/libcf-shared.a modules/common/$(TARGET_LIB)/libcf-client.a $(MSGPACK_PATH)/src/.libs/libmsgpack.a 
+TEST_CFLAGS = -I$(TARGET_INCL) -Imodules/common/$(TARGET_INCL) -Imodules/common/$(TARGET_INCL)/server
+TEST_LDFLAGS = -llua -lpthread -lm -lrt
+TEST_DEPS = $(TARGET_LIB)/libmod_lua.a modules/common/$(TARGET_LIB)/libcf-server.a modules/common/$(TARGET_LIB)/libcf-shared.a $(MSGPACK_PATH)/src/.libs/libmsgpack.a 
 
-.PHONY: record_udf
-record_udf: $(SOURCE_TEST)/record_udf.c $(TEST_DEPS)
-	$(executable)
-
-.PHONY: hashmap_test
-hashmap_test: $(SOURCE_TEST)/hashmap_test.c $(TEST_DEPS)
-	$(executable)
-
-.PHONY: linkedlist_test
-linkedlist_test: $(SOURCE_TEST)/linkedlist_test.c $(TEST_DEPS)
-	$(executable)
-
-.PHONY: arraylist_test
-arraylist_test: $(SOURCE_TEST)/arraylist_test.c $(TEST_DEPS)
-	$(executable)
-
-.PHONY: msgpack_test
-msgpack_test: $(SOURCE_TEST)/msgpack_test.c $(TEST_DEPS)
-	$(executable)
 
 .PHONY: test
-test: msgpack_test hashmap_test linkedlist_test arraylist_test record_udf
+test: test-build
+#	@$(TARGET_BIN)/test/record_udf
+
+.PHONY: test-build
+test-build: test/record_udf 
+
+.PHONY: test-clean
+test-clean: 
+	@rm -rf $(TARGET_BIN)/test
+	@rm -rf $(TARGET_OBJ)/test
+
+$(TARGET_OBJ)/test/%/%.o: CFLAGS += $(TEST_CFLAGS)
+$(TARGET_OBJ)/test/%/%.o: LDFLAGS += $(TEST_LDFLAGS)
+$(TARGET_OBJ)/test/%/%.o: $(SOURCE_TEST)/%/%.c
+	$(object)
+
+$(TARGET_OBJ)/test/%.o: CFLAGS += $(TEST_CFLAGS)
+$(TARGET_OBJ)/test/%.o: LDFLAGS += $(TEST_LDFLAGS)
+$(TARGET_OBJ)/test/%.o: $(SOURCE_TEST)/%.c
+	$(object)
+
+.PHONY: test/record_udf
+test/record_udf: $(TARGET_BIN)/test/record_udf
+$(TARGET_BIN)/test/record_udf: CFLAGS += $(TEST_CFLAGS)
+$(TARGET_BIN)/test/record_udf: LDFLAGS += $(TEST_LDFLAGS)
+$(TARGET_BIN)/test/record_udf: $(TARGET_OBJ)/test/record_udf.o $(TEST_DEPS) | modules
+	$(executable)
+
+# .PHONY: hashmap_test
+# hashmap_test: $(SOURCE_TEST)/hashmap_test.c $(TEST_DEPS)
+# 	$(executable)
+
+# .PHONY: linkedlist_test
+# linkedlist_test: $(SOURCE_TEST)/linkedlist_test.c $(TEST_DEPS)
+# 	$(executable)
+
+# .PHONY: arraylist_test
+# arraylist_test: $(SOURCE_TEST)/arraylist_test.c $(TEST_DEPS)
+# 	$(executable)
+
+# .PHONY: msgpack_test
+# msgpack_test: $(SOURCE_TEST)/msgpack_test.c $(TEST_DEPS)
+# 	$(executable)
+
+#.PHONY: test
+# test: msgpack_test hashmap_test linkedlist_test arraylist_test record_udf
 
 ###############################################################################
 include project/rules.makefile
