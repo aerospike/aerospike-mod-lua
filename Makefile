@@ -58,7 +58,7 @@ AS_TYPES += as_result.o
 AS_TYPES += as_aerospike.o
 AS_TYPES += as_serializer.o
 AS_TYPES += as_msgpack.o
-AS_TYPES += internal.o
+AS_TYPES += as_internal.o
 
 
 MOD_LUA =
@@ -74,9 +74,9 @@ MOD_LUA += mod_lua_val.o
 MOD_LUA += mod_lua_config.o
 
 
-TEST =  test.o
-TEST += $(as_types) $(as_module) $(mod_lua)
-
+TEST = test.o
+TEST += $(AS_TYPES) $(MOD_LUA)
+# TEST += $(as_types) $(as_module) $(mod_lua)
 
 VAL_TEST = val_test.o
 VAL_TEST += $(as_types)
@@ -177,7 +177,8 @@ test: test-build
 #	@$(TARGET_BIN)/test/record_udf
 
 .PHONY: test-build
-test-build: test/record_udf 
+test-build: test/hashmap_test test/arraylist_test 
+#test-build: test/record_udf 
 
 .PHONY: test-clean
 test-clean: 
@@ -201,24 +202,36 @@ $(TARGET_BIN)/test/record_udf: LDFLAGS += $(TEST_LDFLAGS)
 $(TARGET_BIN)/test/record_udf: $(TARGET_OBJ)/test/record_udf.o $(TEST_DEPS) | modules
 	$(executable)
 
-# .PHONY: hashmap_test
-# hashmap_test: $(SOURCE_TEST)/hashmap_test.c $(TEST_DEPS)
-# 	$(executable)
+.PHONY: test/hashmap_test
+test/hashmap_test: $(TARGET_BIN)/test/hashmap_test
+$(TARGET_BIN)/test/hashmap_test: CFLAGS += $(TEST_CFLAGS)
+$(TARGET_BIN)/test/hashmap_test: LDFLAGS += $(TEST_LDFLAGS)
+$(TARGET_BIN)/test/hashmap_test: $(TARGET_OBJ)/test/hashmap_test.o $(TEST_DEPS) | modules
+	$(executable)
 
-# .PHONY: linkedlist_test
-# linkedlist_test: $(SOURCE_TEST)/linkedlist_test.c $(TEST_DEPS)
-# 	$(executable)
+.PHONY: test/arraylist_test
+test/arraylist_test: $(TARGET_BIN)/test/arraylist_test
+$(TARGET_BIN)/test/arraylist_test: CFLAGS += $(TEST_CFLAGS)
+$(TARGET_BIN)/test/arraylist_test: LDFLAGS += $(TEST_LDFLAGS)
+$(TARGET_BIN)/test/arraylist_test: $(TARGET_OBJ)/test/arraylist_test.o $(TEST_DEPS) | modules
+	$(executable)
 
-# .PHONY: arraylist_test
-# arraylist_test: $(SOURCE_TEST)/arraylist_test.c $(TEST_DEPS)
-# 	$(executable)
+.PHONY: test/linkedlist_test
+test/linkedlist_test: $(TARGET_BIN)/test/linkedlist_test
+$(TARGET_BIN)/test/linkedlist_test: CFLAGS += $(TEST_CFLAGS)
+$(TARGET_BIN)/test/linkedlist_test: LDFLAGS += $(TEST_LDFLAGS)
+$(TARGET_BIN)/test/linkedlist_test: $(TARGET_OBJ)/test/linkedlist_test.o $(TEST_DEPS) | modules
+	$(executable)	
 
-# .PHONY: msgpack_test
-# msgpack_test: $(SOURCE_TEST)/msgpack_test.c $(TEST_DEPS)
-# 	$(executable)
+.PHONY: test/msgpack_test
+test/msgpack_test: $(TARGET_BIN)/test/msgpack_test
+$(TARGET_BIN)/test/msgpack_test: CFLAGS += $(TEST_CFLAGS)
+$(TARGET_BIN)/test/msgpack_test: LDFLAGS += $(TEST_LDFLAGS)
+$(TARGET_BIN)/test/msgpack_test: $(TARGET_OBJ)/test/msgpack_test.o $(TEST_DEPS) | modules
+	$(executable)	
 
-#.PHONY: test
-# test: msgpack_test hashmap_test linkedlist_test arraylist_test record_udf
+#PHONY: test
+#test: msgpack_test hashmap_test linkedlist_test arraylist_test record_udf
 
 ###############################################################################
 include project/rules.makefile
