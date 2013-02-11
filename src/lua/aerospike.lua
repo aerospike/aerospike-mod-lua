@@ -1,8 +1,12 @@
--- ######################################################################################
+
+-- A table to track whether we had sandboxed a function
+local sandboxed = {}
+
+-- ############################################################################
 --
 -- LOG FUNCTIONS
 --
--- ######################################################################################
+-- ############################################################################
 
 function trace(m, ...)
     return aerospike:log(4, string.format(m, ...))
@@ -20,11 +24,11 @@ function warn(m, ...)
     return aerospike:log(1, string.format(m, ...))
 end
 
--- ######################################################################################
+-- ############################################################################
 --
 -- APPLY FUNCTIONS
 --
--- ######################################################################################
+-- ############################################################################
 
 --
 -- Creates a new environment for use in apply* functions
@@ -104,7 +108,11 @@ function apply_record(f, r, ...)
         error("function not found", 2)
     end
 
-    setfenv(f,env())
+    if not sandboxed[f] then
+        setfenv(f,env())
+        sandboxed[f] = true
+    end
+
     success, result = pcall(f, r, ...)
     if success then
         return result
