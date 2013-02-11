@@ -1,9 +1,11 @@
+#include "as_val.h"
 #include "as_aerospike.h"
+#include "internal.h"
+
 #include "mod_lua_aerospike.h"
 #include "mod_lua_record.h"
 #include "mod_lua_val.h"
 #include "mod_lua_reg.h"
-#include "as_internal.h"
 
 #define CLASS_NAME "Aerospike"
 

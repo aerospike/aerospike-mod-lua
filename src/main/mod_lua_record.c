@@ -2,7 +2,9 @@
 #include "mod_lua_val.h"
 #include "as_rec.h"
 #include "mod_lua_reg.h"
-#include "as_internal.h"
+
+#include "as_val.h"
+#include "internal.h"
 
 #define OBJECT_NAME "record"
 #define CLASS_NAME  "Record"

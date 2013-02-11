@@ -58,7 +58,7 @@ AS_TYPES += as_result.o
 AS_TYPES += as_aerospike.o
 AS_TYPES += as_serializer.o
 AS_TYPES += as_msgpack.o
-AS_TYPES += as_internal.o
+AS_TYPES += internal.o
 
 
 MOD_LUA =

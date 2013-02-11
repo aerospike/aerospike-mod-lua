@@ -12,7 +12,8 @@
 
 #include "mod_lua_stream.h"
 #include "mod_lua_iterator.h"
-#include "as_internal.h"
+
+#include "as_val.h"
 
 #include <lua.h>
 #include <lauxlib.h>

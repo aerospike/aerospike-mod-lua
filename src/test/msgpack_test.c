@@ -1,6 +1,6 @@
 #include "test.h"
 
-#include "as_internal.h"
+#include "as_val.h"
 
 #include "as_msgpack.h"
 #include "as_types.h"

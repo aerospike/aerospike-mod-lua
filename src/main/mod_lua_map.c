@@ -1,7 +1,9 @@
 #include "mod_lua_val.h"
 #include "mod_lua_map.h"
 #include "mod_lua_reg.h"
-#include "as_internal.h"
+
+#include "as_val.h"
+#include "internal.h"
 
 #define OBJECT_NAME "map"
 #define CLASS_NAME  "Map"

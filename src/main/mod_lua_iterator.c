@@ -1,7 +1,9 @@
 #include "mod_lua_val.h"
 #include "mod_lua_reg.h"
 #include "mod_lua_iterator.h"
-#include "as_internal.h"
+
+#include "as_val.h"
+#include "internal.h"
 
 #include <lua.h>
 #include <lauxlib.h>

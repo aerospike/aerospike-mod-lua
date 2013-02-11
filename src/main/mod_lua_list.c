@@ -2,7 +2,9 @@
 #include "mod_lua_list.h"
 #include "mod_lua_iterator.h"
 #include "mod_lua_reg.h"
-#include "as_internal.h"
+
+#include "as_val.h"
+#include "internal.h"
 
 #define OBJECT_NAME "list"
 #define CLASS_NAME  "List"

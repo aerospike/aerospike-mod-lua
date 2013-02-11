@@ -10,7 +10,8 @@
 #include "mod_lua_list.h"
 #include "mod_lua_map.h"
 
-#include "as_internal.h"
+#include "as_val.h"
+#include "internal.h"
 
 as_val * mod_lua_takeval(lua_State * l, int i) {
     return mod_lua_toval(l, i);
@@ -118,14 +119,14 @@ int mod_lua_pushval(lua_State * l, const as_val * v) {
 
 
 
-mod_lua_box * mod_lua_newbox(lua_State * l, mod_lua_scope scope, as_val * value, const char * type) {
+mod_lua_box * mod_lua_newbox(lua_State * l, mod_lua_scope scope, void * value, const char * type) {
     mod_lua_box * box = (mod_lua_box *) lua_newuserdata(l, sizeof(mod_lua_box));
     box->scope = scope;
     box->value = value;
     return box;
 }
 
-mod_lua_box * mod_lua_pushbox(lua_State * l, mod_lua_scope scope, as_val * value, const char * type) {
+mod_lua_box * mod_lua_pushbox(lua_State * l, mod_lua_scope scope, void * value, const char * type) {
     mod_lua_box * box = (mod_lua_box *) mod_lua_newbox(l, scope, value, type);
     luaL_getmetatable(l, type);
     lua_setmetatable(l, -2);
