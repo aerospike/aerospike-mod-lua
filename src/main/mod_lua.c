@@ -16,7 +16,6 @@
 
 #include "as_aerospike.h"
 #include "as_types.h"
-#include "internal.h"
 
 #include <dirent.h>
 #include <stdio.h>
