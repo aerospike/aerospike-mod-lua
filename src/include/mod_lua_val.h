@@ -1,9 +1,10 @@
 #pragma once
 
-#include "as_types.h"
 #include <lua.h>
 #include <lauxlib.h>
 #include <lualib.h>
+
+#include "as_types.h"
 
 typedef struct mod_lua_box_s mod_lua_box;
 

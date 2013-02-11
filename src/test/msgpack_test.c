@@ -1,26 +1,43 @@
 #include "test.h"
+
+#include "as_val.h"
+
 #include "as_msgpack.h"
 #include "as_types.h"
 #include "as_hashmap.h"
+#include "as_map.h"
 #include "as_arraylist.h"
 
-as_map * make_map();
-as_list * make_list();
+// forward declaration
+as_list *make_list(int level);
 
 as_map * make_map(int level) {
 
-    as_map * m = as_map_new(as_hashmap_new(32), &as_hashmap_map);
+    as_map * m = as_hashmap_new(32);
     // if ( !level ) return m;
-    as_map_set(m, (as_val *) as_string_new("b"), (as_val *) as_boolean_new(true));
-    as_map_set(m, (as_val *) as_string_new("s"), (as_val *) as_string_new("word"));
-    as_map_set(m, (as_val *) as_string_new("i"), (as_val *) as_integer_new(1234));
-    if ( level > 0 ) as_map_set(m, (as_val *) as_string_new("l"), (as_val *) make_list(level-1));
-    if ( level > 0 ) as_map_set(m, (as_val *) as_string_new("m"), (as_val *) make_map(level-1));
-    as_map_set(m, (as_val *) as_boolean_new(true), (as_val *) as_boolean_new(false));
-    as_map_set(m, (as_val *) as_integer_new(20), (as_val *) as_integer_new(200));
+    as_map_set(m, 
+        (as_val *) as_string_new("b",false), 
+        (as_val *) as_boolean_new(true));
+    as_map_set(m, 
+        (as_val *) as_string_new("s", false), 
+        (as_val *) as_string_new("word", false));
+    as_map_set(m, 
+        (as_val *) as_string_new("i", false), 
+        (as_val *) as_integer_new(1234));
+    if ( level > 0 ) 
+        as_map_set(m, 
+            (as_val *) as_string_new("l", false), 
+            (as_val *) make_list(level-1));
+    if ( level > 0 ) 
+        as_map_set(m, 
+            (as_val *) as_string_new("m", false), 
+            (as_val *) make_map(level-1));
+    as_map_set(m, 
+        (as_val *) as_boolean_new(true), (as_val *) as_boolean_new(false));
+    as_map_set(m, 
+        (as_val *) as_integer_new(20), (as_val *) as_integer_new(200));
     // as_map_set(m, (as_val *) make_list(level-1), (as_val *) make_list(level-1));
     // as_map_set(m, (as_val *) make_map(level-1), (as_val *) make_map(level-1));
-
 
     printf("created map: %d\n", as_map_size(m));
     return m;
@@ -28,14 +45,14 @@ as_map * make_map(int level) {
 
 as_list * make_list(int level) {
 
-    as_list * l = as_list_new(as_arraylist_new(10,10), &as_arraylist_list);
+    as_list * l = as_arraylist_new(10,10);
     // if ( !level ) return l;
     as_list_append(l, (as_val *) as_boolean_new(true));
     as_list_append(l, (as_val *) as_boolean_new(false));
-    as_list_append(l, (as_val *) as_string_new("a"));
-    as_list_append(l, (as_val *) as_string_new("b"));
-    as_list_append(l, (as_val *) as_string_new("c"));
-    as_list_append(l, (as_val *) as_string_new("d"));
+    as_list_append(l, (as_val *) as_string_new("a", false));
+    as_list_append(l, (as_val *) as_string_new("b", false));
+    as_list_append(l, (as_val *) as_string_new("c", false));
+    as_list_append(l, (as_val *) as_string_new("d", false));
     as_list_append(l, (as_val *) as_integer_new(1234));
     // if ( level > 0 ) as_list_append(l, (as_val *) make_map(level-1));
     // if ( level > 0 ) as_list_append(l, (as_val *) make_list(level-1));
@@ -74,8 +91,10 @@ int serialize(as_val * v) {
     as_serializer s;
     as_msgpack_init(&s);
 
+    char *ac = as_val_tostring(v);
     printf("t: %d\n",as_val_type(v));
-    printf("a: %s\n",as_val_tostring(v));
+    printf("a: %s\n",ac);
+    free(ac);
 
     as_serializer_serialize(&s, v, &b);
 
@@ -90,7 +109,7 @@ int serialize(as_val * v) {
     // watch it go!!!!
     // serialize(out);
 
-    as_val_free(out);
+    as_val_destroy(out);
 
     as_serializer_destroy(&s);
     as_buffer_destroy(&b);

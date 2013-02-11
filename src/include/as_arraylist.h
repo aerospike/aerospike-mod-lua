@@ -6,20 +6,8 @@
  * TYPES
  ******************************************************************************/
 
-typedef struct as_arraylist_s as_arraylist;
+typedef struct as_arraylist_source_s as_arraylist_source;
 typedef struct as_arraylist_iterator_source_s as_arraylist_iterator_source;
-
-struct as_arraylist_s {
-    as_val **   elements;
-    uint32_t    size;
-    uint32_t    capacity;
-    uint32_t    block_size;
-};
-
-struct as_arraylist_iterator_source_s {
-    as_arraylist *  list;
-    uint32_t        pos;
-};
 
 enum as_arraylist_status {
     AS_ARRAYLIST_OK         = 0,
@@ -31,15 +19,13 @@ enum as_arraylist_status {
  * CONSTANTS
  ******************************************************************************/
 
-extern const as_list_hooks      as_arraylist_list;
-extern const as_iterator_hooks  as_arraylist_iterator;
+extern const as_list_hooks      as_arraylist_list_hooks;
+extern const as_iterator_hooks  as_arraylist_iterator_hooks;
 
 /******************************************************************************
  * FUNCTIONS
  ******************************************************************************/
 
-as_arraylist *    as_arraylist_init(as_arraylist *, uint32_t, uint32_t);
-int               as_arraylist_destroy(as_arraylist *);
-
-as_arraylist *    as_arraylist_new(uint32_t, uint32_t);
-int               as_arraylist_free(as_arraylist *);
+as_list *    	as_arraylist_init(as_list *, uint32_t, uint32_t);
+as_list *    	as_arraylist_new(uint32_t, uint32_t);
+int               as_arraylist_destroy(as_list *);

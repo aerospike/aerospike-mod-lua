@@ -1,6 +1,8 @@
 #include "mod_lua_val.h"
 #include "mod_lua_map.h"
 #include "mod_lua_reg.h"
+
+#include "as_val.h"
 #include "internal.h"
 
 #define OBJECT_NAME "map"
@@ -36,7 +38,7 @@ static int mod_lua_map_size(lua_State * l) {
 }
 
 static int mod_lua_map_new(lua_State * l) {
-    as_hashmap * map = as_hashmap_new(320);
+    as_map * map = as_hashmap_new(320);
     int n = lua_gettop(l);
     if ( n == 2 && lua_type(l, 2) == LUA_TTABLE) {
         lua_pushnil(l);
@@ -44,15 +46,15 @@ static int mod_lua_map_new(lua_State * l) {
             as_val * k = mod_lua_takeval(l, -2);
             as_val * v = mod_lua_takeval(l, -1);
             if ( !k || !v ) {
-                as_val_free(k);
-                as_val_free(v);
+                as_val_destroy(k);
+                as_val_destroy(v);
                 continue;
             }
-            as_hashmap_set(map, k, v);
+            as_map_set(map, k, v);
             lua_pop(l, 1);
         }
     }
-    mod_lua_pushmap(l, as_map_new(map, &as_hashmap_map));
+    mod_lua_pushmap(l, map);
     return 1;
 }
 

@@ -1,3 +1,6 @@
+#include <stdarg.h>
+#include <stdio.h>
+
 #include "internal.h"
 
 void __log_append(const char * file, int line, const char * fmt, ...) {

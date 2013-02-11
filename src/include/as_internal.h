@@ -1,7 +1,8 @@
 #pragma once
 
-#include <stdio.h>
-#include <stdarg.h>
+//
+// logging
+//
 
 #define LOG(fmt, args...) \
     // __log_append(__FILE__, __LINE__, fmt, ## args);

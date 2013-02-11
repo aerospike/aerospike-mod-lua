@@ -2,6 +2,8 @@
 #include "mod_lua_val.h"
 #include "as_rec.h"
 #include "mod_lua_reg.h"
+
+#include "as_val.h"
 #include "internal.h"
 
 #define OBJECT_NAME "record"

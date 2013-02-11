@@ -13,6 +13,8 @@
 #include "mod_lua_stream.h"
 #include "mod_lua_iterator.h"
 
+#include "as_val.h"
+
 #include <lua.h>
 #include <lauxlib.h>
 #include <lualib.h>
@@ -59,7 +61,7 @@ static as_stream * mod_lua_checkstream(lua_State * l, int index) {
  */
 static int mod_lua_stream_iterator(lua_State * l) {
     as_stream * s = mod_lua_checkstream(l, 1);
-    as_iterator * i = as_stream_iterator(s);
+    as_iterator * i = as_stream_iterator_new(s);
     mod_lua_pushiterator(l, i);
     return 1;
 }

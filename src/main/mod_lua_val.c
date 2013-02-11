@@ -1,15 +1,17 @@
-#include "mod_lua_val.h"
-#include "mod_lua_list.h"
-#include "mod_lua_map.h"
-#include "internal.h"
+
+#include <string.h>
+#include <stdio.h>
 
 #include <lua.h>
 #include <lauxlib.h>
 #include <lualib.h>
-#include <string.h>
-#include <stdio.h>
 
+#include "mod_lua_val.h"
+#include "mod_lua_list.h"
+#include "mod_lua_map.h"
 
+#include "as_val.h"
+#include "internal.h"
 
 as_val * mod_lua_takeval(lua_State * l, int i) {
     return mod_lua_toval(l, i);
@@ -35,7 +37,7 @@ as_val * mod_lua_toval(lua_State * l, int i) {
             return (as_val *) as_boolean_new(lua_toboolean(l, i));
         }
         case LUA_TSTRING : {
-            return (as_val *) as_string_new(strdup(lua_tostring(l, i)));
+            return (as_val *) as_string_new(strdup(lua_tostring(l, i)), true);
         }
         case LUA_TUSERDATA : {
             mod_lua_box * box = (mod_lua_box *) lua_touserdata(l, i);
@@ -48,10 +50,9 @@ as_val * mod_lua_toval(lua_State * l, int i) {
                     case AS_MAP:
                         switch (box->scope) {
                             case MOD_LUA_SCOPE_LUA:
-                                LOG("mod_lua_toval: sope is Lua, returning value ref");
-                                return as_val_ref(box->value);
+                                as_val_reserve(box->value);
+                                return box->value;
                             case MOD_LUA_SCOPE_HOST:
-                                LOG("mod_lua_toval: scope is Host, returning value");
                                 return box->value;
                         }
                     default:
@@ -94,11 +95,13 @@ int mod_lua_pushval(lua_State * l, const as_val * v) {
             return 1;   
         }
         case AS_LIST: {
-            mod_lua_pushlist(l, (as_list *) as_val_ref((as_val *) v));
+            as_val_reserve(v);
+            mod_lua_pushlist(l, (as_list *) v);
             return 1;   
         }
         case AS_MAP: {
-            mod_lua_pushmap(l, (as_map *) as_val_ref((as_val *) v));
+            as_val_reserve(v);
+            mod_lua_pushmap(l, (as_map *) v);
             return 1;   
         }
         case AS_PAIR: {
@@ -144,15 +147,11 @@ mod_lua_box * mod_lua_checkbox(lua_State * l, int index, const char * type) {
 }
 
 int mod_lua_freebox(lua_State * l, int index, const char * type) {
-    LOG("mod_lua_freebox: begin (%s)",type);
     mod_lua_box * box = mod_lua_checkbox(l, index, type);
     if ( box != NULL && box->scope == MOD_LUA_SCOPE_LUA && box->value != NULL ) {
-        LOG("mod_lua_freebox: scope is Lua, free (%s)",type);
-        as_val_free(box->value);
+        as_val_destroy(box->value);
         box->value = NULL;
-        LOG("mod_lua_freebox: free (%s)",type);
     }
-    LOG("mod_lua_freebox: end (%s)",type);
     return 0;
 }
 

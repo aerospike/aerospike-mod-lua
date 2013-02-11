@@ -1,3 +1,7 @@
+#include "cf_queue.h"
+#include "cf_rchash.h"
+#include "cf_alloc.h"
+
 #include "mod_lua.h"
 #include "mod_lua_config.h"
 #include "mod_lua_aerospike.h"
@@ -7,12 +11,11 @@
 #include "mod_lua_list.h"
 #include "mod_lua_map.h"
 #include "mod_lua_val.h"
+
 #include "as_aerospike.h"
 #include "as_types.h"
+
 #include "internal.h"
-#include "cf_queue.h"
-#include "cf_rchash.h"
-#include "cf_alloc.h"
 
 #include <dirent.h>
 #include <stdio.h>
@@ -22,7 +25,6 @@
 
 // #include <fault.h>
 
-// LUA Shizzle
 #include <lua.h>
 #include <lauxlib.h>
 #include <lualib.h>
@@ -182,9 +184,10 @@ int cache_rm(context * ctx, const char *key) {
     }
     cache_entry_cleanup(centry);
     cf_queue_destroy(centry->lua_state_q);
-    cf_rc_release(centry);
+    cf_rc_releaseandfree(centry);
+    centry = 0;
     cf_rchash_delete(centry_hash, (void *)key, strlen(key));
-    cf_free(centry);    
+
 	return 0;
 }
 
@@ -192,7 +195,7 @@ int cache_init(context * ctx, const char *key, const char * gen) {
     if (strlen(key) == 0) return 0;
     cache_entry     * centry = NULL;
     if (CF_RCHASH_OK != cf_rchash_get(centry_hash, (void *)key, strlen(key), (void *)&centry)) {
-        centry = cf_malloc(sizeof(cache_entry)); 
+        centry = cf_rc_alloc(sizeof(cache_entry)); 
         cf_atomic32_set(&centry->total, 0);
         cf_atomic32_set(&centry->cache_miss, 0);
         centry->max_cache_size = CACHE_ENTRY_STATE_MAX;
@@ -202,14 +205,15 @@ int cache_init(context * ctx, const char *key, const char * gen) {
         if (retval != CF_RCHASH_OK) {
             // weird should not happen
             cf_queue_destroy(centry->lua_state_q);
-            cf_free(centry);
+            cf_rc_releaseandfree(centry);
             return 1;
         } else {
             LOG( "Added [%s:%p] \n", key, centry);
         }
     } else { 
         cache_entry_init(ctx, centry, key, gen);
-        cf_rc_release(centry);
+        cf_rc_releaseandfree(centry);
+        centry = 0;
     }
 	return 0;
 }
@@ -428,7 +432,6 @@ static int poll_state(context * ctx, cache_item * citem) {
             if (cf_queue_pop(centry->lua_state_q, &citem->state, CF_QUEUE_NOWAIT) != CF_QUEUE_EMPTY) {
                 strncpy(citem->key, centry->key, CACHE_ENTRY_KEY_MAX);
                 strncpy(citem->gen, centry->gen, CACHE_ENTRY_GEN_MAX);
-                cf_rc_release(centry);
                 LOG("[CACHE] took state: %s (%d)", citem->key, centry->size);
             } else {
                 miss = cf_atomic32_incr(&centry->cache_miss);
@@ -441,6 +444,8 @@ static int poll_state(context * ctx, cache_item * citem) {
                 if (centry->max_cache_size > CACHE_ENTRY_STATE_MAX)
                     centry->max_cache_size = CACHE_ENTRY_STATE_MAX; 
             }
+            cf_rc_releaseandfree(centry);
+            centry = 0;
 			LOG("Cache Miss %d : Total %d \n", miss, total);
         } else {
             centry = NULL;
@@ -485,7 +490,8 @@ static int offer_state(context * ctx, cache_item * citem) {
                 LOG("[CACHE] returning state: %s (%d)", citem->key, centry->size);
                 citem->state = NULL;
             }
-            cf_rc_release(centry);
+            cf_rc_releaseandfree(centry);
+            centry = 0;
         }
         else {
             LOG("[CACHE] entry not found: %s", citem->key);

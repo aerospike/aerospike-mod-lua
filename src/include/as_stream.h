@@ -29,8 +29,8 @@ struct as_stream_s {
  * Provided functions that interface with the streams.
  */
 struct as_stream_hooks_s {
-    int (*free)(as_stream *);
-    const as_val * (*read)(const as_stream *);
+    int (*destroy)(as_stream *);
+    as_val * (*read)(const as_stream *);
 };
 
 /******************************************************************************
@@ -43,7 +43,9 @@ struct as_stream_hooks_s {
  * @param s the stream to create an iterator from
  * @return a new iterator
  */
-as_iterator * as_stream_iterator(as_stream *);
+as_iterator * as_stream_iterator_new(as_stream *);
+
+as_iterator * as_stream_iterator_init(as_stream *, as_iterator *i);
 
 /******************************************************************************
  * INLINE FUNCTIONS
@@ -52,10 +54,6 @@ as_iterator * as_stream_iterator(as_stream *);
 inline int as_stream_init(as_stream * s, void * source, const as_stream_hooks * hooks) {
     s->source = source;
     s->hooks = hooks;
-    return 0;
-}
-
-inline int as_stream_destroy(as_stream * s) {
     return 0;
 }
 
@@ -79,8 +77,8 @@ inline as_stream * as_stream_new(void * source, const as_stream_hooks * hooks) {
  * @param s the stream to free
  * @return 0 on success, otherwise 1.
  */
-inline int as_stream_free(as_stream * s) {
-    return as_util_hook(free, 1, s);
+inline void as_stream_destroy(as_stream * s) {
+    as_util_hook(destroy, 1, s);
 }
 
 /**
@@ -101,7 +99,7 @@ inline void * as_stream_source(const as_stream * s) {
  * @param s the read to be read.
  * @return the element read from the stream or STREAM_END
  */
-inline const as_val * as_stream_read(const as_stream * s) {
+inline as_val * as_stream_read(const as_stream * s) {
     return as_util_hook(read, NULL, s);
 }
 
