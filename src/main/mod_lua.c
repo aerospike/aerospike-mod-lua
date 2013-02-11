@@ -9,7 +9,7 @@
 #include "mod_lua_val.h"
 #include "as_aerospike.h"
 #include "as_types.h"
-#include "internal.h"
+#include "as_internal.h"
 
 #include <dirent.h>
 #include <stdio.h>

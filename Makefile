@@ -6,7 +6,7 @@ endif
 
 # CFLAGS 	= -g -O3 -std=gnu99 -Wall -fPIC -fno-common -fno-strict-aliasing -finline-functions -Winline -march=nocona -DMARCH_$(ARCH) -DMEM_COUNT=1
 CFLAGS 	= -g -std=gnu99 -Wall -fPIC -fno-common -fno-strict-aliasing -finline-functions -Winline -march=nocona -DMARCH_$(ARCH) -DMEM_COUNT=1
-LDFLAGS = -Wall -Winline -rdynamic 
+LDFLAGS = -Wall -Winline -rdynamic -Wl,-rpath,/usr/local/lib
 
 INC_PATH += modules/common/$(TARGET_INCL)
 INC_PATH += $(MSGPACK_PATH)/src
@@ -35,7 +35,7 @@ as_types += as_aerospike.o
 as_types += as_serializer.o
 
 as_types += as_msgpack.o
-as_types += internal.o
+as_types += as_internal.o
 
 mod_lua =
 mod_lua += mod_lua.o
@@ -109,4 +109,5 @@ arraylist_test: $(SOURCE_TEST)/arraylist_test.c | $(TARGET_BIN) libmod_lua.a com
 msgpack_test: $(SOURCE_TEST)/msgpack_test.c | $(TARGET_BIN) libmod_lua.a common-lib msgpack-lib
 	$(call executable, $(empty), $(empty), $(empty), $(empty), $(test_flags))
 
-test: msgpack_test hashmap_test linkedlist_test arraylist_test record_udf
+#test: msgpack_test hashmap_test linkedlist_test arraylist_test record_udf
+test: msgpack_test hashmap_test linkedlist_test arraylist_test 

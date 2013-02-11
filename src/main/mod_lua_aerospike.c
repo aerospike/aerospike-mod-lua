@@ -3,7 +3,7 @@
 #include "mod_lua_record.h"
 #include "mod_lua_val.h"
 #include "mod_lua_reg.h"
-#include "internal.h"
+#include "as_internal.h"
 
 #define CLASS_NAME "Aerospike"
 
@@ -45,10 +45,10 @@ static int mod_lua_aerospike_gc(lua_State * l) {
 /**
  * aerospike.create(record) => result<bool>
  */
-static int mod_lua_aerospike_create(lua_State * l) {
+static int mod_lua_aerospike_rec_create(lua_State * l) {
     as_aerospike *  a   = mod_lua_checkaerospike(l, 1);
     as_rec *        r   = mod_lua_torecord(l, 2);
-    int             rc  = as_aerospike_create(a, r);
+    int             rc  = as_aerospike_rec_create(a, r);
     lua_pushinteger(l, rc);
     return 1;
 }
@@ -56,10 +56,10 @@ static int mod_lua_aerospike_create(lua_State * l) {
 /**
  * aerospike.update(record) => result<bool>
  */
-static int mod_lua_aerospike_update(lua_State * l) {
+static int mod_lua_aerospike_rec_update(lua_State * l) {
     as_aerospike *  a   = mod_lua_checkaerospike(l, 1);
     as_rec *        r   = mod_lua_torecord(l, 2);
-    int             rc  = as_aerospike_update(a, r);
+    int             rc  = as_aerospike_rec_update(a, r);
     lua_pushinteger(l, rc);
     return 1;
 }
@@ -67,10 +67,10 @@ static int mod_lua_aerospike_update(lua_State * l) {
 /**
  * aerospike.exists(record) => result<bool>
  */
-static int mod_lua_aerospike_exists(lua_State * l) {
+static int mod_lua_aerospike_rec_exists(lua_State * l) {
     as_aerospike *  a   = mod_lua_checkaerospike(l, 1);
     as_rec *        r   = mod_lua_torecord(l, 2);
-    int             rc  = as_aerospike_exists(a, r);
+    int             rc  = as_aerospike_rec_exists(a, r);
     lua_pushboolean(l, rc == 1);
     return 1;
 }
@@ -78,10 +78,10 @@ static int mod_lua_aerospike_exists(lua_State * l) {
 /**
  * aerospike.remove(namespace, set, key) => result<bool>
  */
-static int mod_lua_aerospike_remove(lua_State * l) {
+static int mod_lua_aerospike_rec_remove(lua_State * l) {
     as_aerospike *  a   = mod_lua_checkaerospike(l, 1);
     as_rec *        r   = mod_lua_torecord(l, 2);
-    int             rc  = as_aerospike_remove(a, r);
+    int             rc  = as_aerospike_rec_remove(a, r);
     lua_pushinteger(l, rc);
     return 1;
 }
@@ -107,10 +107,10 @@ static int mod_lua_aerospike_log(lua_State * l) {
  ******************************************************************************/
 
 static const luaL_reg class_table[] = {
-    {"create",      mod_lua_aerospike_create},
-    {"update",      mod_lua_aerospike_update},
-    {"exists",      mod_lua_aerospike_exists},
-    {"remove",      mod_lua_aerospike_remove},
+    {"create",      mod_lua_aerospike_rec_create},
+    {"update",      mod_lua_aerospike_rec_update},
+    {"exists",      mod_lua_aerospike_rec_exists},
+    {"remove",      mod_lua_aerospike_rec_remove},
     {"log",         mod_lua_aerospike_log},
     {0, 0}
 };

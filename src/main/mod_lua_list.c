@@ -2,7 +2,7 @@
 #include "mod_lua_list.h"
 #include "mod_lua_iterator.h"
 #include "mod_lua_reg.h"
-#include "internal.h"
+#include "as_internal.h"
 
 #define OBJECT_NAME "list"
 #define CLASS_NAME  "List"
@@ -104,25 +104,24 @@ static int mod_lua_list_size(lua_State * l) {
 }
 
 static int mod_lua_list_new(lua_State * l) {
-    as_linkedlist * ll = as_linkedlist_new(NULL,NULL);
-    as_list * list = as_list_new(ll, &as_linkedlist_list);
+    as_list * ll = as_linkedlist_new(NULL,NULL);
     int n = lua_gettop(l);
     if ( n == 2 && lua_type(l, 2) == LUA_TTABLE) {
         lua_pushnil(l);
         while ( lua_next(l, 2) != 0 ) {
             if ( lua_type(l, -2) == LUA_TNUMBER ) {
-                as_list_append(list, mod_lua_takeval(l, -1));
+                as_list_append(ll, mod_lua_takeval(l, -1));
             }
             lua_pop(l, 1);
         }
     }
-    mod_lua_pushlist(l, list);
+    mod_lua_pushlist(l, ll);
     return 1;
 }
 
 static int mod_lua_list_iterator(lua_State * l) {
     as_list * list  = mod_lua_checklist(l, 1);
-    mod_lua_pushiterator(l, as_list_iterator(list));
+    mod_lua_pushiterator(l, as_list_iterator_new(list));
     return 1;
 }
 

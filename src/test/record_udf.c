@@ -14,7 +14,7 @@
 static as_rec * maprecord_create() ;
 static as_val * maprecord_get(const as_rec *, const char *);
 static int maprecord_set(const as_rec *, const char *, const as_val *);
-static int maprecord_free(as_rec *);
+static void maprecord_destroy(as_rec *);
 static uint32_t maprecord_hash(as_rec *);
 
 static const as_rec_hooks maprecord_hooks;
@@ -40,11 +40,8 @@ static int maprecord_remove(const as_rec * r, const char * name) {
     return 0;
 }
 
-static int maprecord_free(as_rec * r) {
-    as_map * m = (as_map *) as_rec_source(r);
-    as_map_free(m);
-    // free(r);
-    return 0;
+static void maprecord_destroy(as_rec * r) {
+    as_val_destroy(r);
 }
 
 static uint32_t maprecord_hash(as_rec * r) {
@@ -55,13 +52,9 @@ static const as_rec_hooks maprecord_hooks = {
     .get    = maprecord_get,
     .set    = maprecord_set,
     .remove = maprecord_remove,
-    .free   = maprecord_free,
+    .destroy   = maprecord_destroy,
     .hash   = maprecord_hash
 };
-
-
-
-
 
 as_list * arglist(int argc, char ** argv) {
     if ( argc == 0 || argv == NULL ) return cons(NULL,NULL);

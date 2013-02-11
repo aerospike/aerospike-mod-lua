@@ -1,5 +1,5 @@
 #include "mod_lua_reg.h"
-#include "internal.h"
+#include "as_internal.h"
 
 int mod_lua_reg_object(lua_State * l, const char * name, const luaL_reg * table, const luaL_reg * metatable) {
 
