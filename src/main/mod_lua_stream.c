@@ -53,25 +53,12 @@ static as_stream * mod_lua_checkstream(lua_State * l, int index) {
     return s;
 }
 
-/**
- * Gets an iterator for a stream
- *
- *    stream.iterator(s: Stream): Iterator
- * 
- */
-static int mod_lua_stream_iterator(lua_State * l) {
-    as_stream * s = mod_lua_checkstream(l, 1);
-    as_iterator * i = as_stream_iterator_new(s);
-    mod_lua_pushiterator(l, i);
-    return 1;
-}
 
 /**
  * stream table
  *    stream.iterator(s: Stream): Iterator
  */
 static const luaL_reg mod_lua_stream_table[] = {
-    {"iterator",        mod_lua_stream_iterator},
     {0, 0}
 };
 
