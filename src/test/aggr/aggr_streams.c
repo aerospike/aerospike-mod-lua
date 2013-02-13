@@ -1,5 +1,6 @@
 
 #include "../test.h"
+#include <as_arraylist.h>
 #include <as_linkedlist.h>
 #include <as_list.h>
 #include <as_integer.h>
@@ -49,12 +50,23 @@ as_rec * map_rec_new() {
 
 
 uint32_t rec_stream_seed = 0;
+uint32_t rec_stream_count = 0;
+const uint32_t rec_stream_max = 1000 * 100;
 
 as_val * rec_stream_read(const as_stream * s) {
+
+    if ( rec_stream_count == rec_stream_max ) {
+        return AS_STREAM_END;
+    }
+
+    rec_stream_count++;
+
     int i = rand_r(&rec_stream_seed);
     as_rec * r = map_rec_new();
+
     as_rec_set(r, "campaign", (as_val *) as_integer_new(i % 10));
     as_rec_set(r, "views", (as_val *) as_integer_new(i % 1000));
+
     return (as_val *) r;
 }
 
@@ -68,10 +80,15 @@ as_stream * rec_stream_new() {
 }
 
 
-
+const uint32_t integer_stream_max = 1000;
 
 as_val * integer_stream_read(const as_stream * s) {
     uint32_t * i = (uint32_t *) as_stream_source(s);
+
+    if ( integer_stream_max == *i ) {
+        return AS_STREAM_END;
+    }
+
     return (as_val *) as_integer_new((*i)++);
 }
 
@@ -109,6 +126,17 @@ as_stream * list_stream_new(as_list * l) {
  * TEST CASES
  *****************************************************************************/
 
+uint32_t stream_pipe(as_stream * istream, as_stream * ostream) {
+    as_val * v = as_stream_read(istream);
+    if ( v != AS_STREAM_END ) {
+        as_stream_write(ostream, v);
+        return stream_pipe(istream, ostream) + 1;
+    }
+    else {
+        return 0;
+    }
+}
+
 TEST( aggr_streams_ints, "piping ints from stream a to stream b" ) {
 
     uint32_t i = 0;
@@ -117,32 +145,23 @@ TEST( aggr_streams_ints, "piping ints from stream a to stream b" ) {
     as_list * l = as_linkedlist_new(NULL,NULL);
     as_stream * ostream = list_stream_new(l);
 
-    for(int i=0; i<100; i++) {
-        as_stream_write(ostream, as_stream_read(istream));
-    }
+    uint32_t count = stream_pipe(istream, ostream);
 
-    assert_int_eq( as_list_size(l), 100);
+    assert_int_eq( count, integer_stream_max);
+    assert_int_eq( as_list_size(l), count);
 }
 
 TEST( aggr_streams_recs, "piping recs from stream a to stream b" ) {
 
     as_stream * istream = rec_stream_new();
 
-    as_list * l = as_linkedlist_new(NULL,NULL);
+    as_list * l = as_arraylist_new(rec_stream_max,100);
     as_stream * ostream = list_stream_new(l);
 
-    for(int i=0; i<100; i++) {
-        as_stream_write(ostream, as_stream_read(istream));
-    }
+    uint32_t count = stream_pipe(istream, ostream);
 
-    for(int i=0; i<as_list_size(l); i++) {
-        as_rec * r = (as_rec *) as_list_get(l,i);
-        as_integer * campaign = (as_integer *) as_rec_get(r, "campaign");
-        as_integer * views = (as_integer *) as_rec_get(r, "views");
-        // info("rec campaign: %d, views: %ld", as_integer_toint(campaign), as_integer_toint(views));
-    }
-
-    assert_int_eq( as_list_size(l), 100);
+    assert_int_eq( count, rec_stream_max);
+    assert_int_eq( as_list_size(l), count);
 }
 
 /******************************************************************************
