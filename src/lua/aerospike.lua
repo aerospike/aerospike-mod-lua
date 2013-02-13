@@ -31,9 +31,9 @@ end
 -- ############################################################################
 
 --
--- Creates a new environment for use in apply* functions
+-- Creates a new environment for use in apply_record functions
 --
-function env()
+function env_record()
     return {
 
         -- aerospike types
@@ -109,7 +109,7 @@ function apply_record(f, r, ...)
     end
 
     if not sandboxed[f] then
-        setfenv(f,env())
+        setfenv(f,env_record())
         sandboxed[f] = true
     end
 
@@ -123,6 +123,72 @@ function apply_record(f, r, ...)
 end
 
 --
+-- Creates a new environment for use in apply_stream functions
+-- Differences from env_record()
+--      - removed 'aerospike'
+--
+function env_stream()
+    return {
+
+        -- aerospike types
+        ["record"] = record,
+        ["iterator"] = iterator,
+        ["list"] = list,
+        ["map"] = map,
+        -- ["aerospike"] = aerospike,
+
+        -- logging functions
+        ["trace"] = trace,
+        ["debug"] = debug,
+        ["info"] = info,
+        ["warn"] = warn,
+        
+        -- standard lua functions
+        ["error"] = error,
+        ["getmetatable"] = getmetatable,
+        ["ipairs"] = ipairs,
+        ["load"] = load,
+        ["module"] = module,
+        ["next"] = next,
+        ["pairs"] = pairs,
+        ["print"] = print,
+        ["pcall"] = pcall,
+        ["rawequal"] = rawequal,
+        ["rawget"] = rawget,
+        ["rawset"] = rawset,
+        ["require"] = require,
+        ["require"] = require,
+        ["select"] = select,
+        ["setmetatable"] = setmetatable,
+        ["setfenv"] = setfenv,
+        ["tonumber"] = tonumber,
+        ["tostring"] = tostring,
+        ["type"] = type,
+        ["unpack"] = unpack,
+        ["xpcall"] = xpcall,
+
+        -- standard lua objects
+        ["math"] = math,
+        ["io"] = io,
+        ["os"] = {
+            ['clock'] = os.clock,
+            ['date'] = os.date,
+            ['difftime'] = os.difftime,
+            ['getenv'] = os.getenv,
+            ['setlocale'] = os.setlocale,
+            ['time'] = os.time,
+            ['tmpname'] = os.tmpname
+        },
+        ["package"] = package,
+        ["string"] = string,
+        ["table"] = table,
+
+        -- standard lua variables
+        ["_G"] = {}
+    }
+end
+
+--
 -- Apply function to an iterator and arguments.
 --
 -- @param f the fully-qualified name of the function.
@@ -130,11 +196,15 @@ end
 -- @param ... additional arguments to be applied to the function.
 -- @return result of the called function or nil.
 -- 
-
 function apply_stream(f, s, ...)
     
     if f == nil then
         error("function not found", 2)
+    end
+
+    if not sandboxed[f] then
+        setfenv(f,env_stream())
+        sandboxed[f] = true
     end
 
     setfenv(f,env())
