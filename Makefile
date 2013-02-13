@@ -144,11 +144,15 @@ modules/common/$(TARGET_LIB)/libcf-shared.a:
 modules/common/$(TARGET_LIB)/libcf-server.a:
 	$(MAKE) -e -C modules/common libcf-server.a
 
+modules/common/$(TARGET_LIB)/libcf-client.a:
+	$(MAKE) -e -C modules/common libcf-client.a
+
 modules/common/$(TARGET_INCL)/*.h:
 	$(MAKE) -e -C modules/common prepare
 
 .PHONY: modules/common
-modules/common: modules/common/$(TARGET_LIB)/libcf-shared.a modules/common/$(TARGET_LIB)/libcf-server.a modules/common/$(TARGET_INCL)/*.h
+modules/common: modules/common/$(TARGET_LIB)/libcf-shared.a modules/common/$(TARGET_LIB)/libcf-client.a modules/common/$(TARGET_INCL)/*.h
+#modules/common: modules/common/$(TARGET_LIB)/libcf-shared.a  modules/common/$(TARGET_LIB)/libcf-server.a modules/common/$(TARGET_INCL)/*.h
 
 ##
 ## SUBMODULE: msgpack
@@ -167,68 +171,68 @@ modules/msgpack: modules/msgpack/src/.libs/libmsgpackc.a
 ##  TEST TARGETS                                                      		 ##
 ###############################################################################
 
-TEST_CFLAGS = -I$(TARGET_INCL) -Imodules/common/$(TARGET_INCL) -Imodules/common/$(TARGET_INCL)/server
-TEST_LDFLAGS = -llua -lpthread -lm -lrt
-TEST_DEPS = $(TARGET_LIB)/libmod_lua.a modules/common/$(TARGET_LIB)/libcf-server.a modules/common/$(TARGET_LIB)/libcf-shared.a $(MSGPACK_PATH)/src/.libs/libmsgpack.a 
+TEST_CFLAGS =  -DMEM_COUNT=1
+TEST_CFLAGS += -I$(TARGET_INCL)
+TEST_CFLAGS += -Imodules/common/$(TARGET_INCL)
+
+TEST_LDFLAGS = -lssl -lcrypto -llua -lpthread -lm -lrt 
+
+TEST_DEPS =
+TEST_DEPS += $(TARGET_OBJ)/*.o 
+TEST_DEPS += modules/common/$(TARGET_OBJ)/client/*.o 
+TEST_DEPS += modules/common/$(TARGET_OBJ)/shared/*.o 
+TEST_DEPS += $(MSGPACK_PATH)/src/.libs/libmsgpackc.a
+
+
+TEST_TYPES = types
+TEST_TYPES += types_integer
+TEST_TYPES += types_string
+TEST_TYPES += types_arraylist
+TEST_TYPES += types_linkedlist
+TEST_TYPES += types_hashmap
 
 
 .PHONY: test
 test: test-build
-#	@$(TARGET_BIN)/test/record_udf
+	@$(TARGET_BIN)/test/types
+
 
 .PHONY: test-build
-test-build: test/hashmap_test test/arraylist_test 
-#test-build: test/record_udf 
+test-build: test/types
 
 .PHONY: test-clean
 test-clean: 
 	@rm -rf $(TARGET_BIN)/test
 	@rm -rf $(TARGET_OBJ)/test
 
-$(TARGET_OBJ)/test/%/%.o: CFLAGS += $(TEST_CFLAGS)
+
+.PHONY: test/types
+test/types: $(TARGET_BIN)/test/types
+
+.PHONY: test/client
+test/client: $(TARGET_BIN)/test/client
+
+.PHONY: test/udf
+test/udf: $(TARGET_BIN)/test/udf
+
+
+$(TARGET_OBJ)/test/%/%.o: CFLAGS = $(TEST_CFLAGS)
 $(TARGET_OBJ)/test/%/%.o: LDFLAGS += $(TEST_LDFLAGS)
 $(TARGET_OBJ)/test/%/%.o: $(SOURCE_TEST)/%/%.c
 	$(object)
 
-$(TARGET_OBJ)/test/%.o: CFLAGS += $(TEST_CFLAGS)
+$(TARGET_OBJ)/test/%.o: CFLAGS = $(TEST_CFLAGS)
 $(TARGET_OBJ)/test/%.o: LDFLAGS += $(TEST_LDFLAGS)
 $(TARGET_OBJ)/test/%.o: $(SOURCE_TEST)/%.c
 	$(object)
 
-.PHONY: test/record_udf
-test/record_udf: $(TARGET_BIN)/test/record_udf
-$(TARGET_BIN)/test/record_udf: CFLAGS += $(TEST_CFLAGS)
-$(TARGET_BIN)/test/record_udf: LDFLAGS += $(TEST_LDFLAGS)
-$(TARGET_BIN)/test/record_udf: $(TARGET_OBJ)/test/record_udf.o $(TEST_DEPS) | modules
-	$(executable)
+.PHONY: test/types
+test/types: $(TARGET_BIN)/test/types
+$(TARGET_BIN)/test/types: CFLAGS = $(TEST_CFLAGS)
+$(TARGET_BIN)/test/types: LDFLAGS += $(TEST_LDFLAGS)
+$(TARGET_BIN)/test/types: $(TEST_TYPES:%=$(TARGET_OBJ)/test/types/%.o) $(TARGET_OBJ)/test/test.o $(TEST_DEPS) | prepare
 
-.PHONY: test/hashmap_test
-test/hashmap_test: $(TARGET_BIN)/test/hashmap_test
-$(TARGET_BIN)/test/hashmap_test: CFLAGS += $(TEST_CFLAGS)
-$(TARGET_BIN)/test/hashmap_test: LDFLAGS += $(TEST_LDFLAGS)
-$(TARGET_BIN)/test/hashmap_test: $(TARGET_OBJ)/test/hashmap_test.o $(TEST_DEPS) | modules
-	$(executable)
 
-.PHONY: test/arraylist_test
-test/arraylist_test: $(TARGET_BIN)/test/arraylist_test
-$(TARGET_BIN)/test/arraylist_test: CFLAGS += $(TEST_CFLAGS)
-$(TARGET_BIN)/test/arraylist_test: LDFLAGS += $(TEST_LDFLAGS)
-$(TARGET_BIN)/test/arraylist_test: $(TARGET_OBJ)/test/arraylist_test.o $(TEST_DEPS) | modules
-	$(executable)
-
-.PHONY: test/linkedlist_test
-test/linkedlist_test: $(TARGET_BIN)/test/linkedlist_test
-$(TARGET_BIN)/test/linkedlist_test: CFLAGS += $(TEST_CFLAGS)
-$(TARGET_BIN)/test/linkedlist_test: LDFLAGS += $(TEST_LDFLAGS)
-$(TARGET_BIN)/test/linkedlist_test: $(TARGET_OBJ)/test/linkedlist_test.o $(TEST_DEPS) | modules
-	$(executable)	
-
-.PHONY: test/msgpack_test
-test/msgpack_test: $(TARGET_BIN)/test/msgpack_test
-$(TARGET_BIN)/test/msgpack_test: CFLAGS += $(TEST_CFLAGS)
-$(TARGET_BIN)/test/msgpack_test: LDFLAGS += $(TEST_LDFLAGS)
-$(TARGET_BIN)/test/msgpack_test: $(TARGET_OBJ)/test/msgpack_test.o $(TEST_DEPS) | modules
-	$(executable)	
 
 #PHONY: test
 #test: msgpack_test hashmap_test linkedlist_test arraylist_test record_udf
