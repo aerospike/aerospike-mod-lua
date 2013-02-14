@@ -576,10 +576,10 @@ static int apply(lua_State * l, int err, int argc, as_result * res) {
     as_val * rv = mod_lua_retval(l);
 
     if ( rc == 0 ) {
-        as_result_tosuccess(res, rv);
+        as_result_setsuccess(res, rv);
     }
     else {
-        as_result_tofailure(res, rv);
+        as_result_setfailure(res, rv);
     }
 
     // Pop the return value off the stack
