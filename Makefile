@@ -178,7 +178,6 @@ TEST_CFLAGS += -Imodules/common/$(TARGET_INCL)
 TEST_LDFLAGS = -lssl -lcrypto -llua -lpthread -lm -lrt 
 
 TEST_DEPS =
-TEST_DEPS += $(TARGET_OBJ)/*.o 
 TEST_DEPS += modules/common/$(TARGET_OBJ)/client/*.o 
 TEST_DEPS += modules/common/$(TARGET_OBJ)/shared/*.o 
 TEST_DEPS += $(MSGPACK_PATH)/src/.libs/libmsgpackc.a
@@ -191,20 +190,20 @@ TEST_TYPES += types_arraylist
 TEST_TYPES += types_linkedlist
 TEST_TYPES += types_hashmap
 
-# TEST_AGGR = aggr
-# TEST_AGGR += aggr_streams
-# TEST_AGGR += aggr_udf
+TEST_AGGR = aggr
+TEST_AGGR += aggr_streams
+TEST_AGGR += aggr_udf
 
 
 .PHONY: test
 test: test-build
-	# @$(TARGET_BIN)/test/aggr
+#	@$(TARGET_BIN)/test/aggr
 	@$(TARGET_BIN)/test/types
 
 
 .PHONY: test-build
+#test-build: test/aggr test/types
 test-build: test/types
-# test-build: test/aggr test/types
 
 .PHONY: test-clean
 test-clean: 
@@ -226,15 +225,15 @@ $(TARGET_OBJ)/test/%.o: $(SOURCE_TEST)/%.c
 test/types: $(TARGET_BIN)/test/types
 $(TARGET_BIN)/test/types: CFLAGS = $(TEST_CFLAGS)
 $(TARGET_BIN)/test/types: LDFLAGS += $(TEST_LDFLAGS)
-$(TARGET_BIN)/test/types: $(TEST_TYPES:%=$(TARGET_OBJ)/test/types/%.o) $(TARGET_OBJ)/test/test.o | modules/common prepare
+$(TARGET_BIN)/test/types: $(TEST_TYPES:%=$(TARGET_OBJ)/test/types/%.o) $(TARGET_OBJ)/test/test.o $(TARGET_OBJ)/*.o | modules build prepare
 	$(executable)  $(TEST_DEPS)
 
-# .PHONY: test/aggr
-# test/aggr: $(TARGET_BIN)/test/aggr
-# $(TARGET_BIN)/test/aggr: CFLAGS = $(TEST_CFLAGS)
-# $(TARGET_BIN)/test/aggr: LDFLAGS += $(TEST_LDFLAGS)
-# $(TARGET_BIN)/test/aggr: $(TEST_AGGR:%=$(TARGET_OBJ)/test/aggr/%.o) $(TARGET_OBJ)/test/test.o | modules/common prepare
-# 	$(executable)  $(TEST_DEPS)
+.PHONY: test/aggr
+test/aggr: $(TARGET_BIN)/test/aggr
+$(TARGET_BIN)/test/aggr: CFLAGS = $(TEST_CFLAGS)
+$(TARGET_BIN)/test/aggr: LDFLAGS += $(TEST_LDFLAGS)
+$(TARGET_BIN)/test/aggr: $(TEST_AGGR:%=$(TARGET_OBJ)/test/aggr/%.o) $(TARGET_OBJ)/test/test.o $(TARGET_OBJ)/*.o | modules build prepare
+	$(executable)  $(TEST_DEPS)
 
 
 
