@@ -1,5 +1,6 @@
+#include "mod_lua_val.h"
 #include "mod_lua_stream.h"
-#include "mod_lua_iterator.h"
+#include "mod_lua_reg.h"
 #include "as_val.h"
 
 #include <lua.h>
@@ -39,9 +40,9 @@ static int mod_lua_stream_gc(lua_State * l) {
 
 static int mod_lua_stream_tostring(lua_State * l) {
     as_stream * stream = mod_lua_tostream(l, 1);
-    char string[128] = { '\0' };
-    snprintf(string, 128, "Stream<%p>", stream)
-    lua_pushstring(l, string);
+    char str[128] = { '\0' };
+    snprintf(str, 128, "Stream<%p>", stream);
+    lua_pushstring(l, str);
     return 1;
 }
 
@@ -131,7 +132,7 @@ static const luaL_reg class_metatable[] = {
  * REGISTER
  ******************************************************************************/
 
-int mod_lua_list_register(lua_State * l) {
+int mod_lua_stream_register(lua_State * l) {
     mod_lua_reg_object(l, OBJECT_NAME, object_table, object_metatable);
     mod_lua_reg_class(l, CLASS_NAME, NULL, class_metatable);
     return 1;
