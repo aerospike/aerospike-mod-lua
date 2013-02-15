@@ -112,6 +112,7 @@ static int mod_lua_record_newindex(lua_State * l) {
         if ( value != NULL ) {
             LOG("mod_lua_record_newindex: value is not null, setting bin");
             as_rec_set(rec, name, value);
+            as_val_destroy(value);
         }
         else {
             LOG("mod_lua_record_newindex: value is null, removing bin");
