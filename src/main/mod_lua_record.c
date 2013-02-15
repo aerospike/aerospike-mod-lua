@@ -108,11 +108,12 @@ static int mod_lua_record_newindex(lua_State * l) {
     const char *    name    = luaL_optstring(l, 2, 0);
     if ( name != NULL ) {
         LOG("mod_lua_record_newindex: name is not null");
+        // reference to this value is created by mod_lua_toval
+        // then stashed in the record cache
         as_val * value = (as_val *) mod_lua_toval(l, 3);
         if ( value != NULL ) {
             LOG("mod_lua_record_newindex: value is not null, setting bin");
             as_rec_set(rec, name, value);
-            as_val_destroy(value);
         }
         else {
             LOG("mod_lua_record_newindex: value is null, removing bin");
