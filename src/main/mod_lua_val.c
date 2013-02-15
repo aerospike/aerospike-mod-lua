@@ -81,6 +81,11 @@ as_val * mod_lua_toval(lua_State * l, int i) {
  * @returns number of values pushed
  */
 int mod_lua_pushval(lua_State * l, const as_val * v) {
+    if ( v == NULL ) {
+        lua_pushnil(l);
+        return 1;
+    }
+    
     switch( as_val_type(v) ) {
         case AS_BOOLEAN: {
             lua_pushboolean(l, as_boolean_tobool((as_boolean *) v) );

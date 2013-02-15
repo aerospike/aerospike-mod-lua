@@ -2,6 +2,7 @@
 #include "mod_lua_stream.h"
 #include "mod_lua_reg.h"
 #include "as_val.h"
+#include "internal.h"
 
 #include <lua.h>
 #include <lauxlib.h>
@@ -24,7 +25,7 @@ as_stream * mod_lua_tostream(lua_State * l, int index) {
 }
 
 as_stream * mod_lua_pushstream(lua_State * l, as_stream * stream) {
-    mod_lua_box * box = mod_lua_pushbox(l, MOD_LUA_SCOPE_LUA, stream, CLASS_NAME);
+    mod_lua_box * box = mod_lua_pushbox(l, MOD_LUA_SCOPE_HOST, stream, CLASS_NAME);
     return (as_stream *) mod_lua_box_value(box);
 }
 
@@ -50,7 +51,7 @@ static int mod_lua_stream_read(lua_State * l) {
     as_stream * stream = mod_lua_tostream(l, 1);
     if ( stream ) {
         as_val * val = as_stream_read(stream);
-        mod_lua_pushval(l, val);
+        mod_lua_pushval(l, val );
         return 1;
     }
     else {
@@ -74,7 +75,7 @@ static int mod_lua_stream_readable(lua_State * l) {
 static int mod_lua_stream_write(lua_State * l) {
     as_stream * stream = mod_lua_tostream(l, 1);
     as_val * val = mod_lua_toval(l, 2);
-    if ( stream && val ) {
+    if ( stream ) {
         int rc = as_stream_write(stream, val);
         lua_pushinteger(l, rc);
         return 1;
@@ -102,8 +103,8 @@ static int mod_lua_stream_writable(lua_State * l) {
  ******************************************************************************/
 
 static const luaL_reg object_table[] = {
-    {"read",            mod_lua_stream_write},
-    {"write",           mod_lua_stream_read},
+    {"read",            mod_lua_stream_read},
+    {"write",           mod_lua_stream_write},
     {"readable",        mod_lua_stream_readable},
     {"writable",        mod_lua_stream_writable},
     {"tostring",        mod_lua_stream_tostring},

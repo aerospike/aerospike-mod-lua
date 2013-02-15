@@ -25,6 +25,12 @@ mod_lua_config * mod_lua_config_new(bool cache_enabled, char * system_path, char
     return c;
 }
 
+mod_lua_config * mod_lua_config_client(bool cache_enabled, char * system_path, char * user_path) {
+    mod_lua_config * c = mod_lua_config_new(cache_enabled, system_path, user_path);
+    c->server_mode = false;
+    return c;
+}
+
 int mod_lua_config_free(mod_lua_config * c) {
     if ( c->system_path ) free(c->system_path);
     c->system_path = NULL;
