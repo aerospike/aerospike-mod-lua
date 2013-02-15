@@ -77,7 +77,6 @@ static int mod_lua_record_index(lua_State * l) {
     mod_lua_box *   box     = mod_lua_checkbox(l, 1, CLASS_NAME);
     as_rec *        rec     = (as_rec *) mod_lua_box_value(box);
     const char *    name    = luaL_optstring(l, 2, 0);
-    int             rc      = 0;
     if ( name != NULL ) {
         as_val * value  = (as_val *) as_rec_get(rec, name);
         if ( value != NULL ) {
@@ -102,6 +101,8 @@ static int mod_lua_record_newindex(lua_State * l) {
     as_rec *        rec     = mod_lua_checkrecord(l, 1);
     const char *    name    = luaL_optstring(l, 2, 0);
     if ( name != NULL ) {
+        // reference to this value is created by mod_lua_toval
+        // then stashed in the record cache
         as_val * value = (as_val *) mod_lua_toval(l, 3);
         if ( value != NULL ) {
             as_rec_set(rec, name, value);
