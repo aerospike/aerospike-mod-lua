@@ -32,9 +32,7 @@ static as_map * mod_lua_checkmap(lua_State * l, int index) {
 }
 
 static int mod_lua_map_gc(lua_State * l) {
-    LOG("mod_lua_map_gc: begin");
     mod_lua_freebox(l, 1, CLASS_NAME);
-    LOG("mod_lua_map_gc: end");
     return 0;
 }
 

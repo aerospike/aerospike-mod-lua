@@ -18,35 +18,52 @@
  *****************************************************************************/
 
 
+int map_rec_destroy(as_rec * r) {
+    return 0;
+}
 
 as_val * map_rec_get(const as_rec * r, const char * name) {
-    // as_map * m = (as_map *) as_rec_source(r);
-    // as_string s;
-    // as_string_init(&s, (char *) name, false);
-    // as_val  * v = as_map_get(m, (as_val *) &s);
-    // as_string_destroy(&s);
-    // return v;
-    return (as_val *) as_integer_new(1);
+    as_map * m = (as_map *) as_rec_source(r);
+    as_string s;
+    as_string_init(&s, (char *) name, false);
+    as_val * v = as_map_get(m, (as_val *) &s);
+    as_string_destroy(&s);
+    return v;
 }
 
 int map_rec_set(const as_rec * r, const char * name, const as_val * value) {
-    // as_map * m = (as_map *) as_rec_source(r);
-    // return as_map_set(m, (as_val *) as_string_new(strdup(name),true), (as_val *) value);
+    as_map * m = (as_map *) as_rec_source(r);
+    return as_map_set(m, (as_val *) as_string_new(strdup(name),true), (as_val *) value);
+}
+
+int map_rec_remove(const as_rec * r, const char * name) {
+    return 0;
+}
+
+uint32_t map_rec_ttl(const as_rec * r) {
+    return 0;
+}
+
+uint16_t map_rec_gen(const as_rec * r) {
+    return 0;
+}
+
+uint32_t map_rec_hash(as_rec * r) {
     return 0;
 }
 
 const as_rec_hooks map_rec_hooks = {
     .get        = map_rec_get,
     .set        = map_rec_set,
-    .destroy    = NULL,
-    .remove     = NULL,
-    .ttl        = NULL,
-    .gen        = NULL,
-    .hash       = NULL
+    .destroy    = map_rec_destroy,
+    .remove     = map_rec_remove,
+    .ttl        = map_rec_ttl,
+    .gen        = map_rec_gen,
+    .hash       = map_rec_hash
 };
 
-as_rec * map_rec_new() {
-    return as_rec_new(NULL, &map_rec_hooks);
+as_rec * map_rec_new(as_map * m) {
+    return as_rec_new(m, &map_rec_hooks);
 }
 
 
@@ -55,11 +72,6 @@ typedef struct {
     uint32_t end;
 } range;
 
-
-uint32_t rec_stream_seed = 0;
-uint32_t rec_stream_count = 0;
-uint32_t const rec_stream_max = 1000 * 100;
-
 as_val * rec_stream_read(const as_stream * s) {
     range * r = (range *) as_stream_source(s);
 
@@ -67,11 +79,27 @@ as_val * rec_stream_read(const as_stream * s) {
         return AS_STREAM_END;
     }
 
-    as_rec * rec = map_rec_new();
+    // as_rec * rec = map_rec_new();
+    // as_map * map = (as_map *) as_rec_source(rec);
     // as_rec_set(rec, "campaign", (as_val *) as_integer_new(r->pos % 10));
     // as_rec_set(rec, "views", (as_val *) as_integer_new(r->pos * 123 % 1000));
 
-    return (as_val *) rec;
+    
+    // printf("\n");
+    // printf("REC: %s\n",as_val_tostring((as_val*)map));
+    // printf("\n");
+
+    // return (as_val *) as_string_new(strdup("hello"),true);
+    // return (as_val *) as_hashmap_new(10);
+    // return (as_val *) as_integer_new(r->pos);
+    
+    as_map * m = as_hashmap_new(10);
+    as_map_set(m, (as_val *) as_string_new(strdup("campaign"),true), (as_val *) as_integer_new(r->pos % 10));
+    as_map_set(m, (as_val *) as_string_new(strdup("views"),true), (as_val *) as_integer_new(r->pos * 2919 % 1000));
+    
+    r->pos ++;
+
+    return (as_val *) map_rec_new(m);
 }
 
 const as_stream_hooks rec_stream_hooks = {
@@ -79,10 +107,10 @@ const as_stream_hooks rec_stream_hooks = {
     .write  = NULL
 };
 
-as_stream * rec_stream_new(uint32_t end) {
+as_stream * rec_stream_new(uint32_t count) {
     range * r = (range *) malloc(sizeof(range));
     r->pos = 1;
-    r->end = end;
+    r->end = count;
     return as_stream_new(r, &rec_stream_hooks);
 }
 
@@ -169,7 +197,7 @@ TEST( aggr_streams_recs, "piping recs from stream a to stream b" ) {
 
     uint32_t count = stream_pipe(istream, ostream);
 
-    assert_int_eq( count, rec_stream_max);
+    // assert_int_eq( count, rec_stream_max);
     assert_int_eq( as_list_size(l), count);
 }
 

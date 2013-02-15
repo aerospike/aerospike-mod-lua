@@ -54,9 +54,29 @@ static const as_aerospike_hooks test_aerospike_hooks = {
  * TEST CASES
  *****************************************************************************/
 
-TEST( aggr_udf_1, "sum range (0-100)" ) {
+TEST( aggr_udf_1, "increment range (1-10)" ) {
+ 
+    as_stream * istream = integer_stream_new(1,10);     
 
-    as_stream * istream = integer_stream_new(0,100);
+    as_list * l = as_arraylist_new(100,0);
+    as_stream * ostream = list_stream_new(l);
+
+    as_list * arglist = as_arraylist_new(100,0);
+
+    int rc = as_module_apply_stream(&mod_lua, &as, "aggregations", "increment", istream, arglist, ostream);
+
+    assert_int_eq( rc, 0);
+    assert_int_eq( as_list_size(l), 10);
+
+    as_val * v = as_list_head(l);
+    assert_int_eq(as_integer_toint((as_integer *) v), 2);
+    
+    info("result: %s",as_val_tostring(v));
+}
+
+TEST( aggr_udf_2, "sum range (1-100)" ) {
+
+    as_stream * istream = integer_stream_new(1,100);
 
     as_list * l = as_arraylist_new(1,1);
     as_stream * ostream = list_stream_new(l);
@@ -72,23 +92,52 @@ TEST( aggr_udf_1, "sum range (0-100)" ) {
     as_val * v = as_list_head(l);
     assert_int_eq(as_integer_toint((as_integer *) v), 5050);
 
-    info("result: %ld",as_integer_toint((as_integer *) v));
+    info("result: %s",as_val_tostring(v));
 }
 
-TEST( aggr_udf_2, "campaign rollup" ) {
+TEST( aggr_udf_3, "product range (1-10)" ) {
  
-    as_stream * istream = rec_stream_new(10);
-    // as_stream * istream = integer_stream_new(0,100);
+    as_stream * istream = integer_stream_new(1,10);     
 
-    as_list * l = as_arraylist_new(10,1);
+    as_list * l = as_arraylist_new(100,0);
     as_stream * ostream = list_stream_new(l);
 
     as_list * arglist = as_arraylist_new(100,0);
+
+    int rc = as_module_apply_stream(&mod_lua, &as, "aggregations", "product", istream, arglist, ostream);
+
+    assert_int_eq( rc, 0);
+    assert_int_eq( as_list_size(l), 1);
+
+
+    as_val * v = as_list_head(l);
+    assert_int_eq(as_integer_toint((as_integer *) v), 3628800);
+
+    info("result: %s",as_val_tostring(v));
+}
+
+TEST( aggr_udf_4, "campaign rollup" ) {
+ 
+    as_stream * istream = rec_stream_new(10);
+    // as_stream * istream = integer_stream_new(1,10);     
+
+    as_list * l = as_arraylist_new(100,0);
+    as_stream * ostream = list_stream_new(l);
+
+    as_list * arglist = as_arraylist_new(100,100);
 
     int rc = as_module_apply_stream(&mod_lua, &as, "aggregations", "rollup", istream, arglist, ostream);
 
     assert_int_eq( rc, 0);
     assert_int_eq( as_list_size(l), 1);
+
+
+    as_map * v = (as_map *) as_list_head(l);
+    assert_int_eq(as_map_size(v), 1);
+
+    info("result: %s",as_val_tostring(v));
+
+    // info("result: %ld",as_integer_toint((as_integer *) v));
 
     // as_map * m = as_list_head(l);
     // assert_int_eq(as_integer_toint((as_integer *) v), 5050);
@@ -123,4 +172,6 @@ SUITE( aggr_udf, "aggregate udf" ) {
     
     suite_add( aggr_udf_1 );
     suite_add( aggr_udf_2 );
+    suite_add( aggr_udf_3 );
+    suite_add( aggr_udf_4 );
 }

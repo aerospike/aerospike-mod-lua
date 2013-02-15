@@ -449,7 +449,7 @@ static int poll_state(context * ctx, cache_item * citem) {
             }
             cf_rc_releaseandfree(centry);
             centry = 0;
-			LOG("Cache Miss %d : Total %d \n", miss, total);
+			LOG("[CACHE] Miss %d : Total %d", miss, total);
         } else {
             centry = NULL;
         }
