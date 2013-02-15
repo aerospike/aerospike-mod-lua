@@ -1,4 +1,5 @@
 
+
 -- A table to track whether we had sandboxed a function
 local sandboxed = {}
 
@@ -137,7 +138,7 @@ function env_stream()
         ["iterator"] = iterator,
         ["list"] = list,
         ["map"] = map,
-        -- ["aerospike"] = aerospike,
+        ["aerospike"] = aerospike,
 
         -- logging functions
         ["trace"] = trace,
@@ -196,25 +197,48 @@ end
 -- @param f the fully-qualified name of the function.
 -- @param s the iterator to be applied to the function.
 -- @param ... additional arguments to be applied to the function.
--- @return result of the called function or nil.
+-- @return 0 on success, otherwise failure.
 -- 
-function apply_stream(f, s, ...)
-    
+function apply_stream(f, scope, istream, ostream, ...)
+
     if f == nil then
         error("function not found", 2)
+        return 2
     end
+    
+    require("stream_ops")
 
-    if not sandboxed[f] then
-        setfenv(f,env_stream())
-        sandboxed[f] = true
-    end
+    setfenv(f,env_stream())
+    
+    -- if not sandboxed[f] then
+    --     setfenv(f,env_stream())
+    --     sandboxed[f] = true
+    -- end
 
-    setfenv(f,env())
-    success, result = pcall(f, StreamOps_create(), ...)
+    local ops = StreamOps_create();
+    
+    success, result = pcall(f, ops, ...)
+
+    info("apply_stream: success=%s, result=%s", tostring(success), tostring(result))
+
     if success then
-        return (StreamOps_eval(s, result))[1]
+
+        -- Apply server operations to the stream
+        -- result => a stream_ops object
+        local values = StreamOps_apply(iterator(istream), result, scope);
+
+        -- Iterate the stream of values from the computation
+        -- then pipe it to the ostream
+        for value in values do
+            stream.write(ostream, value)
+        end
+
+        -- 0 is success
+        return 0
     else
         error(result, 2)
-        return nil
+        return 2
     end
 end
+
+

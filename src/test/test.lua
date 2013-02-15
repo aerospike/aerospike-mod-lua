@@ -1,6 +1,6 @@
 package.path = package.path .. ";" .. "/Users/chris/projects/cstivers78/aerospike-mod-lua/src/lua/?.lua;"
 
--- require('stream')
+require('stream')
 
 
 --
@@ -206,8 +206,8 @@ end
 
 
 
--- test_integer_sum(0,100)
--- test_rollup()
+test_integer_sum(0,100)
+test_rollup()
 
 
 

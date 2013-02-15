@@ -18,12 +18,15 @@
  *****************************************************************************/
 
 
+int map_rec_destroy(as_rec * r) {
+    return 0;
+}
 
 as_val * map_rec_get(const as_rec * r, const char * name) {
     as_map * m = (as_map *) as_rec_source(r);
     as_string s;
     as_string_init(&s, (char *) name, false);
-    as_val  * v = as_map_get(m, (as_val *) &s);
+    as_val * v = as_map_get(m, (as_val *) &s);
     as_string_destroy(&s);
     return v;
 }
@@ -33,41 +36,70 @@ int map_rec_set(const as_rec * r, const char * name, const as_val * value) {
     return as_map_set(m, (as_val *) as_string_new(strdup(name),true), (as_val *) value);
 }
 
+int map_rec_remove(const as_rec * r, const char * name) {
+    return 0;
+}
+
+uint32_t map_rec_ttl(const as_rec * r) {
+    return 0;
+}
+
+uint16_t map_rec_gen(const as_rec * r) {
+    return 0;
+}
+
+uint32_t map_rec_hash(as_rec * r) {
+    return 0;
+}
+
 const as_rec_hooks map_rec_hooks = {
     .get        = map_rec_get,
     .set        = map_rec_set,
-    .destroy    = NULL,
-    .remove     = NULL,
-    .ttl        = NULL,
-    .gen        = NULL,
-    .hash       = NULL
+    .destroy    = map_rec_destroy,
+    .remove     = map_rec_remove,
+    .ttl        = map_rec_ttl,
+    .gen        = map_rec_gen,
+    .hash       = map_rec_hash
 };
 
-as_rec * map_rec_new() {
-    return as_rec_new(as_hashmap_new(32), &map_rec_hooks);
+as_rec * map_rec_new(as_map * m) {
+    return as_rec_new(m, &map_rec_hooks);
 }
 
 
-
-uint32_t rec_stream_seed = 0;
-uint32_t rec_stream_count = 0;
-const uint32_t rec_stream_max = 1000 * 100;
+typedef struct {
+    uint32_t pos;
+    uint32_t end;
+} range;
 
 as_val * rec_stream_read(const as_stream * s) {
+    range * r = (range *) as_stream_source(s);
 
-    if ( rec_stream_count == rec_stream_max ) {
+    if ( r->pos > r->end ) {
         return AS_STREAM_END;
     }
 
-    rec_stream_count++;
+    // as_rec * rec = map_rec_new();
+    // as_map * map = (as_map *) as_rec_source(rec);
+    // as_rec_set(rec, "campaign", (as_val *) as_integer_new(r->pos % 10));
+    // as_rec_set(rec, "views", (as_val *) as_integer_new(r->pos * 123 % 1000));
 
-    int i = rand_r(&rec_stream_seed);
-    as_rec * r = map_rec_new();
+    
+    // printf("\n");
+    // printf("REC: %s\n",as_val_tostring((as_val*)map));
+    // printf("\n");
 
-    as_rec_set(r, "campaign", (as_val *) as_integer_new(i % 10));
-    as_rec_set(r, "views", (as_val *) as_integer_new(i % 1000));
+    // return (as_val *) as_string_new(strdup("hello"),true);
+    // return (as_val *) as_hashmap_new(10);
+    // return (as_val *) as_integer_new(r->pos);
+    
+    as_map * m = as_hashmap_new(10);
+    as_map_set(m, (as_val *) as_string_new(strdup("campaign"),true), (as_val *) as_integer_new(r->pos % 10));
+    as_map_set(m, (as_val *) as_string_new(strdup("views"),true), (as_val *) as_integer_new(r->pos * 2919 % 1000));
+    
+    r->pos ++;
 
-    return (as_val *) r;
+    return (as_val *) map_rec_new(m);
 }
 
 const as_stream_hooks rec_stream_hooks = {
@@ -75,21 +107,23 @@ const as_stream_hooks rec_stream_hooks = {
     .write  = NULL
 };
 
-as_stream * rec_stream_new() {
-    return as_stream_new(NULL, &rec_stream_hooks);
+as_stream * rec_stream_new(uint32_t count) {
+    range * r = (range *) malloc(sizeof(range));
+    r->pos = 1;
+    r->end = count;
+    return as_stream_new(r, &rec_stream_hooks);
 }
 
 
-const uint32_t integer_stream_max = 1000;
 
 as_val * integer_stream_read(const as_stream * s) {
-    uint32_t * i = (uint32_t *) as_stream_source(s);
+    range * r = (range *) as_stream_source(s);
 
-    if ( integer_stream_max == *i ) {
+    if ( r->pos > r->end ) {
         return AS_STREAM_END;
     }
 
-    return (as_val *) as_integer_new((*i)++);
+    return (as_val *) as_integer_new(r->pos++);
 }
 
 const as_stream_hooks integer_stream_hooks = {
@@ -97,8 +131,11 @@ const as_stream_hooks integer_stream_hooks = {
     .write  = NULL
 };
 
-as_stream * integer_stream_new(uint32_t * i) {
-    return as_stream_new(i, &integer_stream_hooks);
+as_stream * integer_stream_new(uint32_t start, uint32_t end) {
+    range * r = (range *) malloc(sizeof(range));
+    r->pos = start;
+    r->end = end;
+    return as_stream_new(r, &integer_stream_hooks);
 }
 
 
@@ -106,7 +143,9 @@ as_stream * integer_stream_new(uint32_t * i) {
 
 as_stream_status list_stream_write(const as_stream * s, const as_val * v) {
     as_list * l = (as_list *) as_stream_source(s);
-    as_list_append(l, (as_val *) v);
+    if ( v != NULL ) {
+        as_list_append(l, (as_val *) v);
+    }
     return AS_STREAM_OK;
 }
 
@@ -120,12 +159,6 @@ as_stream * list_stream_new(as_list * l) {
 }
 
 
-
-
-/******************************************************************************
- * TEST CASES
- *****************************************************************************/
-
 uint32_t stream_pipe(as_stream * istream, as_stream * ostream) {
     as_val * v = as_stream_read(istream);
     if ( v != AS_STREAM_END ) {
@@ -137,30 +170,34 @@ uint32_t stream_pipe(as_stream * istream, as_stream * ostream) {
     }
 }
 
+
+/******************************************************************************
+ * TEST CASES
+ *****************************************************************************/
+
 TEST( aggr_streams_ints, "piping ints from stream a to stream b" ) {
 
-    uint32_t i = 0;
-    as_stream * istream = integer_stream_new(&i);
+    as_stream * istream = integer_stream_new(1,100);
 
     as_list * l = as_linkedlist_new(NULL,NULL);
     as_stream * ostream = list_stream_new(l);
 
     uint32_t count = stream_pipe(istream, ostream);
 
-    assert_int_eq( count, integer_stream_max);
+    assert_int_eq( count, 100);
     assert_int_eq( as_list_size(l), count);
 }
 
 TEST( aggr_streams_recs, "piping recs from stream a to stream b" ) {
 
-    as_stream * istream = rec_stream_new();
+    as_stream * istream = rec_stream_new(10);
 
-    as_list * l = as_arraylist_new(rec_stream_max,100);
+    as_list * l = as_arraylist_new(10,100);
     as_stream * ostream = list_stream_new(l);
 
     uint32_t count = stream_pipe(istream, ostream);
 
-    assert_int_eq( count, rec_stream_max);
+    // assert_int_eq( count, rec_stream_max);
     assert_int_eq( as_list_size(l), count);
 }
 
@@ -168,7 +205,18 @@ TEST( aggr_streams_recs, "piping recs from stream a to stream b" ) {
  * TEST SUITE
  *****************************************************************************/
 
+static bool before(atf_suite * suite) {
+    return true;
+}
+
+static bool after(atf_suite * suite) {
+    return true;
+}
+
 SUITE( aggr_streams, "as_stream" ) {
+    suite_before( before );
+    suite_after( after );
+    
     suite_add( aggr_streams_ints );
     suite_add( aggr_streams_recs );
 }
