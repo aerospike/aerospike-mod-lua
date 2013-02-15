@@ -197,8 +197,8 @@ TEST_AGGR += aggr_udf
 
 .PHONY: test
 test: test-build
+	@$(TARGET_BIN)/test/types
 	@$(TARGET_BIN)/test/aggr
-	# @$(TARGET_BIN)/test/types
 
 
 .PHONY: test-build
