@@ -1,5 +1,6 @@
 #include "mod_lua_val.h"
 #include "mod_lua_map.h"
+#include "mod_lua_iterator.h"
 #include "mod_lua_reg.h"
 
 #include "as_val.h"
@@ -35,6 +36,8 @@ static int mod_lua_map_gc(lua_State * l) {
     mod_lua_freebox(l, 1, CLASS_NAME);
     return 0;
 }
+
+
 
 static int mod_lua_map_size(lua_State * l) {
     as_map *    map     = mod_lua_checkmap(l, 1);
@@ -132,11 +135,124 @@ static int mod_lua_map_tostring(lua_State * l) {
     return 1;
 }
 
+/**
+ * Generator for map.pairs()
+ */
+static int mod_lua_map_pairs_next(lua_State * l) {
+    as_iterator * iter  = mod_lua_toiterator(l, 1);
+    if ( iter && as_iterator_has_next(iter) ) {
+        as_pair * pair = (as_pair *) as_iterator_next(iter);
+        if ( pair ) {
+            mod_lua_pushval(l, pair->_1);
+            mod_lua_pushval(l, pair->_2);
+            return 2;
+        }
+    }
+    return 0;
+}
+
+/**
+ * USAGE:
+ *      for k,v in map.pairs(m) do
+ *      end
+ * USAGE:
+ *      for k,v in map.iterator(m) do
+ *      end
+ */
+static int mod_lua_map_pairs(lua_State * l) {
+    mod_lua_box *   box     = mod_lua_checkbox(l, 1, CLASS_NAME);
+    as_map *        map     = (as_map *) mod_lua_box_value(box);
+    if ( map ) {
+        as_iterator * iter = as_map_iterator_new(map);
+        if ( iter ) {
+            lua_pushcfunction(l, mod_lua_map_pairs_next);
+            mod_lua_pushiterator(l, iter);
+            return 2;
+        }
+    }
+
+    return 0;
+}
+
+/**
+ * Generator for map.keys()
+ */
+static int mod_lua_map_keys_next(lua_State * l) {
+    as_iterator * iter  = mod_lua_toiterator(l, 1);
+    if ( iter && as_iterator_has_next(iter) ) {
+        as_pair * pair = (as_pair *) as_iterator_next(iter);
+        if ( pair ) {
+            mod_lua_pushval(l, pair->_1);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/**
+ * USAGE:
+ *      for k in map.keys(m) do
+ *      end
+ */
+static int mod_lua_map_keys(lua_State * l) {
+    mod_lua_box *   box     = mod_lua_checkbox(l, 1, CLASS_NAME);
+    as_map *        map     = (as_map *) mod_lua_box_value(box);
+    if ( map ) {
+        as_iterator * iter = as_map_iterator_new(map);
+        if ( iter ) {
+            lua_pushcfunction(l, mod_lua_map_keys_next);
+            mod_lua_pushiterator(l, iter);
+            return 2;
+        }
+    }
+
+    return 0;
+}
+
+/**
+ * Generator for map.values()
+ */
+static int mod_lua_map_values_next(lua_State * l) {
+    as_iterator * iter  = mod_lua_toiterator(l, 1);
+    if ( iter && as_iterator_has_next(iter) ) {
+        as_pair * pair = (as_pair *) as_iterator_next(iter);
+        if ( pair ) {
+            mod_lua_pushval(l, pair->_2);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/**
+ * USAGE:
+ *      for v in map.values(m) do
+ *      end
+ */
+static int mod_lua_map_values(lua_State * l) {
+    mod_lua_box *   box     = mod_lua_checkbox(l, 1, CLASS_NAME);
+    as_map *        map     = (as_map *) mod_lua_box_value(box);
+    if ( map ) {
+        as_iterator * iter = as_map_iterator_new(map);
+        if ( iter ) {
+            lua_pushcfunction(l, mod_lua_map_values_next);
+            mod_lua_pushiterator(l, iter);
+            return 2;
+        }
+    }
+
+    return 0;
+}
+
 /******************************************************************************
  * OBJECT TABLE
  *****************************************************************************/
 
 static const luaL_reg object_table[] = {
+    {"iterator",        mod_lua_map_pairs},
+    {"pairs",           mod_lua_map_pairs},
+    {"keys",            mod_lua_map_keys},
+    {"values",          mod_lua_map_values},
     {"size",            mod_lua_map_size},
     {"tostring",        mod_lua_map_tostring},
     {0, 0}

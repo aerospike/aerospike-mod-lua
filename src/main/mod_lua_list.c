@@ -129,11 +129,16 @@ static int mod_lua_list_new(lua_State * l) {
     return 1;
 }
 
-static int mod_lua_list_iterator(lua_State * l) {
-    as_list * list  = mod_lua_checklist(l, 1);
-    mod_lua_pushiterator(l, as_list_iterator_new(list));
-    return 1;
-}
+// static int mod_lua_list_iterator(lua_State * l) {
+//     as_list * list  = mod_lua_checklist(l, 1);
+//     if ( list ) {
+//         mod_lua_pushiterator(l, as_list_iterator_new(list));
+//     }
+//     else {
+//         lua_pushnil(l);
+//     }
+//     return 1;
+// }
 
 static int mod_lua_list_index(lua_State * l) {
     mod_lua_box *   box     = mod_lua_checkbox(l, 1, CLASS_NAME);
@@ -200,6 +205,43 @@ static int mod_lua_list_tostring(lua_State * l) {
     
     return 1;
 }
+
+
+/**
+ * Generator for list.iterator()
+ */
+static int mod_lua_list_iterator_next(lua_State * l) {
+    as_iterator * iter  = mod_lua_toiterator(l, 1);
+    if ( iter && as_iterator_has_next(iter) ) {
+        as_val * val = as_iterator_next(iter);
+        if ( val ) {
+            mod_lua_pushval(l, val);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/**
+ * USAGE:
+ *      for v in list.iterator(m) do
+ *      end
+ */
+static int mod_lua_list_iterator(lua_State * l) {
+    mod_lua_box *   box     = mod_lua_checkbox(l, 1, CLASS_NAME);
+    as_list *       list    = (as_list *) mod_lua_box_value(box);
+    if ( list ) {
+        as_iterator * iter = as_list_iterator_new(list);
+        if ( iter ) {
+            lua_pushcfunction(l, mod_lua_list_iterator_next);
+            mod_lua_pushiterator(l, iter);
+            return 2;
+        }
+    }
+
+    return 0;
+}
+
 
 /******************************************************************************
  * OBJECT TABLE

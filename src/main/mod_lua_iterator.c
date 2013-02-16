@@ -1,7 +1,6 @@
 #include "mod_lua_val.h"
 #include "mod_lua_reg.h"
 #include "mod_lua_iterator.h"
-
 #include "as_val.h"
 #include "internal.h"
 
@@ -9,38 +8,35 @@
 #include <lauxlib.h>
 #include <lualib.h>
 
+/*******************************************************************************
+ * MACROS
+ ******************************************************************************/
+
 #define OBJECT_NAME "iterator"
 #define CLASS_NAME  "Iterator"
 
-/**
- * Read the item at index and convert to a iterator
- */
-as_iterator * mod_lua_toiterator(lua_State * l, int index) {
-    as_iterator * i = (as_iterator *) lua_touserdata(l, index);
-    if (i == NULL) luaL_typerror(l, index, CLASS_NAME);
-    return i;
+/*******************************************************************************
+ * FUNCTIONS
+ ******************************************************************************/
+
+ as_iterator * mod_lua_toiterator(lua_State * l, int index) {
+    mod_lua_box * box = mod_lua_tobox(l, index, CLASS_NAME);
+    return (as_iterator *) mod_lua_box_value(box);
 }
 
-/**
- * Push a iterator on to the lua stack
- */
 as_iterator * mod_lua_pushiterator(lua_State * l, as_iterator * i) {
-    as_iterator * li = (as_iterator *) lua_newuserdata(l, sizeof(as_iterator));
-    *li = *i;
-    luaL_getmetatable(l, CLASS_NAME);
-    lua_setmetatable(l, -2);
-    return li;
+    mod_lua_box * box = mod_lua_pushbox(l, i->is_malloc ? MOD_LUA_SCOPE_LUA : MOD_LUA_SCOPE_HOST, i, CLASS_NAME);
+    return (as_iterator *) mod_lua_box_value(box);
 }
 
-/**
- * Get the user iterator from the stack at index
- */
 static as_iterator * mod_lua_checkiterator(lua_State * l, int index) {
-    as_iterator * i = NULL;
-    luaL_checktype(l, index, LUA_TUSERDATA);
-    i = (as_iterator *) luaL_checkudata(l, index, CLASS_NAME);
-    if (i == NULL) luaL_typerror(l, index, CLASS_NAME);
-    return i;
+    mod_lua_box * box = mod_lua_checkbox(l, index, CLASS_NAME);
+    return (as_iterator *) mod_lua_box_value(box);
+}
+
+static int mod_lua_iterator_gc(lua_State * l) {
+    mod_lua_freebox(l, 1, CLASS_NAME);
+    return 0;
 }
 
 /**
@@ -68,18 +64,10 @@ static int mod_lua_iterator_next(lua_State * l) {
     return 1;
 }
 
-/**
- * Garbage collection 
- */
-static int mod_lua_iterator_gc(lua_State * l) {
-    // as_iterator * i = mod_lua_checkiterator(l, 1);
-    // as_iterator_free(i);
-    return 0;
-}
 
-/*******************************************************************************
- * ~~~ Object ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- ******************************************************************************/
+/******************************************************************************
+ * OBJECT TABLE
+ *****************************************************************************/
 
 static const luaL_reg object_table[] = {
     {"has_next",        mod_lua_iterator_has_next},
@@ -88,12 +76,13 @@ static const luaL_reg object_table[] = {
 };
 
 static const luaL_reg object_metatable[] = {
+    {"__call",          mod_lua_iterator_next},
     {0, 0}
 };
 
-/*******************************************************************************
- * ~~~ Class ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- ******************************************************************************/
+/******************************************************************************
+ * CLASS TABLE
+ *****************************************************************************/
 
 static const luaL_reg class_table[] = {
     {"has_next",        mod_lua_iterator_has_next},
@@ -106,9 +95,9 @@ static const luaL_reg class_metatable[] = {
     {0, 0}
 };
 
-/*******************************************************************************
- * ~~~ Register ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- ******************************************************************************/
+/******************************************************************************
+ * REGISTER
+ *****************************************************************************/
 
 int mod_lua_iterator_register(lua_State * l) {
     mod_lua_reg_object(l, OBJECT_NAME, object_table, object_metatable);
