@@ -11,9 +11,9 @@ MSGPACK_PATH = modules/msgpack
 endif
 
 ifeq ($(DOPROFILE), 1)
-CFLAGS = -O3
-else 
 CFLAGS = -O0
+else 
+CFLAGS = -O3
 endif
 
 CC_FLAGS = -g -std=gnu99 -Wall -Winline -fPIC 
