@@ -54,7 +54,32 @@ static const as_aerospike_hooks test_aerospike_hooks = {
  * TEST CASES
  *****************************************************************************/
 
-TEST( aggr_udf_1, "increment range (1-10)" ) {
+TEST( aggr_udf_1, "filter even numbers from range (1-10)" ) {
+ 
+    as_stream * istream = integer_stream_new(1,10);     
+
+    as_list * l = as_arraylist_new(100,0);
+    as_stream * ostream = list_stream_new(l);
+
+    as_list * arglist = as_arraylist_new(100,0);
+
+    int rc = as_module_apply_stream(&mod_lua, &as, "aggr", "even", istream, arglist, ostream);
+
+    assert_int_eq( rc, 0);
+    assert_int_eq( as_list_size(l), 5);
+
+
+    as_val * v = as_list_head(l);
+    assert_int_eq(as_integer_toint((as_integer *) v), 2);
+    
+    as_iterator * it = as_list_iterator_new(l);
+    while ( as_iterator_has_next(it) ) {
+        const as_val * v = as_iterator_next(it);
+        info("result: %s",as_val_tostring(v));
+    }
+}
+
+TEST( aggr_udf_2, "increment range (1-10)" ) {
  
     as_stream * istream = integer_stream_new(1,10);     
 
@@ -68,13 +93,18 @@ TEST( aggr_udf_1, "increment range (1-10)" ) {
     assert_int_eq( rc, 0);
     assert_int_eq( as_list_size(l), 10);
 
+
     as_val * v = as_list_head(l);
     assert_int_eq(as_integer_toint((as_integer *) v), 2);
     
-    info("result: %s",as_val_tostring(v));
+    as_iterator * it = as_list_iterator_new(l);
+    while ( as_iterator_has_next(it) ) {
+        const as_val * v = as_iterator_next(it);
+        info("result: %s",as_val_tostring(v));
+    }
 }
 
-TEST( aggr_udf_2, "sum range (1-1,000,000)" ) {
+TEST( aggr_udf_3, "sum range (1-1,000,000)" ) {
 
     as_stream * istream = integer_stream_new(1,1000*1000);
 
@@ -92,10 +122,14 @@ TEST( aggr_udf_2, "sum range (1-1,000,000)" ) {
     as_val * v = as_list_head(l);
     assert_int_eq(as_integer_toint((as_integer *) v), 500000500000);
 
-    info("result: %s",as_val_tostring(v));
+    as_iterator * it = as_list_iterator_new(l);
+    while ( as_iterator_has_next(it) ) {
+        const as_val * v = as_iterator_next(it);
+        info("result: %s",as_val_tostring(v));
+    }
 }
 
-TEST( aggr_udf_3, "product range (1-10)" ) {
+TEST( aggr_udf_4, "product range (1-10)" ) {
  
     as_stream * istream = integer_stream_new(1,10);     
 
@@ -113,10 +147,14 @@ TEST( aggr_udf_3, "product range (1-10)" ) {
     as_val * v = as_list_head(l);
     assert_int_eq(as_integer_toint((as_integer *) v), 3628800);
 
-    info("result: %s",as_val_tostring(v));
+    as_iterator * it = as_list_iterator_new(l);
+    while ( as_iterator_has_next(it) ) {
+        const as_val * v = as_iterator_next(it);
+        info("result: %s",as_val_tostring(v));
+    }
 }
 
-TEST( aggr_udf_4, "campaign rollup w/ map & reduce" ) {
+TEST( aggr_udf_5, "campaign rollup w/ map & reduce" ) {
  
     as_stream * istream = rec_stream_new(100);  
 
@@ -147,11 +185,15 @@ TEST( aggr_udf_4, "campaign rollup w/ map & reduce" ) {
     assert_int_eq(as_integer_toint((as_integer *) as_map_get(v, (as_val *) as_integer_init(&i, 8))), 5070);
     assert_int_eq(as_integer_toint((as_integer *) as_map_get(v, (as_val *) as_integer_init(&i, 9))), 5260);
 
-    info("result: %s",as_val_tostring(v));
+    as_iterator * it = as_list_iterator_new(l);
+    while ( as_iterator_has_next(it) ) {
+        const as_val * v = as_iterator_next(it);
+        info("result: %s",as_val_tostring(v));
+    }
 }
 
 
-TEST( aggr_udf_5, "campaign rollup w/ aggregate" ) {
+TEST( aggr_udf_6, "campaign rollup w/ aggregate" ) {
  
     as_stream * istream = rec_stream_new(100);  
 
@@ -217,4 +259,5 @@ SUITE( aggr_udf, "aggregate udf" ) {
     suite_add( aggr_udf_3 );
     suite_add( aggr_udf_4 );
     suite_add( aggr_udf_5 );
+    suite_add( aggr_udf_6 );
 }

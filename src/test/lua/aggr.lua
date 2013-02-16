@@ -1,4 +1,13 @@
 
+function even(s)
+    
+    local function _even(a)
+        return a % 2 == 0
+    end
+
+    return s : filter(_even)
+end
+
 function increment(s)
     
     local function _map(a)
@@ -8,24 +17,12 @@ function increment(s)
     return s : map(_map)
 end
 
-
 function sum(s)
-
-    local function _reduce(a, b)
-        return a + b
-    end
-
-    return s : reduce(_reduce)
+    return s : reduce(math.sum)
 end
 
-
 function product(s)
-    
-    local function _reduce(a, b)
-        return a * b
-    end
-
-    return s : reduce(_reduce)
+    return s : reduce(math.product)
 end
 
 function rollup(s)

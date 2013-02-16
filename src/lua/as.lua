@@ -65,3 +65,11 @@ end
 function math.sum(a,b) 
     return a + b
 end
+
+
+--
+-- Product of two values
+-- 
+function math.product(a, b)
+    return a * b
+end
