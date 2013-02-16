@@ -37,7 +37,7 @@ static int test_log(const as_aerospike * as, const char * file, const int line, 
             strncpy(l,"TRACE",10);
             break;
     }
-    atf_log(stderr, l, "[TEST] >> ", file, line, msg);
+    atf_log_line(stderr, l, ATF_LOG_PREFIX, file, line, msg);
     return 0;
 }
 
