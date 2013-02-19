@@ -225,15 +225,15 @@ $(TARGET_OBJ)/test/%.o: $(SOURCE_TEST)/%.c
 test/types: $(TARGET_BIN)/test/types
 $(TARGET_BIN)/test/types: CFLAGS = $(TEST_CFLAGS)
 $(TARGET_BIN)/test/types: LDFLAGS += $(TEST_LDFLAGS)
-$(TARGET_BIN)/test/types: $(TEST_TYPES:%=$(TARGET_OBJ)/test/types/%.o) $(TARGET_OBJ)/test/test.o $(TARGET_OBJ)/*.o | modules build prepare
-	$(executable)  $(TEST_DEPS)
+$(TARGET_BIN)/test/types: $(TEST_TYPES:%=$(TARGET_OBJ)/test/types/%.o) $(TARGET_OBJ)/test/test.o | modules build prepare
+	$(executable)  $(TARGET_OBJ)/*.o $(TEST_DEPS)
 
 .PHONY: test/aggr
 test/aggr: $(TARGET_BIN)/test/aggr
 $(TARGET_BIN)/test/aggr: CFLAGS = $(TEST_CFLAGS)
 $(TARGET_BIN)/test/aggr: LDFLAGS += $(TEST_LDFLAGS)
-$(TARGET_BIN)/test/aggr: $(TEST_AGGR:%=$(TARGET_OBJ)/test/aggr/%.o) $(TARGET_OBJ)/test/test.o $(TARGET_OBJ)/*.o | modules build prepare
-	$(executable)  $(TEST_DEPS)
+$(TARGET_BIN)/test/aggr: $(TEST_AGGR:%=$(TARGET_OBJ)/test/aggr/%.o) $(TARGET_OBJ)/test/test.o | modules build prepare
+	$(executable)  $(TARGET_OBJ)/*.o $(TEST_DEPS)
 
 
 

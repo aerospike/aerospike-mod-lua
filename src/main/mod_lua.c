@@ -775,14 +775,7 @@ static int apply_stream(as_module * m, as_aerospike * as, const char * filename,
     // push error handler
     lua_pushcfunction(l, handle_error);
     err = lua_gettop(l);
-
-    // load stream.lua
-    // LOG("apply_stream: load stream.lua");
-    // lua_getglobal(l, "require");
-    // lua_pushstring(l, "stream_ops");
-    // lua_call(l, 1, 1);
-
-
+    
     // push aerospike into the global scope
     LOG("apply_stream: push aerospike into the global scope");
     mod_lua_pushaerospike(l, as);

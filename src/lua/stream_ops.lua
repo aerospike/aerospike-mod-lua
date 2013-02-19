@@ -1,3 +1,4 @@
+require('as')
 
 local function check_limit(v)
     return type(v) == 'number' and v >= 1000
@@ -30,7 +31,11 @@ local function clone(v)
     elseif t == 'table' then
         return clone_table(v)
     elseif t == 'userdata' then
-        local mt = getmetatable(v)
+        if v.__index == Map then
+            return map.clone(v)
+        elseif v.__index == List then
+            return list.clone(v)
+        end
         return nil
     end
 
@@ -167,7 +172,7 @@ end
 --
 -- as_stream iterator
 --
-function iterator(s)
+function stream_iterator(s)
     local done = false
     return function()
         if done then return nil end
@@ -191,6 +196,18 @@ end
 StreamOps = {}
 StreamOps_mt = { __index = StreamOps }
 
+-- Op only executes on server
+local SCOPE_SERVER = 1
+
+-- Op only executes on client
+local SCOPE_CLIENT = 2
+
+-- Op can execute on either client or server
+local SCOPE_EITHER = 3
+
+-- Op executes on both client and server
+local SCOPE_BOTH = 4
+
 --
 -- Creates a new StreamOps using an array of ops
 -- 
@@ -203,29 +220,59 @@ function StreamOps_create()
     return self
 end
 
-function StreamOps_apply(stream, stream_ops, scope, i, n)
+function StreamOps_apply(stream, ops, i, n)
     
     -- if nil, then use default values
     scope = scope or 3
     i = i or 1
-    n = n or #(stream_ops.ops)
+    n = n or #ops
     
     -- if index in list > size of list, then return the stream
     if i > n then return stream end
     
     -- get the current operation
-    local op = stream_ops.ops[i]
+    local op = ops[i]
     
-    -- the following needs to be replaced.
-    -- essentially, the server scope should be first then the client scope.
-    -- While getting the server scoped ops, we should quit when we encounter the 
-    -- first client scoped op.
-    if op.scope == scope or op.scope == 3 then
-        local s = op.func(stream, unpack(op.args)) or stream
-        return StreamOps_apply(s, stream_ops, scope, i + 1, n)
+    -- apply the operation and get a stream or use provided stream
+    local s = op.func(stream, unpack(op.args)) or stream
+
+    -- move to the next operation
+    return StreamOps_apply(s, ops, i + 1, n)
+end
+
+
+--
+-- This selects the operations appropriate for a given scope.
+-- For the SERVER scope, it will select the first n ops until one of the ops
+-- is a CLIENT scope op.
+-- For the CLIENT scope, it will skip the first n ops that are SERVER scope 
+-- ops, then it will take the remaining ops, including SERVER scoped ops.
+--
+function StreamOps_select(stream_ops, scope)
+    local server_ops = {}
+    local client_ops = {}
+    
+    local phase = SCOPE_SERVER
+    for i,op in ipairs(stream_ops) do
+        if phase == SCOPE_SERVER then
+            if op.scope == SCOPE_SERVER then
+                table.insert(server_ops, op)
+            elseif op.scope == SCOPE_EITHER then
+                table.insert(server_ops, op)
+            elseif op.scope == SCOPE_BOTH then
+                table.insert(server_ops, op)
+                table.insert(client_ops, op)
+                phase = SCOPE_CLIENT
+            end
+        elseif phase == SCOPE_CLIENT then
+            table.insert(client_ops, op)
+        end 
+    end
+
+    if scope == SCOPE_CLIENT then
+        return client_ops
     else
-        local s = stream
-        return StreamOps_apply(s, stream_ops, scope, i + 1, n)
+        return server_ops
     end
 end
 
@@ -234,28 +281,29 @@ end
 -- 
 -- OPS: [ OP, ... ]
 -- OP: {scope=SCOPE, name=NAME, func=FUNC, args=ARGS}
--- SCOPE: SERVER(1) | CLIENT(2) | BOTH(3)
+-- SCOPE: ANY(0) | SERVER(1) | CLIENT(2) | 
 -- NAME: FUNCTION NAME
 -- FUNC: FUNCTION POINTER
 -- ARGS: ARRAY OF ARGUMENTS
 --
 
+
 function StreamOps:aggregate(...)
-    table.insert(self.ops, { scope = 1, name = "aggregate", func = aggregate, args = {...}})
+    table.insert(self.ops, { scope = SCOPE_SERVER, name = "aggregate", func = aggregate, args = {...}})
     return self
 end
 
 function StreamOps:reduce(...)
-    table.insert(self.ops, { scope = 3, name = "reduce", func = reduce, args = {...}})
+    table.insert(self.ops, { scope = SCOPE_BOTH, name = "reduce", func = reduce, args = {...}})
     return self
 end
 
 function StreamOps:map(...)
-    table.insert(self.ops, { scope = 3, name = "map", func = transform, args = {...}})
+    table.insert(self.ops, { scope = SCOPE_EITHER, name = "map", func = transform, args = {...}})
     return self
 end
 
 function StreamOps:filter(...)
-    table.insert(self.ops, { scope = 3, name = "filter", func = filter, args = {...}})
+    table.insert(self.ops, { scope = SCOPE_EITHER, name = "filter", func = filter, args = {...}})
     return self
 end
