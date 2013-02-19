@@ -109,8 +109,6 @@ function apply_record(f, r, ...)
         error("function not found", 2)
     end
 
-    setfenv(f,env_record())
-
     if not sandboxed[f] then
         setfenv(f,env_record())
         sandboxed[f] = true
@@ -208,12 +206,10 @@ function apply_stream(f, scope, istream, ostream, ...)
     
     require("stream_ops")
 
-    setfenv(f,env_stream())
-    
-    -- if not sandboxed[f] then
-    --     setfenv(f,env_stream())
-    --     sandboxed[f] = true
-    -- end
+    if not sandboxed[f] then
+        setfenv(f,env_stream())
+        sandboxed[f] = true
+    end
 
     local ops = StreamOps_create();
     
