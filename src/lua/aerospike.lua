@@ -211,9 +211,9 @@ function apply_stream(f, scope, istream, ostream, ...)
         sandboxed[f] = true
     end
 
-    local ops = StreamOps_create();
+    local stream_ops = StreamOps_create();
     
-    success, result = pcall(f, ops, ...)
+    success, result = pcall(f, stream_ops, ...)
 
     -- info("apply_stream: success=%s, result=%s", tostring(success), tostring(result))
 

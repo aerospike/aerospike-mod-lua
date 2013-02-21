@@ -17,8 +17,12 @@ function increment(s)
     return s : map(_map)
 end
 
+local function add(a,b)
+    return a + b;
+end
+
 function sum(s)
-    return s : reduce(math.sum)
+    return s : reduce(add)
 end
 
 function product(s)
