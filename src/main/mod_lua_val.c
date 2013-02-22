@@ -46,6 +46,7 @@ as_val * mod_lua_toval(lua_State * l, int i) {
                     case AS_BOOLEAN: 
                     case AS_INTEGER: 
                     case AS_STRING: 
+                    case AS_BYTES:
                     case AS_LIST:
                     case AS_MAP:
                     case AS_REC:
@@ -98,6 +99,11 @@ int mod_lua_pushval(lua_State * l, const as_val * v) {
         }
         case AS_STRING: {
             lua_pushstring(l, as_string_tostring((as_string *) v) );
+            return 1;   
+        }
+        case AS_BYTES: {
+            lua_pushlstring(l, as_bytes_tobytes((as_bytes *) v), 
+                as_bytes_len((as_bytes *)v) );
             return 1;   
         }
         case AS_LIST: {

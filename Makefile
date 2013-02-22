@@ -45,6 +45,7 @@ AS_TYPES += as_nil.o
 AS_TYPES += as_boolean.o
 AS_TYPES += as_integer.o
 AS_TYPES += as_string.o
+AS_TYPES += as_bytes.o
 AS_TYPES += as_list.o
 AS_TYPES += as_map.o
 AS_TYPES += as_rec.o
