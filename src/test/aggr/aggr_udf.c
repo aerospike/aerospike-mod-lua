@@ -37,7 +37,7 @@ static int test_log(const as_aerospike * as, const char * file, const int line, 
             strncpy(l,"TRACE",10);
             break;
     }
-    atf_log(stderr, l, "[TEST] >> ", file, line, msg);
+    atf_log_line(stderr, l, ATF_LOG_PREFIX, file, line, msg);
     return 0;
 }
 
@@ -54,7 +54,7 @@ static const as_aerospike_hooks test_aerospike_hooks = {
  * TEST CASES
  *****************************************************************************/
 
-TEST( aggr_udf_1, "increment range (1-10)" ) {
+TEST( aggr_udf_1, "filter even numbers from range (1-10)" ) {
  
     as_stream * istream = integer_stream_new(1,10);     
 
@@ -63,39 +63,73 @@ TEST( aggr_udf_1, "increment range (1-10)" ) {
 
     as_list * arglist = as_arraylist_new(100,0);
 
-    int rc = as_module_apply_stream(&mod_lua, &as, "aggregations", "increment", istream, arglist, ostream);
+    int rc = as_module_apply_stream(&mod_lua, &as, "aggr", "even", istream, arglist, ostream);
 
     assert_int_eq( rc, 0);
-    assert_int_eq( as_list_size(l), 10);
+    assert_int_eq( as_list_size(l), 5);
+
 
     as_val * v = as_list_head(l);
     assert_int_eq(as_integer_toint((as_integer *) v), 2);
     
-    info("result: %s",as_val_tostring(v));
+    as_iterator * it = as_list_iterator_new(l);
+    while ( as_iterator_has_next(it) ) {
+        const as_val * v = as_iterator_next(it);
+        info("result: %s",as_val_tostring(v));
+    }
 }
 
-TEST( aggr_udf_2, "sum range (1-100)" ) {
+TEST( aggr_udf_2, "increment range (1-10)" ) {
+ 
+    as_stream * istream = integer_stream_new(1,10);     
 
-    as_stream * istream = integer_stream_new(1,100);
+    as_list * l = as_arraylist_new(100,0);
+    as_stream * ostream = list_stream_new(l);
+
+    as_list * arglist = as_arraylist_new(100,0);
+
+    int rc = as_module_apply_stream(&mod_lua, &as, "aggr", "increment", istream, arglist, ostream);
+
+    assert_int_eq( rc, 0);
+    assert_int_eq( as_list_size(l), 10);
+
+
+    as_val * v = as_list_head(l);
+    assert_int_eq(as_integer_toint((as_integer *) v), 2);
+    
+    as_iterator * it = as_list_iterator_new(l);
+    while ( as_iterator_has_next(it) ) {
+        const as_val * v = as_iterator_next(it);
+        info("result: %s",as_val_tostring(v));
+    }
+}
+
+TEST( aggr_udf_3, "sum range (1-1,000,000)" ) {
+
+    as_stream * istream = integer_stream_new(1,1000*1000);
 
     as_list * l = as_arraylist_new(1,1);
     as_stream * ostream = list_stream_new(l);
 
     as_list * arglist = as_arraylist_new(100,0);
 
-    int rc = as_module_apply_stream(&mod_lua, &as, "aggregations", "sum", istream, arglist, ostream);
+    int rc = as_module_apply_stream(&mod_lua, &as, "aggr", "sum", istream, arglist, ostream);
 
     assert_int_eq( rc, 0);
 
     assert_int_eq( as_list_size(l), 1);
 
     as_val * v = as_list_head(l);
-    assert_int_eq(as_integer_toint((as_integer *) v), 5050);
+    assert_int_eq(as_integer_toint((as_integer *) v), 500000500000);
 
-    info("result: %s",as_val_tostring(v));
+    as_iterator * it = as_list_iterator_new(l);
+    while ( as_iterator_has_next(it) ) {
+        const as_val * v = as_iterator_next(it);
+        info("result: %s",as_val_tostring(v));
+    }
 }
 
-TEST( aggr_udf_3, "product range (1-10)" ) {
+TEST( aggr_udf_4, "product range (1-10)" ) {
  
     as_stream * istream = integer_stream_new(1,10);     
 
@@ -104,7 +138,7 @@ TEST( aggr_udf_3, "product range (1-10)" ) {
 
     as_list * arglist = as_arraylist_new(100,0);
 
-    int rc = as_module_apply_stream(&mod_lua, &as, "aggregations", "product", istream, arglist, ostream);
+    int rc = as_module_apply_stream(&mod_lua, &as, "aggr", "product", istream, arglist, ostream);
 
     assert_int_eq( rc, 0);
     assert_int_eq( as_list_size(l), 1);
@@ -113,34 +147,84 @@ TEST( aggr_udf_3, "product range (1-10)" ) {
     as_val * v = as_list_head(l);
     assert_int_eq(as_integer_toint((as_integer *) v), 3628800);
 
-    info("result: %s",as_val_tostring(v));
+    as_iterator * it = as_list_iterator_new(l);
+    while ( as_iterator_has_next(it) ) {
+        const as_val * v = as_iterator_next(it);
+        info("result: %s",as_val_tostring(v));
+    }
 }
 
-TEST( aggr_udf_4, "campaign rollup" ) {
+TEST( aggr_udf_5, "campaign rollup w/ map & reduce" ) {
  
-    as_stream * istream = rec_stream_new(10);
-    // as_stream * istream = integer_stream_new(1,10);     
+    as_stream * istream = rec_stream_new(100);  
 
     as_list * l = as_arraylist_new(100,0);
     as_stream * ostream = list_stream_new(l);
 
     as_list * arglist = as_arraylist_new(100,100);
 
-    int rc = as_module_apply_stream(&mod_lua, &as, "aggregations", "rollup", istream, arglist, ostream);
+    int rc = as_module_apply_stream(&mod_lua, &as, "aggr", "rollup", istream, arglist, ostream);
 
     assert_int_eq( rc, 0);
     assert_int_eq( as_list_size(l), 1);
 
 
     as_map * v = (as_map *) as_list_head(l);
-    assert_int_eq(as_map_size(v), 1);
+    assert_int_eq(as_map_size(v), 10);
+    
+    as_integer i;
+
+    assert_int_eq(as_integer_toint((as_integer *) as_map_get(v, (as_val *) as_integer_init(&i, 0))), 5450);
+    assert_int_eq(as_integer_toint((as_integer *) as_map_get(v, (as_val *) as_integer_init(&i, 1))), 4740);
+    assert_int_eq(as_integer_toint((as_integer *) as_map_get(v, (as_val *) as_integer_init(&i, 2))), 4930);
+    assert_int_eq(as_integer_toint((as_integer *) as_map_get(v, (as_val *) as_integer_init(&i, 3))), 5120);
+    assert_int_eq(as_integer_toint((as_integer *) as_map_get(v, (as_val *) as_integer_init(&i, 4))), 4310);
+    assert_int_eq(as_integer_toint((as_integer *) as_map_get(v, (as_val *) as_integer_init(&i, 5))), 5500);
+    assert_int_eq(as_integer_toint((as_integer *) as_map_get(v, (as_val *) as_integer_init(&i, 6))), 4690);
+    assert_int_eq(as_integer_toint((as_integer *) as_map_get(v, (as_val *) as_integer_init(&i, 7))), 4880);
+    assert_int_eq(as_integer_toint((as_integer *) as_map_get(v, (as_val *) as_integer_init(&i, 8))), 5070);
+    assert_int_eq(as_integer_toint((as_integer *) as_map_get(v, (as_val *) as_integer_init(&i, 9))), 5260);
+
+    as_iterator * it = as_list_iterator_new(l);
+    while ( as_iterator_has_next(it) ) {
+        const as_val * v = as_iterator_next(it);
+        info("result: %s",as_val_tostring(v));
+    }
+}
+
+
+TEST( aggr_udf_6, "campaign rollup w/ aggregate" ) {
+ 
+    as_stream * istream = rec_stream_new(100);  
+
+    as_list * l = as_arraylist_new(100,0);
+    as_stream * ostream = list_stream_new(l);
+
+    as_list * arglist = as_arraylist_new(100,100);
+
+    int rc = as_module_apply_stream(&mod_lua, &as, "aggr", "rollup2", istream, arglist, ostream);
+
+    assert_int_eq( rc, 0);
+    assert_int_eq( as_list_size(l), 1);
+
+
+    as_map * v = (as_map *) as_list_head(l);
+    assert_int_eq(as_map_size(v), 10);
+    
+    as_integer i;
+
+    assert_int_eq(as_integer_toint((as_integer *) as_map_get(v, (as_val *) as_integer_init(&i, 0))), 5450);
+    assert_int_eq(as_integer_toint((as_integer *) as_map_get(v, (as_val *) as_integer_init(&i, 1))), 4740);
+    assert_int_eq(as_integer_toint((as_integer *) as_map_get(v, (as_val *) as_integer_init(&i, 2))), 4930);
+    assert_int_eq(as_integer_toint((as_integer *) as_map_get(v, (as_val *) as_integer_init(&i, 3))), 5120);
+    assert_int_eq(as_integer_toint((as_integer *) as_map_get(v, (as_val *) as_integer_init(&i, 4))), 4310);
+    assert_int_eq(as_integer_toint((as_integer *) as_map_get(v, (as_val *) as_integer_init(&i, 5))), 5500);
+    assert_int_eq(as_integer_toint((as_integer *) as_map_get(v, (as_val *) as_integer_init(&i, 6))), 4690);
+    assert_int_eq(as_integer_toint((as_integer *) as_map_get(v, (as_val *) as_integer_init(&i, 7))), 4880);
+    assert_int_eq(as_integer_toint((as_integer *) as_map_get(v, (as_val *) as_integer_init(&i, 8))), 5070);
+    assert_int_eq(as_integer_toint((as_integer *) as_map_get(v, (as_val *) as_integer_init(&i, 9))), 5260);
 
     info("result: %s",as_val_tostring(v));
-
-    // info("result: %ld",as_integer_toint((as_integer *) v));
-
-    // as_map * m = as_list_head(l);
-    // assert_int_eq(as_integer_toint((as_integer *) v), 5050);
 }
 
 /******************************************************************************
@@ -174,4 +258,6 @@ SUITE( aggr_udf, "aggregate udf" ) {
     suite_add( aggr_udf_2 );
     suite_add( aggr_udf_3 );
     suite_add( aggr_udf_4 );
+    suite_add( aggr_udf_5 );
+    suite_add( aggr_udf_6 );
 }

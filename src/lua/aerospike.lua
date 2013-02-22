@@ -211,21 +211,24 @@ function apply_stream(f, scope, istream, ostream, ...)
         sandboxed[f] = true
     end
 
-    local ops = StreamOps_create();
+    local stream_ops = StreamOps_create();
     
-    success, result = pcall(f, ops, ...)
+    success, result = pcall(f, stream_ops, ...)
 
-    info("apply_stream: success=%s, result=%s", tostring(success), tostring(result))
+    -- info("apply_stream: success=%s, result=%s", tostring(success), tostring(result))
 
     if success then
 
+        local ops = StreamOps_select(result.ops, scope);
+
         -- Apply server operations to the stream
         -- result => a stream_ops object
-        local values = StreamOps_apply(iterator(istream), result, scope);
+        local values = StreamOps_apply(stream_iterator(istream), ops);
 
         -- Iterate the stream of values from the computation
         -- then pipe it to the ostream
         for value in values do
+            -- info("value = %s", tostring(value))
             stream.write(ostream, value)
         end
 
