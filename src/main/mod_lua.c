@@ -525,9 +525,11 @@ typedef struct {
  * Pushes arguments into the Lua stack.
  * We scope the arguments to Lua, so Lua is responsible for releasing them.
  */
-static void pushargs_foreach(as_val * val, void * context) {
+static bool pushargs_foreach(as_val * val, void * context) {
     pushargs_data * data = (pushargs_data *) context;
+    LOG("pusharg: %s", as_val_tostring(val));
     data->count += mod_lua_pushval(data->l, val);
+    return true;
 }
 
 /**
@@ -562,7 +564,7 @@ static int handle_panic(lua_State * l) {
 
 static int handle_error(lua_State * l) {
     const char * msg = luaL_optstring(l, 1, 0);
-    LOG("LUA: %s",msg);
+    LOG("Lua Runtime Error: %s", msg);
     // cf_warning(AS_SPROC, (char *) msg);
     return 0;
 }
@@ -805,7 +807,7 @@ static int apply_stream(as_module * m, as_aerospike * as, const char * filename,
     argc = pushargs(l, args); 
 
     // function + scope + istream + ostream + arglist
-    argc = 4 + 0;
+    argc = 4 + argc;
     
     // call apply_stream(f, s, ...)
     LOG("apply_stream: apply the function");

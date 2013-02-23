@@ -21,8 +21,15 @@ local function add(a,b)
     return a + b;
 end
 
+local function select(bin) 
+    return function (rec)
+        return rec[bin]
+    end
+end
+
 function sum(s)
-    return s : reduce(add)
+    -- info("sum()")
+    return s : map(select("b")) : reduce(add)
 end
 
 function product(s)
