@@ -9,6 +9,7 @@
 #include "mod_lua_val.h"
 #include "mod_lua_list.h"
 #include "mod_lua_map.h"
+#include "mod_lua_record.h"
 
 #include "as_val.h"
 #include "internal.h"
@@ -102,8 +103,7 @@ int mod_lua_pushval(lua_State * l, const as_val * v) {
             return 1;   
         }
         case AS_BYTES: {
-            lua_pushlstring(l, as_bytes_tobytes((as_bytes *) v), 
-                as_bytes_len((as_bytes *)v) );
+            lua_pushlstring(l, (const char *)as_bytes_tobytes((as_bytes *) v), as_bytes_len((as_bytes *)v) );
             return 1;   
         }
         case AS_LIST: {
