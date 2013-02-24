@@ -213,7 +213,7 @@ static int mod_lua_list_tostring(lua_State * l) {
 static int mod_lua_list_iterator_next(lua_State * l) {
     as_iterator * iter  = mod_lua_toiterator(l, 1);
     if ( iter && as_iterator_has_next(iter) ) {
-        as_val * val = as_iterator_next(iter);
+        const as_val * val = as_iterator_next(iter);
         if ( val ) {
             mod_lua_pushval(l, val);
             return 1;
