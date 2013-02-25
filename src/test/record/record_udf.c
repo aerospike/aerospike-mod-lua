@@ -34,10 +34,10 @@ TEST( record_udf_1, "echo bin a of {a = 123, b = 456 }" ) {
 
     int rc = as_module_apply_record(&mod_lua, &as, "records", "getbin", rec, arglist, res);
 
-    assert_int_eq( rc, 0);
+    assert_int_eq( rc, 0 );
     assert_true( res->is_success );
     assert_not_null( res->value );
-    assert_int_eq( as_integer_toint(res->value), 123 );
+    assert_int_eq( as_integer_toint((as_integer *) res->value), 123 );
 
     as_rec_destroy(rec);
     as_list_destroy(arglist);
@@ -61,7 +61,7 @@ TEST( record_udf_2, "concat bins a and b of {a = 'abc', b = 'def' }" ) {
     assert_int_eq( rc, 0);
     assert_true( res->is_success );
     assert_not_null( res->value );
-    assert_string_eq( as_string_tostring(res->value), "abcdef");
+    assert_string_eq( as_string_tostring((as_string *)res->value), "abcdef");
 
     as_rec_destroy(rec);
     as_list_destroy(arglist);
