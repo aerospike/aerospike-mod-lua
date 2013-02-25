@@ -28,8 +28,7 @@ local function select(bin)
 end
 
 function sum(s)
-    -- info("sum()")
-    return s : map(select("b")) : reduce(add)
+    return s : reduce(add)
 end
 
 function product(s)

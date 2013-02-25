@@ -184,29 +184,43 @@ TEST_DEPS += modules/common/$(TARGET_OBJ)/client/*.o
 TEST_DEPS += modules/common/$(TARGET_OBJ)/shared/*.o 
 TEST_DEPS += $(MSGPACK_PATH)/src/.libs/libmsgpackc.a
 
+TEST_TYPES = 
+TEST_TYPES += types/types_integer
+TEST_TYPES += types/types_string
+TEST_TYPES += types/types_bytes
+TEST_TYPES += types/types_arraylist
+TEST_TYPES += types/types_linkedlist
+TEST_TYPES += types/types_hashmap
 
-TEST_TYPES = types
-TEST_TYPES += types_integer
-TEST_TYPES += types_string
-TEST_TYPES += types_bytes
-TEST_TYPES += types_arraylist
-TEST_TYPES += types_linkedlist
-TEST_TYPES += types_hashmap
+TEST_STREAM = 
+TEST_STREAM += stream/stream_basics
+TEST_STREAM += stream/stream_udf
 
-TEST_AGGR = aggr
-TEST_AGGR += aggr_streams
-TEST_AGGR += aggr_udf
+TEST_RECORD = 
+# TEST_RECORD += record/record_basics
+TEST_RECORD += record/record_udf
 
+TEST_UTIL = 
+TEST_UTIL += util/consumer_stream
+TEST_UTIL += util/producer_stream
+TEST_UTIL += util/map_rec
+TEST_UTIL += util/test_aerospike
+
+TEST_MOD_LUA = mod_lua_test
+TEST_MOD_LUA += $(TEST_UTIL) 
+TEST_MOD_LUA += $(TEST_TYPES) 
+TEST_MOD_LUA += $(TEST_STREAM)
+TEST_MOD_LUA += $(TEST_RECORD) 
+
+
+#-----#
 
 .PHONY: test
 test: test-build
-	@$(TARGET_BIN)/test/types
-	@$(TARGET_BIN)/test/aggr
-
+	@$(TARGET_BIN)/test/mod_lua_test
 
 .PHONY: test-build
-test-build: test/aggr test/types
-# test-build: test/types
+test-build: test/mod_lua_test
 
 .PHONY: test-clean
 test-clean: 
@@ -224,24 +238,14 @@ $(TARGET_OBJ)/test/%.o: LDFLAGS += $(TEST_LDFLAGS)
 $(TARGET_OBJ)/test/%.o: $(SOURCE_TEST)/%.c
 	$(object)
 
-.PHONY: test/types
-test/types: $(TARGET_BIN)/test/types
-$(TARGET_BIN)/test/types: CFLAGS = $(TEST_CFLAGS)
-$(TARGET_BIN)/test/types: LDFLAGS += $(TEST_LDFLAGS)
-$(TARGET_BIN)/test/types: $(TEST_TYPES:%=$(TARGET_OBJ)/test/types/%.o) $(TARGET_OBJ)/test/test.o | modules build prepare
-	$(executable)  $(TARGET_OBJ)/*.o $(TEST_DEPS)
+.PHONY: test/mod_lua_test
+test/mod_lua_test: $(TARGET_BIN)/test/mod_lua_test
+$(TARGET_BIN)/test/mod_lua_test: CFLAGS = $(TEST_CFLAGS)
+$(TARGET_BIN)/test/mod_lua_test: LDFLAGS += $(TEST_LDFLAGS)
+$(TARGET_BIN)/test/mod_lua_test: $(TEST_MOD_LUA:%=$(TARGET_OBJ)/test/%.o) $(TARGET_OBJ)/test/test.o | modules build prepare
+	echo $(TEST_MOD_LUA)
+	$(executable) $(TARGET_OBJ)/*.o $(TEST_DEPS)
 
-.PHONY: test/aggr
-test/aggr: $(TARGET_BIN)/test/aggr
-$(TARGET_BIN)/test/aggr: CFLAGS = $(TEST_CFLAGS)
-$(TARGET_BIN)/test/aggr: LDFLAGS += $(TEST_LDFLAGS)
-$(TARGET_BIN)/test/aggr: $(TEST_AGGR:%=$(TARGET_OBJ)/test/aggr/%.o) $(TARGET_OBJ)/test/test.o | modules build prepare
-	$(executable)  $(TARGET_OBJ)/*.o $(TEST_DEPS)
-
-
-
-#PHONY: test
-#test: msgpack_test hashmap_test linkedlist_test arraylist_test record_udf
 
 ###############################################################################
 include project/rules.makefile
