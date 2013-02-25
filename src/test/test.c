@@ -109,6 +109,7 @@ atf_suite_result * atf_suite_result_new(atf_suite * suite) {
     atf_suite_result * res = (atf_suite_result *) malloc(sizeof(atf_suite_result));
     res->suite = suite;
     res->size = 0;
+    res->success = 0;
     return res;
 }
 
