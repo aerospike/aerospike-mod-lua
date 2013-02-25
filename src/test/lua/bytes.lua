@@ -1,4 +1,4 @@
-
+--[[
 function append(r,bin,...)
     local l = r[bin] or list()
 
@@ -95,7 +95,7 @@ function bprint(r,b)
     end
     return l;
 end
-
+]]
 function set(r,b,l)
     r[b] = l
     if aerospike:exists(r) then
@@ -121,10 +121,10 @@ function get(r,b)
     end
 end
 
-function newlist(r,a,b,c)
-    local l = list{a,b,c}
-    info("1 => %s",l[1] or "<nil>")
-    info("2 => %s",l[2] or "<nil>")
-    info("3 => %s", l[3] or "<nil>")
+function newbytes(r,a,b,c)
+    local b = bytes{1,2,3}
+    info("1 => %s",b[1] or "<nil>")
+    info("2 => %s",b[2] or "<nil>")
+    info("3 => %s",b[3] or "<nil>")
     return l[2]
 end

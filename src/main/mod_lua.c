@@ -10,6 +10,7 @@
 #include "mod_lua_stream.h"
 #include "mod_lua_list.h"
 #include "mod_lua_map.h"
+#include "mod_lua_bytes.h"
 #include "mod_lua_val.h"
 
 #include "as_aerospike.h"
@@ -405,6 +406,7 @@ static lua_State * create_state(context * ctx, const char * filename) {
     mod_lua_stream_register(l);
     mod_lua_list_register(l);
     mod_lua_map_register(l);
+    mod_lua_bytes_register(l);
 
     lua_getglobal(l, "require");
     lua_pushstring(l, "aerospike");
