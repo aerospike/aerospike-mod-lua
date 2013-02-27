@@ -10,6 +10,7 @@
 #include "mod_lua_stream.h"
 #include "mod_lua_list.h"
 #include "mod_lua_map.h"
+#include "mod_lua_bytes.h"
 #include "mod_lua_val.h"
 
 #include "as_aerospike.h"
@@ -87,11 +88,13 @@ static struct context_s {
     char        system_path[256];
     char        user_path[256];
     char        filename[256];
+    bool        server_mode;
     pthread_rwlock_t *lock;
 } lua = {
     .cache_enabled  = true,
     .system_path    = "",
     .user_path      = "",
+    .server_mode    = true
 };
 
 
@@ -102,7 +105,7 @@ static struct context_s {
 static int init(as_module *);
 static int configure(as_module *, void *);
 static int apply_record(as_module *, as_aerospike *, const char *, const char *, as_rec *, as_list *, as_result *);
-static int apply_stream(as_module *, as_aerospike *, const char *, const char *, as_stream *, as_list *, as_result *);
+static int apply_stream(as_module *, as_aerospike *, const char *, const char *, as_stream *, as_list *, as_stream *);
 
 static lua_State * create_state(context *, const char *filename);
 static int poll_state(context *, cache_item *);
@@ -208,7 +211,7 @@ int cache_init(context * ctx, const char *key, const char * gen) {
             cf_rc_releaseandfree(centry);
             return 1;
         } else {
-            LOG( "Added [%s:%p] \n", key, centry);
+            LOG( "[CACHE] Added [%s:%p]", key, centry);
         }
     } else { 
         cache_entry_init(ctx, centry, key, gen);
@@ -276,6 +279,7 @@ static int configure(as_module * m, void * config_op) {
     mod_lua_config *    cfg = op->config;
     DIR *               dir = NULL;
 
+    ctx->server_mode    = cfg->server_mode;
     ctx->cache_enabled  = cfg->cache_enabled;
     ctx->lock           = &cfg->lock;
 
@@ -402,6 +406,7 @@ static lua_State * create_state(context * ctx, const char * filename) {
     mod_lua_stream_register(l);
     mod_lua_list_register(l);
     mod_lua_map_register(l);
+    mod_lua_bytes_register(l);
 
     lua_getglobal(l, "require");
     lua_pushstring(l, "aerospike");
@@ -432,7 +437,7 @@ static int poll_state(context * ctx, cache_item * citem) {
             if (cf_queue_pop(centry->lua_state_q, &citem->state, CF_QUEUE_NOWAIT) != CF_QUEUE_EMPTY) {
                 strncpy(citem->key, centry->key, CACHE_ENTRY_KEY_MAX);
                 strncpy(citem->gen, centry->gen, CACHE_ENTRY_GEN_MAX);
-                LOG("[CACHE] took state: %s (%d)", citem->key, centry->size);
+                LOG("[CACHE] took state: %s (%d)", citem->key, centry->max_cache_size);
             } else {
                 miss = cf_atomic32_incr(&centry->cache_miss);
                 citem->state = NULL;
@@ -446,7 +451,7 @@ static int poll_state(context * ctx, cache_item * citem) {
             }
             cf_rc_releaseandfree(centry);
             centry = 0;
-			LOG("Cache Miss %d : Total %d \n", miss, total);
+			LOG("[CACHE] Miss %d : Total %d", miss, total);
         } else {
             centry = NULL;
         }
@@ -483,11 +488,11 @@ static int offer_state(context * ctx, cache_item * citem) {
         lua_gc(citem->state, LUA_GCSTEP, 2);
         cache_entry *centry = NULL;
         if (CF_RCHASH_OK == cf_rchash_get(centry_hash, (void *)citem->key, strlen(citem->key), (void *)&centry) ) {
-            LOG("[CACHE] found entry: %s (%d)", citem->key, centry->size);
+            LOG("[CACHE] found entry: %s (%d)", citem->key, centry->max_cache_size);
             if (( CF_Q_SZ(centry->lua_state_q) < centry->max_cache_size ) 
                 && ( !strncmp(centry->gen, citem->gen, CACHE_ENTRY_GEN_MAX) )) {
                 cf_queue_push(centry->lua_state_q, &citem->state);
-                LOG("[CACHE] returning state: %s (%d)", citem->key, centry->size);
+                LOG("[CACHE] returning state: %s (%d)", citem->key, centry->max_cache_size);
                 citem->state = NULL;
             }
             cf_rc_releaseandfree(centry);
@@ -522,9 +527,11 @@ typedef struct {
  * Pushes arguments into the Lua stack.
  * We scope the arguments to Lua, so Lua is responsible for releasing them.
  */
-static void pushargs_foreach(as_val * val, void * context) {
+static bool pushargs_foreach(as_val * val, void * context) {
     pushargs_data * data = (pushargs_data *) context;
+    LOG("pusharg: %s", as_val_tostring(val));
     data->count += mod_lua_pushval(data->l, val);
+    return true;
 }
 
 /**
@@ -557,29 +564,37 @@ static int handle_panic(lua_State * l) {
     return 0;
 }
 
-// static int handle_error(lua_State * l) {
-//     // const char * msg = luaL_optstring(l, 1, 0);
-//     // cf_warning(AS_SPROC, (char *) msg);
-//     return 0;
-// }
+static int handle_error(lua_State * l) {
+    const char * msg = luaL_optstring(l, 1, 0);
+    LOG("Lua Runtime Error: %s", msg);
+    // cf_warning(AS_SPROC, (char *) msg);
+    return 0;
+}
 
 static int apply(lua_State * l, int err, int argc, as_result * res) {
 
     LOG("apply");
 
     // call apply_record(f, r, ...)
-    LOG("call apply_record()");
+    LOG("call function");
     int rc = lua_pcall(l, argc, 1, err);
+
+    LOG("rc = %d", rc);
 
     // Convert the return value from a lua type to a val type
     LOG("convert lua type to val");
     as_val * rv = mod_lua_retval(l);
 
+
     if ( rc == 0 ) {
-        as_result_tosuccess(res, rv);
+        if ( res != NULL ) {
+            as_result_setsuccess(res, rv);
+        }
     }
     else {
-        as_result_tofailure(res, rv);
+        if ( res != NULL ) {
+            as_result_setfailure(res, rv);
+        }
     }
 
     // Pop the return value off the stack
@@ -631,11 +646,11 @@ static int verify_environment(context * ctx, as_aerospike * as) {
  */
 static int apply_record(as_module * m, as_aerospike * as, const char * filename, const char * function, as_rec * r, as_list * args, as_result * res) {
 
+    int         rc      = 0;
     context *   ctx     = (context *) m->source;    // mod-lua context
     lua_State * l       = (lua_State *) NULL;       // Lua State
     int         argc    = 0;                        // Number of arguments pushed onto the stack
     int         err     = 0;                        // Error handler
-    int         rc      = 0;
     
     pthread_rwlock_rdlock(ctx->lock);
     rc = verify_environment(ctx, as);
@@ -691,7 +706,7 @@ static int apply_record(as_module * m, as_aerospike * as, const char * filename,
     LOG("apply_record: push each argument onto the stack");
     argc = pushargs(l, args);
 
-    // function + stream + arglist
+    // function + record + arglist
     argc = argc + 2;
     
     // apply the function
@@ -724,14 +739,14 @@ static int apply_record(as_module * m, as_aerospike * as, const char * filename,
  * @param result pointer to a val that will be populated with the result.
  * @return 0 on success, otherwise 1
  */
-static int apply_stream(as_module * m, as_aerospike * as, const char * filename, const char * function, as_stream * s, as_list * args, as_result * res) {
+static int apply_stream(as_module * m, as_aerospike * as, const char * filename, const char * function, as_stream * istream, as_list * args, as_stream * ostream) {
 
+    int         rc      = 0;
     context *   ctx     = (context *) m->source;    // mod-lua context
     lua_State * l       = (lua_State *) NULL;   // Lua State
     int         argc    = 0;                    // Number of arguments pushed onto the stack
     int         err     = 0;                    // Error handler
-    int         rc      = 0;
-
+    
     pthread_rwlock_rdlock(ctx->lock);
     rc = verify_environment(ctx, as);
     if ( rc ) {
@@ -762,9 +777,9 @@ static int apply_stream(as_module * m, as_aerospike * as, const char * filename,
     l = citem.state;
 
     // push error handler
-    // lua_pushcfunction(l, handle_error);
-    // int err = lua_gettop(l);
-
+    lua_pushcfunction(l, handle_error);
+    err = lua_gettop(l);
+    
     // push aerospike into the global scope
     LOG("apply_stream: push aerospike into the global scope");
     mod_lua_pushaerospike(l, as);
@@ -779,19 +794,26 @@ static int apply_stream(as_module * m, as_aerospike * as, const char * filename,
     lua_getglobal(l, function);
 
     // push the stream onto the stack
-    LOG("apply_stream: push the stream iterator onto the stack");
-    mod_lua_pushstream(l, s);
+    LOG("apply_stream: push scope onto the stack");
+    lua_pushinteger(l, 1);
+
+    // push the stream onto the stack
+    LOG("apply_stream: push istream onto the stack");
+    mod_lua_pushstream(l, istream);
+
+    LOG("apply_stream: push ostream onto the stack");
+    mod_lua_pushstream(l, ostream);
 
     // push each argument onto the stack
     LOG("apply_stream: push each argument onto the stack");
     argc = pushargs(l, args); 
 
-    // function + stream + arglist
-    argc = argc + 2;
+    // function + scope + istream + ostream + arglist
+    argc = 4 + argc;
     
     // call apply_stream(f, s, ...)
     LOG("apply_stream: apply the function");
-    apply(l, err, argc, res);
+    apply(l, err, argc, NULL);
 
     // release the context
     pthread_rwlock_rdlock(ctx->lock);

@@ -30,19 +30,22 @@ as_string * as_string_new(char * s, bool is_malloc) {
 }
 
 void as_string_destroy(as_string * s) {
-    if ( s->value_is_malloc && s->value ) free(s->value);
+	as_val_val_destroy( (as_val *) s);
 }
 
 void as_string_val_destroy(as_val * v) {
-   as_string_destroy( (as_string *)v );
+	as_string *s = (as_string *) v;
+	if ( s->value_is_malloc && s->value ) free(s->value);
 }
 
 size_t as_string_len(as_string * s) {
-	if (s->len == SIZE_MAX) s->len = strlen(s->value);
+    if (s->value == NULL) return(0);
+	if (s->len == SIZE_MAX)     s->len = strlen(s->value);
 	return(s->len);
 }
 
 uint32_t as_string_hash(const as_string * s) {
+    if (s->value == NULL) return(0);
     uint32_t hash = 0;
     int c;
     char * str = s->value;
@@ -58,6 +61,7 @@ uint32_t as_string_val_hash(const as_val * v) {
 
 char * as_string_val_tostring(const as_val * v) {
     as_string * s = (as_string *) v;
+    if (s->value == NULL) return(NULL);
     size_t sl = as_string_len(s);
     size_t st = 3 + sl;
     char * str = (char *) malloc(sizeof(char) * st);

@@ -12,6 +12,7 @@
 static int as_msgpack_pack_boolean(msgpack_packer *, as_boolean *);
 static int as_msgpack_pack_integer(msgpack_packer *, as_integer *);
 static int as_msgpack_pack_string(msgpack_packer *, as_string *);
+static int as_msgpack_pack_bytes(msgpack_packer *, as_bytes *);
 static int as_msgpack_pack_list(msgpack_packer *, as_list *);
 static int as_msgpack_pack_map(msgpack_packer *, as_map *);
 static int as_msgpack_pack_rec(msgpack_packer *, as_rec *);
@@ -22,12 +23,13 @@ static int as_msgpack_pack_pair(msgpack_packer *, as_pair *);
 static int as_msgpack_boolean_to_val(bool, as_val **);
 static int as_msgpack_integer_to_val(int64_t, as_val **);
 static int as_msgpack_string_to_val(msgpack_object_raw *, as_val **);
+static int as_msgpack_bytes_to_val(msgpack_object_raw *, as_val **);
 static int as_msgpack_array_to_val(msgpack_object_array *, as_val **);
 static int as_msgpack_map_to_val(msgpack_object_map *, as_val **);
 
 // static int as_msgpack_object_to_val(msgpack_object *, as_val **);
 
-static int as_msgpack_destroy(as_serializer *);
+static void as_msgpack_destroy(as_serializer *);
 static int as_msgpack_serialize(as_serializer *, as_val *, as_buffer *);
 static int as_msgpack_deserialize(as_serializer *, as_buffer *, as_val **);
 
@@ -49,9 +51,10 @@ as_serializer * as_msgpack_new() {
     return as_serializer_new(NULL, &as_msgpack_serializer_hooks);
 }
 
-int as_msgpack_init(as_serializer * s) {
+as_serializer * as_msgpack_init(as_serializer * s)
+ {
     as_serializer_init(s, NULL, &as_msgpack_serializer_hooks);
-    return 0;
+    return s;
 }
 
 static int as_msgpack_pack_boolean(msgpack_packer * pk, as_boolean * b) {
@@ -66,6 +69,14 @@ static int as_msgpack_pack_string(msgpack_packer * pk, as_string * s) {
     int rc = msgpack_pack_raw(pk, as_string_len(s));
     if ( rc ) return rc;
     return msgpack_pack_raw_body(pk, as_string_tostring(s), as_string_len(s));
+}
+
+// TODO: BB -- how to differentiate in msgpack between string and bytes?
+// there is only "raw"?
+static int as_msgpack_pack_bytes(msgpack_packer * pk, as_bytes * b) {
+    int rc = msgpack_pack_raw(pk, as_bytes_len(b));
+    if ( rc ) return rc;
+    return msgpack_pack_raw_body(pk, as_bytes_tobytes(b), as_bytes_len(b));
 }
 
 static int as_msgpack_pack_list(msgpack_packer * pk, as_list * l) {
@@ -96,6 +107,7 @@ static int as_msgpack_pack_map(msgpack_packer * pk, as_map * m) {
     as_map_iterator_init(&i, m);
     while ( as_iterator_has_next(&i) ) {
         as_pair * p = (as_pair *) as_iterator_next(&i);
+
         if ( !p ) {
             rc = 2;
             break;
@@ -130,6 +142,7 @@ int as_msgpack_pack_val(msgpack_packer * pk, as_val * v) {
         case AS_BOOLEAN : return as_msgpack_pack_boolean(pk, (as_boolean *) v);
         case AS_INTEGER : return as_msgpack_pack_integer(pk, (as_integer *) v);
         case AS_STRING  : return as_msgpack_pack_string(pk, (as_string *) v);
+        case AS_BYTES   : return as_msgpack_pack_bytes(pk, (as_bytes *) v);
         case AS_LIST    : return as_msgpack_pack_list(pk, (as_list *) v);
         case AS_MAP     : return as_msgpack_pack_map(pk, (as_map *) v);
         case AS_REC     : return as_msgpack_pack_rec(pk, (as_rec *) v);
@@ -151,6 +164,13 @@ static int as_msgpack_integer_to_val(int64_t i, as_val ** v) {
 
 static int as_msgpack_string_to_val(msgpack_object_raw * r, as_val ** v) {
     *v = (as_val *) as_string_new(strndup(r->ptr, sizeof(char) * r->size), true /*ismalloc*/);
+    return 0;
+}
+
+static int as_msgpack_bytes_to_val(msgpack_object_raw * r, as_val ** v) {
+    uint8_t *b = malloc(r->size);
+    memcpy(b, r->ptr, r->size);
+    *v = (as_val *) as_bytes_new(b, r->size, true /*ismalloc*/);
     return 0;
 }
 
@@ -204,8 +224,8 @@ int as_msgpack_object_to_val(msgpack_object * object, as_val ** val) {
 }
 
 
-static int as_msgpack_destroy(as_serializer * s) {
-    return 0;
+static void as_msgpack_destroy(as_serializer * s) {
+    return;
 }
 
 static int as_msgpack_serialize(as_serializer * s, as_val * v, as_buffer * buff) {

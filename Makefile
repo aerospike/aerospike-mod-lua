@@ -11,9 +11,9 @@ MSGPACK_PATH = modules/msgpack
 endif
 
 ifeq ($(DOPROFILE), 1)
-CFLAGS = -O3
-else 
 CFLAGS = -O0
+else 
+CFLAGS = -O3
 endif
 
 CC_FLAGS = -g -std=gnu99 -Wall -Winline -fPIC 
@@ -45,6 +45,7 @@ AS_TYPES += as_nil.o
 AS_TYPES += as_boolean.o
 AS_TYPES += as_integer.o
 AS_TYPES += as_string.o
+AS_TYPES += as_bytes.o
 AS_TYPES += as_list.o
 AS_TYPES += as_map.o
 AS_TYPES += as_rec.o
@@ -69,6 +70,7 @@ MOD_LUA += mod_lua_record.o
 MOD_LUA += mod_lua_iterator.o
 MOD_LUA += mod_lua_list.o
 MOD_LUA += mod_lua_map.o
+MOD_LUA += mod_lua_bytes.o
 MOD_LUA += mod_lua_stream.o
 MOD_LUA += mod_lua_val.o
 MOD_LUA += mod_lua_config.o
@@ -171,6 +173,8 @@ modules/msgpack: modules/msgpack/src/.libs/libmsgpackc.a
 ##  TEST TARGETS                                                      		 ##
 ###############################################################################
 
+TEST_VALGRIND = --tool=memcheck --leak-check=yes --show-reachable=yes --num-callers=20 --track-fds=yes -v
+
 TEST_CFLAGS =  -DMEM_COUNT=1
 TEST_CFLAGS += -I$(TARGET_INCL)
 TEST_CFLAGS += -Imodules/common/$(TARGET_INCL)
@@ -178,43 +182,57 @@ TEST_CFLAGS += -Imodules/common/$(TARGET_INCL)
 TEST_LDFLAGS = -lssl -lcrypto -llua -lpthread -lm -lrt 
 
 TEST_DEPS =
-TEST_DEPS += $(TARGET_OBJ)/*.o 
 TEST_DEPS += modules/common/$(TARGET_OBJ)/client/*.o 
 TEST_DEPS += modules/common/$(TARGET_OBJ)/shared/*.o 
 TEST_DEPS += $(MSGPACK_PATH)/src/.libs/libmsgpackc.a
 
+#-----#
 
-TEST_TYPES = types
-TEST_TYPES += types_integer
-TEST_TYPES += types_string
-TEST_TYPES += types_arraylist
-TEST_TYPES += types_linkedlist
-TEST_TYPES += types_hashmap
+TEST_TYPES = 
+TEST_TYPES += types/types_integer
+TEST_TYPES += types/types_string
+TEST_TYPES += types/types_bytes
+TEST_TYPES += types/types_arraylist
+TEST_TYPES += types/types_linkedlist
+TEST_TYPES += types/types_hashmap
 
+TEST_STREAM = 
+TEST_STREAM += stream/stream_basics
+TEST_STREAM += stream/stream_udf
+
+TEST_RECORD = 
+# TEST_RECORD += record/record_basics
+TEST_RECORD += record/record_udf
+
+TEST_UTIL = 
+TEST_UTIL += util/consumer_stream
+TEST_UTIL += util/producer_stream
+TEST_UTIL += util/map_rec
+TEST_UTIL += util/test_aerospike
+
+TEST_MOD_LUA = mod_lua_test
+TEST_MOD_LUA += $(TEST_UTIL) 
+TEST_MOD_LUA += $(TEST_TYPES) 
+TEST_MOD_LUA += $(TEST_STREAM)
+TEST_MOD_LUA += $(TEST_RECORD) 
+
+#-----#
 
 .PHONY: test
 test: test-build
-	@$(TARGET_BIN)/test/types
+	@$(TARGET_BIN)/test/mod_lua_test
 
+.PHONY: test-valgrind
+test-valgrind: test-build
+	valgrind $(TEST_VALGRIND) $(TARGET_BIN)/test/mod_lua_test 1>&2 2>mod_lua_test-valgrind
 
 .PHONY: test-build
-test-build: test/types
+test-build: test/mod_lua_test
 
 .PHONY: test-clean
 test-clean: 
 	@rm -rf $(TARGET_BIN)/test
 	@rm -rf $(TARGET_OBJ)/test
-
-
-.PHONY: test/types
-test/types: $(TARGET_BIN)/test/types
-
-.PHONY: test/client
-test/client: $(TARGET_BIN)/test/client
-
-.PHONY: test/udf
-test/udf: $(TARGET_BIN)/test/udf
-
 
 $(TARGET_OBJ)/test/%/%.o: CFLAGS = $(TEST_CFLAGS)
 $(TARGET_OBJ)/test/%/%.o: LDFLAGS += $(TEST_LDFLAGS)
@@ -226,16 +244,12 @@ $(TARGET_OBJ)/test/%.o: LDFLAGS += $(TEST_LDFLAGS)
 $(TARGET_OBJ)/test/%.o: $(SOURCE_TEST)/%.c
 	$(object)
 
-.PHONY: test/types
-test/types: $(TARGET_BIN)/test/types
-$(TARGET_BIN)/test/types: CFLAGS = $(TEST_CFLAGS)
-$(TARGET_BIN)/test/types: LDFLAGS += $(TEST_LDFLAGS)
-$(TARGET_BIN)/test/types: $(TEST_TYPES:%=$(TARGET_OBJ)/test/types/%.o) $(TARGET_OBJ)/test/test.o $(TEST_DEPS) | prepare
-
-
-
-#PHONY: test
-#test: msgpack_test hashmap_test linkedlist_test arraylist_test record_udf
+.PHONY: test/mod_lua_test
+test/mod_lua_test: $(TARGET_BIN)/test/mod_lua_test
+$(TARGET_BIN)/test/mod_lua_test: CFLAGS = $(TEST_CFLAGS)
+$(TARGET_BIN)/test/mod_lua_test: LDFLAGS += $(TEST_LDFLAGS)
+$(TARGET_BIN)/test/mod_lua_test: $(TEST_MOD_LUA:%=$(TARGET_OBJ)/test/%.o) $(TARGET_OBJ)/test/test.o | modules build prepare
+	$(executable) $(TARGET_OBJ)/*.o $(TEST_DEPS)
 
 ###############################################################################
 include project/rules.makefile

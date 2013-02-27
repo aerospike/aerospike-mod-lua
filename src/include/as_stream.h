@@ -29,6 +29,7 @@ enum as_stream_status_e {
  * @field hooks the interface to the source
  */
 struct as_stream_s {
+    bool is_malloc;
     void * source;
     const as_stream_hooks * hooks;
 };
@@ -38,33 +39,21 @@ struct as_stream_s {
  * Provided functions that interface with the streams.
  */
 struct as_stream_hooks_s {
-    int (*destroy)(as_stream *);
-    as_val * (*read)(const as_stream *);
-    as_stream_status * (*write)(const as_stream *, const as_val *);
+    int                 (* destroy)(as_stream *);
+    as_val *            (* read)(const as_stream *);
+    as_stream_status    (* write)(const as_stream *, as_val *);
 };
-
-/******************************************************************************
- * FUNCTIONS
- ******************************************************************************/
-
-/**
- * Creates an iterator from the stream
- *
- * @param s the stream to create an iterator from
- * @return a new iterator
- */
-as_iterator * as_stream_iterator_new(as_stream *);
-
-as_iterator * as_stream_iterator_init(as_stream *, as_iterator *i);
 
 /******************************************************************************
  * INLINE FUNCTIONS
  ******************************************************************************/
 
-inline int as_stream_init(as_stream * s, void * source, const as_stream_hooks * hooks) {
+inline as_stream * as_stream_init(as_stream * s, void * source, const as_stream_hooks * hooks) {
+    if ( s == NULL ) return s;
+    s->is_malloc = false;
     s->source = source;
     s->hooks = hooks;
-    return 0;
+    return s;
 }
 
 /**
@@ -75,7 +64,9 @@ inline int as_stream_init(as_stream * s, void * source, const as_stream_hooks * 
  */
 inline as_stream * as_stream_new(void * source, const as_stream_hooks * hooks) {
     as_stream * s = (as_stream *) malloc(sizeof(as_stream));
-    as_stream_init(s, source, hooks);
+    s->is_malloc = true;
+    s->source = source;
+    s->hooks = hooks;
     return s;
 }
 
@@ -89,8 +80,8 @@ inline as_stream * as_stream_new(void * source, const as_stream_hooks * hooks) {
  */
 inline void as_stream_destroy(as_stream * s) {
     as_util_hook(destroy, 1, s);
+    if ( s && s->is_malloc) free(s);
 }
-
 /**
  * Get the source for the stream
  *
@@ -114,6 +105,16 @@ inline as_val * as_stream_read(const as_stream * s) {
 }
 
 /**
+ * Is the stream readable? Tests whether the stream has a read function.
+ *
+ * @param s the stream to test.
+ * @return true if the stream can be read from
+ */
+inline bool as_stream_readable(const as_stream * s) {
+    return s != NULL && s->hooks != NULL && s->hooks->read;
+}
+
+/**
  * Write a value to the stream
  *
  * Proxies to `s->hooks->write(s,v)`
@@ -122,8 +123,17 @@ inline as_val * as_stream_read(const as_stream * s) {
  * @param v the element to write to the stream.
  * @return AS_STREAM_OK on success, otherwise is failure.
  */
-inline as_stream_status * as_stream_write(const as_stream * s, const as_val * v) {
-    return as_util_hook(write, AS_STREAM_OK, s, v);
+inline as_stream_status as_stream_write(const as_stream * s, as_val * v) {
+    return as_util_hook(write, AS_STREAM_ERR, s, v);
 }
 
 
+/**
+ * Is the stream writable? Tests whether the stream has a write function.
+ *
+ * @param s the stream to test.
+ * @return true if the stream can be written to.
+ */
+inline bool as_stream_writable(const as_stream * s) {
+    return s != NULL && s->hooks != NULL && s->hooks->write;
+}

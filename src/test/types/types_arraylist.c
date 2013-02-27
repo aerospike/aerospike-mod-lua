@@ -11,6 +11,13 @@ TEST( types_arraylist_empty, "as_arraylist is empty" ) {
     as_list l;
     as_arraylist_init(&l,0,0);
     assert( as_list_size(&l) == 0 );
+    as_list_destroy(&l);
+}
+
+static void print_list(const char *msg, const as_list *l) {
+	char *s = as_val_tostring(l);
+	fprintf(stderr, "%s %s\n",msg,s);
+	free(s);
 }
 
 TEST( types_arraylist_cap10_blk0, "as_arraylist w/ capacity 10, block_size 0" ) {
@@ -57,6 +64,8 @@ TEST( types_arraylist_cap10_blk0, "as_arraylist w/ capacity 10, block_size 0" ) 
     assert( l.u.arraylist.size == as_list_size(&l));
     assert_int_eq( l.u.arraylist.size, 10);
     assert_int_eq( l.u.arraylist.capacity, 10);
+    
+    as_list_destroy(&l);
 
 }
 
@@ -101,6 +110,8 @@ TEST( types_arraylist_cap10_blk10, "as_arraylist w/ capacity 10, block_size 10" 
     assert( l.u.arraylist.size == as_list_size(&l));
     assert_int_eq( l.u.arraylist.size, 12);
     assert_int_eq( l.u.arraylist.capacity, 20);
+    
+    as_list_destroy(&l);
 
 }
 
@@ -133,14 +144,17 @@ TEST( types_arraylist_list, "as_arraylist w/ list ops" ) {
         assert_int_eq( l.u.arraylist.size, i );
         assert_int_eq( l.u.arraylist.capacity, 10);
     }
-
+    	
     as_list * t = as_list_take(&l, 5);
     assert_int_eq( as_list_size(t), 5 );
 
     as_integer * t_head = (as_integer *) as_list_head(t);
     as_integer * l_head = (as_integer *) as_list_head(&l);
 
-    assert( t_head->value == l_head->value );
+    assert( as_integer_toint(t_head) == as_integer_toint(l_head) );
+    
+    as_list_destroy(t);
+    t = 0;
 
     as_list * d = as_list_drop(&l, 5);
     assert_int_eq( as_list_size(d), 5 );
@@ -148,8 +162,10 @@ TEST( types_arraylist_list, "as_arraylist w/ list ops" ) {
     as_integer * d_0 = (as_integer *) as_list_get(d, 0);
     as_integer * l_5 = (as_integer *) as_list_get(&l, 5);
 
-    assert( d_0->value == l_5->value );
+    assert( as_integer_toint(d_0) == as_integer_toint(l_5) );
 
+    as_list_destroy(d);
+    
     as_list_destroy(&l);
 }
 

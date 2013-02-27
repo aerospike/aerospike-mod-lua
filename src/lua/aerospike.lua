@@ -1,4 +1,5 @@
 
+
 -- A table to track whether we had sandboxed a function
 local sandboxed = {}
 
@@ -31,9 +32,9 @@ end
 -- ############################################################################
 
 --
--- Creates a new environment for use in apply* functions
+-- Creates a new environment for use in apply_record functions
 --
-function env()
+function env_record()
     return {
 
         -- aerospike types
@@ -109,7 +110,7 @@ function apply_record(f, r, ...)
     end
 
     if not sandboxed[f] then
-        setfenv(f,env())
+        setfenv(f,env_record())
         sandboxed[f] = true
     end
 
@@ -123,26 +124,120 @@ function apply_record(f, r, ...)
 end
 
 --
+-- Creates a new environment for use in apply_stream functions
+-- Differences from env_record()
+--      - removed 'aerospike'
+--
+function env_stream()
+    return {
+
+        -- aerospike types
+        ["record"] = record,
+        ["iterator"] = iterator,
+        ["list"] = list,
+        ["map"] = map,
+        ["aerospike"] = aerospike,
+
+        -- logging functions
+        ["trace"] = trace,
+        ["debug"] = debug,
+        ["info"] = info,
+        ["warn"] = warn,
+        
+        -- standard lua functions
+        ["error"] = error,
+        ["getmetatable"] = getmetatable,
+        ["ipairs"] = ipairs,
+        ["load"] = load,
+        ["module"] = module,
+        ["next"] = next,
+        ["pairs"] = pairs,
+        ["print"] = print,
+        ["pcall"] = pcall,
+        ["rawequal"] = rawequal,
+        ["rawget"] = rawget,
+        ["rawset"] = rawset,
+        ["require"] = require,
+        ["require"] = require,
+        ["select"] = select,
+        ["setmetatable"] = setmetatable,
+        ["setfenv"] = setfenv,
+        ["tonumber"] = tonumber,
+        ["tostring"] = tostring,
+        ["type"] = type,
+        ["unpack"] = unpack,
+        ["xpcall"] = xpcall,
+
+        -- standard lua objects
+        ["math"] = math,
+        ["io"] = io,
+        ["os"] = {
+            ['clock'] = os.clock,
+            ['date'] = os.date,
+            ['difftime'] = os.difftime,
+            ['getenv'] = os.getenv,
+            ['setlocale'] = os.setlocale,
+            ['time'] = os.time,
+            ['tmpname'] = os.tmpname
+        },
+        ["package"] = package,
+        ["string"] = string,
+        ["table"] = table,
+
+        -- standard lua variables
+        ["_G"] = {}
+    }
+end
+
+--
 -- Apply function to an iterator and arguments.
 --
 -- @param f the fully-qualified name of the function.
 -- @param s the iterator to be applied to the function.
 -- @param ... additional arguments to be applied to the function.
--- @return result of the called function or nil.
+-- @return 0 on success, otherwise failure.
 -- 
+function apply_stream(f, scope, istream, ostream, ...)
 
-function apply_stream(f, s, ...)
-    
     if f == nil then
         error("function not found", 2)
+        return 2
+    end
+    
+    require("stream_ops")
+
+    if not sandboxed[f] then
+        setfenv(f,env_stream())
+        sandboxed[f] = true
     end
 
-    setfenv(f,env())
-    success, result = pcall(f, StreamOps_create(), ...)
+    local stream_ops = StreamOps_create();
+    
+    success, result = pcall(f, stream_ops, ...)
+
+    -- info("apply_stream: success=%s, result=%s", tostring(success), tostring(result))
+
     if success then
-        return (StreamOps_eval(s, result))[1]
+
+        local ops = StreamOps_select(result.ops, scope);
+
+        -- Apply server operations to the stream
+        -- result => a stream_ops object
+        local values = StreamOps_apply(stream_iterator(istream), ops);
+
+        -- Iterate the stream of values from the computation
+        -- then pipe it to the ostream
+        for value in values do
+            -- info("value = %s", tostring(value))
+            stream.write(ostream, value)
+        end
+
+        -- 0 is success
+        return 0
     else
         error(result, 2)
-        return nil
+        return 2
     end
 end
+
+

@@ -7,7 +7,15 @@
 #include "mod_lua_val.h"
 #include "mod_lua_reg.h"
 
+/*******************************************************************************
+ * MACROS
+ ******************************************************************************/
+
 #define CLASS_NAME "Aerospike"
+
+/*******************************************************************************
+ * FUNCTIONS
+ ******************************************************************************/
 
 /**
  * Read the item at index and convert to a aerospike
@@ -67,6 +75,29 @@ static int mod_lua_aerospike_rec_update(lua_State * l) {
 }
 
 /**
+ * aerospike.unique(record) => result<char *>
+ */
+static int mod_lua_aerospike_rec_unique(lua_State * l) {
+    as_aerospike *  a   = mod_lua_checkaerospike(l, 1);
+    as_rec *        r   = mod_lua_torecord(l, 2);
+    char *          rc  = as_aerospike_rec_unique(a, r);
+    lua_pushstring(l, rc);
+    return 1;
+}
+
+/**
+ * aerospike.get(digest) => result<record>
+ */
+static int mod_lua_aerospike_rec_get(lua_State * l) {
+    as_aerospike *  a      = mod_lua_checkaerospike(l, 1);
+    const char *    digest = lua_tostring(l, 2);
+    as_rec *        rc     = as_aerospike_rec_get(a, digest);
+    if (!rc) return 0;
+    mod_lua_pushrecord(l, rc);
+    return 1;
+}
+
+/**
  * aerospike.exists(record) => result<bool>
  */
 static int mod_lua_aerospike_rec_exists(lua_State * l) {
@@ -104,13 +135,15 @@ static int mod_lua_aerospike_log(lua_State * l) {
     return 0;
 }
 
-/*******************************************************************************
- * ~~~ Class ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- ******************************************************************************/
+/******************************************************************************
+ * CLASS TABLE
+ *****************************************************************************/
 
 static const luaL_reg class_table[] = {
     {"create",      mod_lua_aerospike_rec_create},
     {"update",      mod_lua_aerospike_rec_update},
+    {"unique",      mod_lua_aerospike_rec_unique},
+    {"get",         mod_lua_aerospike_rec_get},
     {"exists",      mod_lua_aerospike_rec_exists},
     {"remove",      mod_lua_aerospike_rec_remove},
     {"log",         mod_lua_aerospike_log},
@@ -122,9 +155,9 @@ static const luaL_reg class_metatable[] = {
     {0, 0}
 };
 
-/*******************************************************************************
- * ~~~ Register ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- ******************************************************************************/
+/******************************************************************************
+ * REGISTER
+ *****************************************************************************/
 
 int mod_lua_aerospike_register(lua_State * l) {
     mod_lua_reg_class(l, CLASS_NAME, class_table, class_metatable);

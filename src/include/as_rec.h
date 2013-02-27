@@ -51,7 +51,9 @@ extern const as_val as_rec_val;
 as_rec *  as_rec_init(as_rec *, void *, const as_rec_hooks *);
 as_rec *  as_rec_new(void *, const as_rec_hooks *);
 
+inline void	  as_rec_destroy(as_rec *);
 void      as_rec_val_destroy(as_val *);
+
 
 uint32_t  as_rec_val_hash(const as_val *v);
 char *    as_rec_val_tostring(const as_val *v);
@@ -70,11 +72,12 @@ inline uint32_t as_rec_hash(as_rec * r) {
 }
 
 inline void as_rec_destroy(as_rec *r) {
-    as_util_hook(destroy, 0, r);
+	as_val_val_destroy( (as_val *) r );
 }
 
 /**
  * Get a bin value by name.
+ * The return value must be destroyed or passed to another function
  *
  * Proxies to `r->hooks->get(r, name, value)`
  *
@@ -88,10 +91,11 @@ inline as_val * as_rec_get(const as_rec * r, const char * name) {
 
 /**
  * Set the value of a bin.
+ * This CONSUMES the reference on the value
  *
  * Proxies to `r->hooks->set(r, name, value)`
  *
- * @param r the as_rec to write the bin value to.
+ * @param r the as_rec to write the bin value to - CONSUMES REFERENCE
  * @param name the name of the bin.
  * @param value the value of the bin.
  */

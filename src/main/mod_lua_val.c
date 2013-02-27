@@ -9,6 +9,7 @@
 #include "mod_lua_val.h"
 #include "mod_lua_list.h"
 #include "mod_lua_map.h"
+#include "mod_lua_record.h"
 
 #include "as_val.h"
 #include "internal.h"
@@ -46,8 +47,10 @@ as_val * mod_lua_toval(lua_State * l, int i) {
                     case AS_BOOLEAN: 
                     case AS_INTEGER: 
                     case AS_STRING: 
+                    case AS_BYTES:
                     case AS_LIST:
                     case AS_MAP:
+                    case AS_REC:
                         switch (box->scope) {
                             case MOD_LUA_SCOPE_LUA:
                                 as_val_reserve(box->value);
@@ -81,6 +84,11 @@ as_val * mod_lua_toval(lua_State * l, int i) {
  * @returns number of values pushed
  */
 int mod_lua_pushval(lua_State * l, const as_val * v) {
+    if ( v == NULL ) {
+        lua_pushnil(l);
+        return 1;
+    }
+    
     switch( as_val_type(v) ) {
         case AS_BOOLEAN: {
             lua_pushboolean(l, as_boolean_tobool((as_boolean *) v) );
@@ -94,6 +102,10 @@ int mod_lua_pushval(lua_State * l, const as_val * v) {
             lua_pushstring(l, as_string_tostring((as_string *) v) );
             return 1;   
         }
+        case AS_BYTES: {
+            lua_pushlstring(l, (const char *)as_bytes_tobytes((as_bytes *) v), as_bytes_len((as_bytes *)v) );
+            return 1;   
+        }
         case AS_LIST: {
             as_val_reserve(v);
             mod_lua_pushlist(l, (as_list *) v);
@@ -102,6 +114,11 @@ int mod_lua_pushval(lua_State * l, const as_val * v) {
         case AS_MAP: {
             as_val_reserve(v);
             mod_lua_pushmap(l, (as_map *) v);
+            return 1;   
+        }
+        case AS_REC: {
+            as_val_reserve(v);
+            mod_lua_pushrecord(l, (as_rec *) v);
             return 1;   
         }
         case AS_PAIR: {

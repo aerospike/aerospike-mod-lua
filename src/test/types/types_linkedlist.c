@@ -14,6 +14,13 @@ TEST( types_linkedlist_empty, "as_linkedlist is empty" ) {
     assert( l.u.linkedlist.tail == NULL );
 }
 
+static void print_list(const char *msg, const as_list *l) {
+	char *s = as_val_tostring(l);
+	fprintf(stderr, "%s %s\n",msg,s);
+	free(s);
+}
+
+
 TEST( types_linkedlist_list, "as_linkedlist w/ list ops" ) {
 
     int rc = 0;
@@ -31,7 +38,7 @@ TEST( types_linkedlist_list, "as_linkedlist w/ list ops" ) {
         assert_int_eq( rc, 0 );
         assert_int_eq( as_list_size(&l), i );
     }
-
+    
     for ( int i = 6; i < 11; i++) {
         rc = as_list_prepend(&l, (as_val *) as_integer_new(i));
         assert_int_eq( rc, 0 );
@@ -44,8 +51,10 @@ TEST( types_linkedlist_list, "as_linkedlist w/ list ops" ) {
     as_integer * t_head = (as_integer *) as_list_head(t);
     as_integer * l_head = (as_integer *) as_list_head(&l);
 
-    assert( t_head->value == l_head->value );
+    assert( as_integer_toint(t_head) == as_integer_toint(l_head) );
 
+    as_list_destroy(t);
+    
     as_list * d = as_list_drop(&l, 5);
     assert_int_eq( as_list_size(d), 5 );
 
@@ -53,11 +62,11 @@ TEST( types_linkedlist_list, "as_linkedlist w/ list ops" ) {
     as_integer * l_5 = (as_integer *) as_list_get(&l, 5);
 
     assert( d_0->value == l_5->value );
+    
+    as_list_destroy(d);
 
     as_list_destroy(&l);
 
-    assert_null( l.u.linkedlist.head );
-    assert_null( l.u.linkedlist.tail );
 }
 
 TEST( types_linkedlist_iterator, "as_linkedlist w/ iterator ops" ) {
@@ -97,6 +106,8 @@ TEST( types_linkedlist_iterator, "as_linkedlist w/ iterator ops" ) {
     assert_false( as_iterator_has_next(i) );
 
     as_iterator_destroy(i);
+    
+    as_list_destroy(&l);
 }
 
 TEST( types_linkedlist_stack, "as_linkedlist via stack allocation" ) {
@@ -112,6 +123,7 @@ TEST( types_linkedlist_stack, "as_linkedlist via stack allocation" ) {
     as_list c;
     tail = as_linkedlist_init(&c, (as_val *) as_integer_new(3), tail);
 
+
     as_list * l = &c;
 
     assert_int_eq( as_list_size(l), 3 );
@@ -119,7 +131,7 @@ TEST( types_linkedlist_stack, "as_linkedlist via stack allocation" ) {
     as_iterator * i = NULL;
     as_integer * v = NULL;
 
-    i  = as_list_iterator_new(&l);
+    i  = as_list_iterator_new(l);
     
     assert_true( as_iterator_has_next(i) );
 
@@ -133,6 +145,9 @@ TEST( types_linkedlist_stack, "as_linkedlist via stack allocation" ) {
     assert_int_eq( as_integer_toint(v), 1 );
 
     assert_false( as_iterator_has_next(i) );
+
+    as_iterator_destroy(i);
+    as_list_destroy(l);
 }
 
 /******************************************************************************

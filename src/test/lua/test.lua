@@ -1,135 +1,213 @@
+package.path = package.path .. ";" .. "/Users/chris/projects/cstivers78/aerospike-mod-lua/src/lua/?.lua;"
 
-local math = require "test_math"
+-- require('stream')
 
--- this is not accessible, really, give it a try
-global_counter = 0
 
--- this is accessible
-local file_local_counter = 0;
-
-function record(r)
-    return r.a
-end
-
-function sum(r,a,b)
-    return math.add(a,b)
-end
-
-function join(r,delim,...)
-    local out = ''
-    local len = select('#',...)
-    for i=1, len do
-        if i > 1 then
-            out = out .. (delim or ',')
+--
+-- Merge two tables. If the keys in the two tables match, then
+-- call `merge()` to merge to the values.
+--
+function table_merge(t1,t2, merge)
+    local t3 = {}
+    if t1 ~= nil then
+        for k,v in pairs(t1) do
+            t3[k] = v
         end
-        out = out .. r[select(i,...)]
     end
-    return out
+    if t2 ~= nil then
+        for k, v in pairs(t2) do
+            if t3[k] then
+                t3[k] = merge(t3[k], t2[k])
+            else
+                t3[k] = v
+            end
+        end
+    end
+    return t3
 end
 
-function setbin(r,bin,val)
-    r[bin] = val;
-    aerospike:update(r);
-    return r[bin];
+--
+-- Generate a range of numbers
+--
+function range(start,limit)
+    local i = start
+    return function()
+        if  i < limit then
+            i = i + 1
+            return i
+        else
+            return nil
+        end
+    end
 end
 
-function getbin(r,bin)
-    info("bin: %s = %s", "a", r.a or "<null>")
-    return r.a;
+--
+-- Generate a values using a function
+--
+function generate(limit, fn)
+    local i = 0
+    return function()
+        if  i < limit then
+            return fn()
+        else
+            return nil
+        end
+    end
 end
 
-function rmbin(r,bin)
-    r[bin] = nil
-    aerospike:update(r)
-    return 1;
+--
+-- Iterates over values in an array
+--
+function iterator(t)
+    local i = 0
+    local n = table.getn(t)
+    return function()
+        i = i + 1
+        if i <= n then return t[i] end
+    end
 end
 
-function example_lua(r,arg1,arg2,arg3,arg4)
-    r[arg1] = arg2;
-    r[arg3] = arg4;
-    aerospike:update(r);
-    return r['b'];
+
+function log(test, desc, stream, stringify)
+    stringify = stringify or tostring
+    print(string.format("   [%s] %s", test, desc))
+    for v in stream do
+        print(string.format("        - %s", stringify(v)))
+    end
 end
 
-function cat(r,a,b,c,d,e,f)
-    return (a or '') .. (b or '') .. (c or '') .. (d or '') .. (e or '') .. (f or '')
-end
+function test_integer_sum(i,n)
 
-function catfail(r,a,b,c,d,e,f)
-    return a .. b .. c .. d .. e .. f
-end
+    local function _map(a)
+        return a 
+    end
 
-function abc(r,a,b)
-    return "abc"
-end
+    local function _aggregate(a,b)
+        return a + (b or 0)
+    end
 
-function log(r,msg)
-    info(msg)
-    return 1
-end
+    local function _reduce(a,b)
+        return (a or 0) + (b or 0)
+    end
 
-function global_count(r)
-    return global_counter
-end
+    -- ########################################################################
 
-function local_count(r)
-    return file_local_counter
-end
+    print("")
+    print(string.format("TEST: SUM INTEGERS IN RANGE (%d,%d)",i,n))
+    print("")
+    print("   expected: 5050")
+    print("")
 
-function one(r)
-    return 1
-end
+    local t1 = reduce( range(i,n), _reduce )
+    log("t1", "reduce(s)", t1)
 
-function prepend(r,l)
+    local t2 = aggregate( range(i,n), 0,  _aggregate )
+    log("t2", "aggregate(s)", t2)
 
-    info("l[1] = %s", l[1] or "<null>")
-    info("size = %d", list.size(l))
+    local t3 = reduce( aggregate( range(i,n), 0,  _aggregate ), _reduce )
+    log("t3", "reduce(aggregate(s))", t3)
 
-    list.prepend(l, "z")
+    local s4 = StreamOps.create() : map(_map) : reduce(_reduce)
+    local t4 = StreamOps.apply( range(i,n), s4, 1)
+    log("t4", "s : map : reduce", t4)
 
-    info("l[1] = %s", l[1] or "<null>")
-    info("size = %d", list.size(l))
+    local s5 = StreamOps.create() : aggregate(0, _aggregate) : reduce(_reduce)
+    local t5 = StreamOps.apply( range(i,n), s5, 1)
+    log("t5", "s : aggregate : reduce", t5)
     
-    return list.size(l)
+
+    print("")
 end
 
-function iterate(r,l)
 
-    info("iterate:")
-    local i = list.iterator(l);
-    while iterator.has_next(i) do
-        info(iterator.next(i))
+
+
+
+
+function test_rollup()
+
+    local campaign_views = {
+        { campaign = "a", views = 1 },
+        { campaign = "b", views = 2 },
+        { campaign = "c", views = 2 },
+        { campaign = "a", views = 2 },
+        { campaign = "b", views = 4 },
+        { campaign = "c", views = 6 },
+        { campaign = "a", views = 3 },
+        { campaign = "b", views = 6 },
+        { campaign = "c", views = 9 },
+        { campaign = "a", views = 4 },
+        { campaign = "b", views = 8 },
+        { campaign = "c", views = 12 },
+        { campaign = "a", views = 5 },
+        { campaign = "b", views = 10 },
+        { campaign = "c", views = 15 },
+        { campaign = "a", views = 6 },
+        { campaign = "b", views = 12 },
+        { campaign = "c", views = 18 }
+    }
+
+    local function result_tostring(t)
+        local s = "{"
+        local e = false
+        for k,v in pairs(t) do 
+            if e then
+                s = s .. ", "
+            end
+            s = s .. string.format(" %s = %d", k, v)
+            e = true
+        end
+        s = s .. " }"
+        return s
     end
 
-    info("iterate 2:")
-    local j = list.iterator(l);
-    while j:has_next() do
-        info(j:next())
+    -- ########################################################################
+
+    local function _map(rec)
+        return { [rec.campaign] = rec.views }
     end
-    
-    return list.size(l)
+
+    local function _aggregate(agg,rec)
+        agg[rec.campaign] = (agg[rec.campaign] or 0) + rec.views
+        return agg
+    end
+
+    local function _reduce(agg1, agg2)
+        return table_merge(agg1, agg2, function(v1, v2)
+            return v1 + v2
+        end)
+    end
+
+    -- ########################################################################
+
+    print("")
+    print(string.format("TEST: ROLLUP AD IMPRESSIONS"))
+    print("")
+    print("   expected: { a = 21,  c = 62,  b = 42 }")
+    print("")
+
+    local t1 = aggregate( iterator(campaign_views), {},  _aggregate )
+    log("t1", "aggregate(s)", t1, result_tostring)
+
+    local t2 = reduce( aggregate( iterator(campaign_views), {},  _aggregate ), _reduce )
+    log("t2", "reduce(aggregate(s))", t2, result_tostring)
+
+    local s3 = StreamOps.create() : aggregate({}, _aggregate) : reduce(_reduce)
+    local t3 = StreamOps.apply( iterator(campaign_views), s3, 1)
+    log("t3", "s : aggregate : reduce", t3, result_tostring)
+
+    local s4 = StreamOps.create() : map(_map) : reduce(_reduce)
+    local t4 = StreamOps.apply( iterator(campaign_views), s4, 1)
+    log("t4", "s : map : reduce", t4, result_tostring)
+
+    print("")
 end
 
-function failnil(r)
-    warn('failnil')
-    return r.empty
-end
 
-local function f1(b,a)
-    b = b or {}
-    b["sum"] = (b["sum"] or 0) + a
-    return b
-end
 
-function metadata(r,key)
-    local m = record.metadata(r)
-    return m[key]
-end
 
-local function f2(a,b)
-    return (a or 0)+b
-end
+-- test_integer_sum(0,100)
+-- test_rollup()
 
-function stream(s)
-    return s : reduce(f2)
-end
+
+

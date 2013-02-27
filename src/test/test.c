@@ -58,7 +58,7 @@ atf_suite_result * atf_suite_run(atf_suite * suite) {
 
     if ( suite->init ) suite->init(suite);
 
-    printf("%s: %d tests: %s\n", suite->name, suite->size, suite->desc);
+    printf("[+] %s: %d tests: %s\n", suite->name, suite->size, suite->desc);
 
     atf_suite_result * suite_result = atf_suite_result_new(suite);
 
@@ -70,7 +70,7 @@ atf_suite_result * atf_suite_run(atf_suite * suite) {
 
     for ( int i = 0; i < suite->size; i++ ) {
         atf_test * test = suite->tests[i];
-        printf("    %s: (%d/%d) %s\n", suite->name, i+1, suite->size, test->desc);
+        printf("    [+] %s: (%d/%d) %s\n", suite->name, i+1, suite->size, test->desc);
         atf_test_result * test_result = atf_test_run(test);
         atf_suite_result_add(suite_result, test_result);
         if ( ! test_result->success ) {
@@ -109,6 +109,7 @@ atf_suite_result * atf_suite_result_new(atf_suite * suite) {
     atf_suite_result * res = (atf_suite_result *) malloc(sizeof(atf_suite_result));
     res->suite = suite;
     res->size = 0;
+    res->success = 0;
     return res;
 }
 
@@ -148,7 +149,7 @@ atf_plan * atf_plan_after(atf_plan * plan, bool (* after)(atf_plan * plan)) {
 }
 
 
-atf_plan_result * atf_plan_run(atf_plan * plan, atf_plan_result * result) {
+int atf_plan_run(atf_plan * plan, atf_plan_result * result) {
 
     printf("\n");
     printf("===============================================================================\n");
@@ -156,7 +157,7 @@ atf_plan_result * atf_plan_run(atf_plan * plan, atf_plan_result * result) {
 
     if ( plan->before ) {
         if ( plan->before(plan) == false ) {
-            return result;
+            return -1;
         }
     }
 
@@ -166,7 +167,7 @@ atf_plan_result * atf_plan_run(atf_plan * plan, atf_plan_result * result) {
 
     if ( plan->after ) {
         if ( plan->after(plan) == false ) {
-            return result;
+            return -2;
         }
     }
 
@@ -177,13 +178,20 @@ atf_plan_result * atf_plan_run(atf_plan * plan, atf_plan_result * result) {
     printf("SUMMARY\n");
     printf("\n");
     
+    uint32_t total = 0;
+    uint32_t passed = 0;
+
     for( int i = 0; i < result->size; i++ ) {
         atf_suite_result_print(result->suites[i]);
+        total += result->suites[i]->size;
+        passed += result->suites[i]->success;
     }
 
     printf("\n");
 
-    return result;
+    printf("%d tests: %d passed, %d failed\n", total, passed, total-passed);
+
+    return total-passed;
 }
 
 /******************************************************************************
@@ -253,5 +261,14 @@ void atf_log(FILE * f, const char * level, const char * prefix, const char * fil
     va_start(ap, fmt);
     vsnprintf(msg, LOG_MESSAGE_MAX, fmt, ap);
     va_end(ap);
-    fprintf(f, "%s%s\n",prefix,msg);
+    fprintf(f, "%s%s\n", prefix, msg);
+}
+
+void atf_log_line(FILE * f, const char * level, const char * prefix, const char * file, int line, const char * fmt, ...) {
+    char msg[LOG_MESSAGE_MAX] = {0};
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(msg, LOG_MESSAGE_MAX, fmt, ap);
+    va_end(ap);
+    fprintf(f, "%s[%s:%d] %s\n", prefix, file, line, msg);
 }

@@ -14,7 +14,7 @@
 typedef struct as_list_s as_list;
 typedef struct as_list_hooks_s as_list_hooks;
 
-typedef void (* as_list_foreach_callback)(as_val *, void *);
+typedef bool (* as_list_foreach_callback) (as_val *, void *);
 
 struct as_list_hooks_s {
     void        (* destroy)(as_list *);
@@ -51,6 +51,7 @@ uint32_t as_list_val_hash(const as_val * v);
 char * as_list_val_tostring(const as_val * v);
 
 void * as_list_source(as_list *);
+
 
 /******************************************************************************
  * INLINE FUNCTIONS
@@ -92,8 +93,8 @@ inline as_list * as_list_take(const as_list * l, uint32_t n) {
     return as_util_hook(take, NULL, l, n);
 }
 
-inline void as_list_foreach(const as_list * l, void * context, as_list_foreach_callback callback) {
-    as_util_hook(foreach, NULL, l, context, callback);
+inline void as_list_foreach(const as_list * l, void * context, bool (* foreach)(as_val *, void *)) {
+    as_util_hook(foreach, NULL, l, context, foreach);
 }
 
 inline as_iterator * as_list_iterator_init(as_iterator *i, const as_list * l) {
@@ -115,3 +116,30 @@ inline as_val * as_list_toval(as_list * l) {
 inline as_list * as_list_fromval(as_val * v) {
     return as_util_fromval(v, AS_LIST, as_list);
 }
+
+
+/*
+** HELPERS
+*/
+
+struct as_string_s *   as_string_new(char *, bool is_malloc);
+static inline int as_list_add_string(as_list * arglist, const char * s) {
+    return as_list_append(arglist, (as_val *) as_string_new(strdup(s), true));
+}
+
+struct as_integer_s *  as_integer_new(int64_t i);
+static inline int as_list_add_integer(as_list * arglist, uint64_t i) {
+    return as_list_append(arglist, (as_val *) as_integer_new(i));
+}
+
+static inline int as_list_add_list(as_list * arglist, as_list * l) {
+    return as_list_append(arglist, (as_val *) l);
+}
+
+struct as_map_s;
+
+static inline int as_list_add_map(as_list * arglist, struct as_map_s * m) {
+    return as_list_append(arglist, (as_val *) m);
+}
+
+

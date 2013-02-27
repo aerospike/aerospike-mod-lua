@@ -22,8 +22,7 @@ extern inline as_val * as_list_head(const as_list * l) ;
 extern inline as_list * as_list_tail(const as_list * l) ;
 extern inline as_list * as_list_drop(const as_list * l, uint32_t n) ;
 extern inline as_list * as_list_take(const as_list * l, uint32_t n) ;
-extern inline void as_list_foreach(const as_list * l, void * context,
-     as_list_foreach_callback callback) ;
+extern inline void as_list_foreach(const as_list * l, void * context, bool (* foreach)(as_val *, void *)) ;
 extern inline as_iterator * as_list_iterator_init(as_iterator *i, const as_list * l);
 extern inline as_iterator * as_list_iterator_new(const as_list * l) ;
 extern inline uint32_t as_list_hash(const as_list * l) ;
@@ -49,9 +48,10 @@ as_list * as_list_new(void *source, const as_list_hooks *h) {
     return l;
 }
 
-
-void as_list_destroy(as_list * l) {
-    as_util_hook(destroy, 1, l);
+//
+// helper function, call this
+void as_list_destroy(as_list *l) {
+	as_val_val_destroy( (as_val *) l );
 }
 
 void *as_list_source(as_list *l) {
@@ -62,6 +62,10 @@ void *as_list_source(as_list *l) {
  * STATIC FUNCTIONS
  ******************************************************************************/
 
+//
+// calls the implementations destroy
+// not for external use
+ 
 void as_list_val_destroy(as_val *v) {
     as_list *l = (as_list *) v;
     as_util_hook(destroy, 1, l);
@@ -82,7 +86,6 @@ char * as_list_val_tostring(const as_val * v) {
     bool        sep = false;
 
     buf = (char *) malloc(sizeof(char) * cap);
-    bzero(buf, sizeof(char) * cap);
 
     strcpy(buf, "List(");
     pos += 5;
@@ -94,28 +97,33 @@ char * as_list_val_tostring(const as_val * v) {
             size_t vallen = strlen(valstr);
             
             if ( pos + vallen + 2 >= cap ) {
-                uint32_t adj = vallen+2 > blk ? vallen+2 : blk;
+                uint32_t adj = ((vallen+2) > blk) ? vallen+2 : blk;
                 buf = realloc(buf, sizeof(char) * (cap + adj));
-                bzero(buf+cap, sizeof(char)*adj);
                 cap += adj;
             }
 
             if ( sep ) {
-                strcpy(buf + pos, ", ");
+            	buf[pos] = ',';
+            	buf[pos+1] = ' ';
                 pos += 2;
             }
 
-            strncpy(buf + pos, valstr, vallen);
+            memcpy(buf + pos, valstr, vallen);
             pos += vallen;
             sep = true;
 
             free(valstr);
-            valstr = NULL;
         }
     }
     as_iterator_destroy(i);
 
-    strcpy(buf + pos, ")");
+    if ( pos + 2 >= cap ) {
+		buf = realloc(buf, sizeof(char) * (cap + 2));
+		cap += 2;
+	}
+
+    buf[pos] = ')';
+    buf[pos+1] = 0;
     
     return buf;
 }

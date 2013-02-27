@@ -23,7 +23,8 @@ enum as_val_t {
     AS_LIST         = 5,
     AS_MAP          = 6,
     AS_REC          = 7,
-    AS_PAIR         = 8
+    AS_PAIR         = 8,
+    AS_BYTES        = 9
 } __attribute__((packed));
 
 struct as_val_s {
@@ -32,12 +33,22 @@ struct as_val_s {
     cf_atomic32 count;
 };
 
-// arraylist
+// arraylist:
+// Structure for arraylist -- note that all fields are in terms of elements,
+// not in terms of bytes.  Total size (bytes) allocated for the element
+// array is   sizeof( as_val * ) * capacity
+// The Field "block_size" is misleading -- it is NOT bytes, but it is the unit
+// of allocation to be used each time the list grows.  So, the block_size
+// might be 8 (for example), which means we'll grow by
+//   new_delta_bytes = multiplier * (sizeof( as_val *) * block_size)
+// each time we want to grow the array (with realloc).
 struct as_arraylist_source_s {
-    struct as_val_s **   elements;
-    uint32_t    size;
-    uint32_t    capacity;
-    uint32_t    block_size;
+    struct as_val_s **   elements; // An allocated area for ptrs to list elements
+    uint32_t    size;           // The current array size (element count)
+    uint32_t    capacity;       // The total array size (max element count)
+    uint32_t    block_size;     // The unit of allocation (e.g. 8 elements)
+                                // Note that block_size == 0 means no more
+                                // can be allocated
 };
 
 // linkedlist
@@ -141,7 +152,9 @@ extern as_val_hash_func g_as_val_hash_func_table[];
 extern as_val_tostring_func g_as_val_tostring_func_table[];
 
 extern void as_val_val_destroy(as_val *v);
-extern int as_val_val_reserve(as_val *v);
+extern as_val * as_val_val_reserve(as_val *v);
+extern uint32_t as_val_val_hash(const as_val *v);
+extern char * as_val_val_tostring(const as_val *v);
 
 /******************************************************************************
  * MACROS
@@ -154,15 +167,15 @@ inline void as_val_init(as_val *v, as_val_t type, bool is_malloc) {
  
 #define as_val_type(__v)     (((as_val *)__v)->type)
 
-#define as_val_destroy(__v) (__v ? as_val_val_destroy((as_val *)__v) : 0 )
+#define as_val_destroy(__v) ( as_val_val_destroy((as_val *)__v) )
 
-#define as_val_reserve(__v) (__v ? as_val_val_reserve((as_val *)__v) : 0 )
+#define as_val_reserve(__v) ( as_val_val_reserve((as_val *)__v) )
 
-#define as_val_hash(__v) \
-    (__v ? (g_as_val_hash_func_table[ ((as_val *)__v)->type ] (__v) ) : 0 )
+#define as_val_hash(__v) ( as_val_val_hash((as_val *)__v) )
 
-#define as_val_tostring(__v) \
-    (__v ? ( g_as_val_tostring_func_table[ ((as_val *)__v)->type ] (__v) ) : NULL ) 
+#define as_val_tostring(__v) ( as_val_val_tostring((as_val *)__v) )
+
+
 
 /******************************************************************************
  * FUNCTIONS

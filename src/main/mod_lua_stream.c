@@ -1,112 +1,140 @@
-/**
- * Provides a lua interface to the aerospike struct and functions
- *
- *
- *      aerospike.get(namespace, set, key): result<record>
- *      aerospike.put(namespace, set, key, table)
- *      aerospike.remove(namespace, set, key): result<bool>
- *      aerospike.update(record): result<record>
- *
- *
- */
-
+#include "mod_lua_val.h"
 #include "mod_lua_stream.h"
-#include "mod_lua_iterator.h"
-
+#include "mod_lua_reg.h"
 #include "as_val.h"
+#include "internal.h"
 
 #include <lua.h>
 #include <lauxlib.h>
 #include <lualib.h>
 
-#define MOD_LUA_STREAM_TABLE "stream"
-#define MOD_LUA_STREAM_METATABLE "Stream"
+/*******************************************************************************
+ * MACROS
+ ******************************************************************************/
 
-/**
- * Read the item at index and convert to a stream
- */
+#define OBJECT_NAME "stream"
+#define CLASS_NAME "Stream"
+
+/*******************************************************************************
+ * FUNCTIONS
+ ******************************************************************************/
+
 as_stream * mod_lua_tostream(lua_State * l, int index) {
-    as_stream * s = (as_stream *) lua_touserdata(l, index);
-    if (s == NULL) luaL_typerror(l, index, MOD_LUA_STREAM_METATABLE);
-    return s;
+    mod_lua_box * box = mod_lua_tobox(l, index, CLASS_NAME);
+    return (as_stream *) mod_lua_box_value(box);
 }
 
-/**
- * Push a stream on to the lua stack
- */
-as_stream * mod_lua_pushstream(lua_State * l, as_stream * s) {
-    as_stream * ls = (as_stream *) lua_newuserdata(l, sizeof(as_stream));
-    *ls = *s;
-    luaL_getmetatable(l, MOD_LUA_STREAM_METATABLE);
-    lua_setmetatable(l, -2);
-    return ls;
+as_stream * mod_lua_pushstream(lua_State * l, as_stream * stream) {
+    mod_lua_box * box = mod_lua_pushbox(l, MOD_LUA_SCOPE_HOST, stream, CLASS_NAME);
+    return (as_stream *) mod_lua_box_value(box);
 }
 
-/**
- * Get the stream from the stack at index
- */
 static as_stream * mod_lua_checkstream(lua_State * l, int index) {
-    as_stream * s = NULL;
-    luaL_checktype(l, index, LUA_TUSERDATA);
-    s = (as_stream *) luaL_checkudata(l, index, MOD_LUA_STREAM_METATABLE);
-    if (s == NULL) luaL_typerror(l, index, MOD_LUA_STREAM_METATABLE);
-    return s;
+    mod_lua_box * box = mod_lua_checkbox(l, index, CLASS_NAME);
+    return (as_stream *) mod_lua_box_value(box);
 }
 
-/**
- * Gets an iterator for a stream
- *
- *    stream.iterator(s: Stream): Iterator
- * 
- */
-static int mod_lua_stream_iterator(lua_State * l) {
-    as_stream * s = mod_lua_checkstream(l, 1);
-    as_iterator * i = as_stream_iterator_new(s);
-    mod_lua_pushiterator(l, i);
+static int mod_lua_stream_gc(lua_State * l) {
+    mod_lua_freebox(l, 1, CLASS_NAME);
+    return 0;
+}
+
+static int mod_lua_stream_tostring(lua_State * l) {
+    as_stream * stream = mod_lua_tostream(l, 1);
+    char str[128] = { '\0' };
+    snprintf(str, 128, "Stream<%p>", stream);
+    lua_pushstring(l, str);
     return 1;
 }
 
-/**
- * stream table
- *    stream.iterator(s: Stream): Iterator
- */
-static const luaL_reg mod_lua_stream_table[] = {
-    {"iterator",        mod_lua_stream_iterator},
+static int mod_lua_stream_read(lua_State * l) {
+    as_stream * stream = mod_lua_tostream(l, 1);
+    if ( stream ) {
+        as_val * val = as_stream_read(stream);
+        mod_lua_pushval(l, val );
+        return 1;
+    }
+    else {
+        lua_pushnil(l);
+        return 1;
+    }
+}
+
+static int mod_lua_stream_readable(lua_State * l) {
+    as_stream * stream = mod_lua_tostream(l, 1);
+    if ( stream ) {
+        lua_pushboolean(l, as_stream_readable(stream));
+        return 1;
+    }
+    else {
+        lua_pushboolean(l, false);
+        return 1;
+    }
+}
+
+static int mod_lua_stream_write(lua_State * l) {
+    as_stream * stream = mod_lua_tostream(l, 1);
+    as_val * val = mod_lua_toval(l, 2);
+    if ( stream ) {
+        int rc = as_stream_write(stream, val);
+        lua_pushinteger(l, rc);
+        return 1;
+    }
+    else {
+        lua_pushinteger(l, AS_STREAM_ERR);
+        return 1;
+    }
+}
+
+static int mod_lua_stream_writable(lua_State * l) {
+    as_stream * stream = mod_lua_tostream(l, 1);
+    if ( stream ) {
+        lua_pushboolean(l, as_stream_readable(stream));
+        return 1;
+    }
+    else {
+        lua_pushboolean(l, false);
+        return 1;
+    }
+}
+
+/*******************************************************************************
+ * OBJECT TABLE
+ ******************************************************************************/
+
+static const luaL_reg object_table[] = {
+    {"read",            mod_lua_stream_read},
+    {"write",           mod_lua_stream_write},
+    {"readable",        mod_lua_stream_readable},
+    {"writable",        mod_lua_stream_writable},
+    {"tostring",        mod_lua_stream_tostring},
     {0, 0}
 };
 
-/**
- * Stream metatable
- */
-static const luaL_reg mod_lua_stream_metatable[] = {
+static const luaL_reg object_metatable[] = {
     {0, 0}
 };
 
-/**
- * Registers the table and metatable
- */
+/*******************************************************************************
+ * CLASS TABLE
+ ******************************************************************************/
+
+static const luaL_reg class_table[] = {
+    {0, 0}
+};
+
+static const luaL_reg class_metatable[] = {
+    {"__tostring",      mod_lua_stream_tostring},
+    {"__gc",            mod_lua_stream_gc},
+    {0, 0}
+};
+
+/*******************************************************************************
+ * REGISTER
+ ******************************************************************************/
+
 int mod_lua_stream_register(lua_State * l) {
-    
-    int table, metatable;
-
-    // register the table
-    luaL_register(l, MOD_LUA_STREAM_TABLE, mod_lua_stream_table);
-    table = lua_gettop(l);
-
-    // register the metatable
-    luaL_newmetatable(l, MOD_LUA_STREAM_METATABLE);
-    luaL_register(l, 0, mod_lua_stream_metatable);
-    metatable = lua_gettop(l);
-
-    // lua_pushliteral(l, "__index");
-    // lua_pushvalue(l, table);
-    // lua_rawset(l, metatable);
-
-    lua_pushliteral(l, "__metatable");
-    lua_pushvalue(l, table);
-    lua_rawset(l, metatable);
-    
-    lua_pop(l, 1);
-
+    mod_lua_reg_object(l, OBJECT_NAME, object_table, object_metatable);
+    mod_lua_reg_class(l, CLASS_NAME, NULL, class_metatable);
     return 1;
 }
