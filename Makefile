@@ -173,6 +173,8 @@ modules/msgpack: modules/msgpack/src/.libs/libmsgpackc.a
 ##  TEST TARGETS                                                      		 ##
 ###############################################################################
 
+TEST_VALGRIND = --tool=memcheck --leak-check=yes --show-reachable=yes --num-callers=20 --track-fds=yes -v
+
 TEST_CFLAGS =  -DMEM_COUNT=1
 TEST_CFLAGS += -I$(TARGET_INCL)
 TEST_CFLAGS += -Imodules/common/$(TARGET_INCL)
@@ -183,6 +185,8 @@ TEST_DEPS =
 TEST_DEPS += modules/common/$(TARGET_OBJ)/client/*.o 
 TEST_DEPS += modules/common/$(TARGET_OBJ)/shared/*.o 
 TEST_DEPS += $(MSGPACK_PATH)/src/.libs/libmsgpackc.a
+
+#-----#
 
 TEST_TYPES = 
 TEST_TYPES += types/types_integer
@@ -212,12 +216,15 @@ TEST_MOD_LUA += $(TEST_TYPES)
 TEST_MOD_LUA += $(TEST_STREAM)
 TEST_MOD_LUA += $(TEST_RECORD) 
 
-
 #-----#
 
 .PHONY: test
 test: test-build
 	@$(TARGET_BIN)/test/mod_lua_test
+
+.PHONY: test-valgrind
+test-valgrind: test-build
+	valgrind $(TEST_VALGRIND) $(TARGET_BIN)/test/mod_lua_test 1>&2 2>mod_lua_test-valgrind
 
 .PHONY: test-build
 test-build: test/mod_lua_test
@@ -226,7 +233,6 @@ test-build: test/mod_lua_test
 test-clean: 
 	@rm -rf $(TARGET_BIN)/test
 	@rm -rf $(TARGET_OBJ)/test
-
 
 $(TARGET_OBJ)/test/%/%.o: CFLAGS = $(TEST_CFLAGS)
 $(TARGET_OBJ)/test/%/%.o: LDFLAGS += $(TEST_LDFLAGS)
@@ -243,9 +249,7 @@ test/mod_lua_test: $(TARGET_BIN)/test/mod_lua_test
 $(TARGET_BIN)/test/mod_lua_test: CFLAGS = $(TEST_CFLAGS)
 $(TARGET_BIN)/test/mod_lua_test: LDFLAGS += $(TEST_LDFLAGS)
 $(TARGET_BIN)/test/mod_lua_test: $(TEST_MOD_LUA:%=$(TARGET_OBJ)/test/%.o) $(TARGET_OBJ)/test/test.o | modules build prepare
-	echo $(TEST_MOD_LUA)
 	$(executable) $(TARGET_OBJ)/*.o $(TEST_DEPS)
-
 
 ###############################################################################
 include project/rules.makefile
