@@ -128,69 +128,68 @@ end
 
 --
 -- Creates a new environment for use in apply_stream functions
--- Differences from env_record()
---      - removed 'aerospike'
 --
-function env_stream()
-    return {
+-- function env_stream()
+--     return {
 
-        -- aerospike types
-        ["record"] = record,
-        ["iterator"] = iterator,
-        ["list"] = list,
-        ["map"] = map,
-        ["aerospike"] = aerospike,
+--         -- aerospike types
+--         ["record"] = record,
+--         ["iterator"] = iterator,
+--         ["list"] = list,
+--         ["map"] = map,
+--         ["bytes"] = bytes,
+--         ["aerospike"] = aerospike,
 
-        -- logging functions
-        ["trace"] = trace,
-        ["debug"] = debug,
-        ["info"] = info,
-        ["warn"] = warn,
+--         -- logging functions
+--         ["trace"] = trace,
+--         ["debug"] = debug,
+--         ["info"] = info,
+--         ["warn"] = warn,
         
-        -- standard lua functions
-        ["error"] = error,
-        ["getmetatable"] = getmetatable,
-        ["ipairs"] = ipairs,
-        ["load"] = load,
-        ["module"] = module,
-        ["next"] = next,
-        ["pairs"] = pairs,
-        ["print"] = print,
-        ["pcall"] = pcall,
-        ["rawequal"] = rawequal,
-        ["rawget"] = rawget,
-        ["rawset"] = rawset,
-        ["require"] = require,
-        ["require"] = require,
-        ["select"] = select,
-        ["setmetatable"] = setmetatable,
-        ["setfenv"] = setfenv,
-        ["tonumber"] = tonumber,
-        ["tostring"] = tostring,
-        ["type"] = type,
-        ["unpack"] = unpack,
-        ["xpcall"] = xpcall,
+--         -- standard lua functions
+--         ["error"] = error,
+--         ["getmetatable"] = getmetatable,
+--         ["ipairs"] = ipairs,
+--         ["load"] = load,
+--         ["module"] = module,
+--         ["next"] = next,
+--         ["pairs"] = pairs,
+--         ["print"] = print,
+--         ["pcall"] = pcall,
+--         ["rawequal"] = rawequal,
+--         ["rawget"] = rawget,
+--         ["rawset"] = rawset,
+--         ["require"] = require,
+--         ["require"] = require,
+--         ["select"] = select,
+--         ["setmetatable"] = setmetatable,
+--         ["setfenv"] = setfenv,
+--         ["tonumber"] = tonumber,
+--         ["tostring"] = tostring,
+--         ["type"] = type,
+--         ["unpack"] = unpack,
+--         ["xpcall"] = xpcall,
 
-        -- standard lua objects
-        ["math"] = math,
-        ["io"] = io,
-        ["os"] = {
-            ['clock'] = os.clock,
-            ['date'] = os.date,
-            ['difftime'] = os.difftime,
-            ['getenv'] = os.getenv,
-            ['setlocale'] = os.setlocale,
-            ['time'] = os.time,
-            ['tmpname'] = os.tmpname
-        },
-        ["package"] = package,
-        ["string"] = string,
-        ["table"] = table,
+--         -- standard lua objects
+--         ["math"] = math,
+--         ["io"] = io,
+--         ["os"] = {
+--             ['clock'] = os.clock,
+--             ['date'] = os.date,
+--             ['difftime'] = os.difftime,
+--             ['getenv'] = os.getenv,
+--             ['setlocale'] = os.setlocale,
+--             ['time'] = os.time,
+--             ['tmpname'] = os.tmpname
+--         },
+--         ["package"] = package,
+--         ["string"] = string,
+--         ["table"] = table,
 
-        -- standard lua variables
-        ["_G"] = {}
-    }
-end
+--         -- standard lua variables
+--         ["_G"] = {}
+--     }
+-- end
 
 --
 -- Apply function to an iterator and arguments.
@@ -210,7 +209,7 @@ function apply_stream(f, scope, istream, ostream, ...)
     require("stream_ops")
 
     if not sandboxed[f] then
-        setfenv(f,env_stream())
+        setfenv(f,env_record())
         sandboxed[f] = true
     end
 
@@ -223,7 +222,7 @@ function apply_stream(f, scope, istream, ostream, ...)
     if success then
 
         local ops = StreamOps_select(result.ops, scope);
-
+        
         -- Apply server operations to the stream
         -- result => a stream_ops object
         local values = StreamOps_apply(stream_iterator(istream), ops);

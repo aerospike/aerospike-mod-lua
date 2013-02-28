@@ -105,6 +105,7 @@ end
 -- @param f - the reduction operation
 --
 function reduce( next, f )
+
     -- done indicates if we exhausted the `next` stream
     local done = false
 
@@ -117,7 +118,6 @@ function reduce( next, f )
         
         -- get the first value
         local a = next()
-
 
         if a ~= nil then
             -- get each subsequent value and reduce them
@@ -215,7 +215,7 @@ local SCOPE_BOTH = 4
 --
 function StreamOps_create()
     local self = {}
-    setmetatable(self, StreamOps_mt);
+    setmetatable(self, StreamOps_mt)
     self.ops = {}
     return self
 end
@@ -223,7 +223,6 @@ end
 function StreamOps_apply(stream, ops, i, n)
     
     -- if nil, then use default values
-    scope = scope or 3
     i = i or 1
     n = n or #ops
     
@@ -232,7 +231,7 @@ function StreamOps_apply(stream, ops, i, n)
     
     -- get the current operation
     local op = ops[i]
-    
+
     -- apply the operation and get a stream or use provided stream
     local s = op.func(stream, unpack(op.args)) or stream
 
@@ -268,7 +267,7 @@ function StreamOps_select(stream_ops, scope)
             table.insert(client_ops, op)
         end 
     end
-
+    
     if scope == SCOPE_CLIENT then
         return client_ops
     else

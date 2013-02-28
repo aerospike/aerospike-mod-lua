@@ -794,8 +794,9 @@ static int apply_stream(as_module * m, as_aerospike * as, const char * filename,
     lua_getglobal(l, function);
 
     // push the stream onto the stack
+    // if server_mode == true then SCOPE_SERVER(1) else SCOPE_CLIENT(2)
     LOG("apply_stream: push scope onto the stack");
-    lua_pushinteger(l, 1);
+    lua_pushinteger(l, ctx->server_mode ? 1 : 2);
 
     // push the stream onto the stack
     LOG("apply_stream: push istream onto the stack");
