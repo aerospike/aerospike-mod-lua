@@ -8,6 +8,7 @@ mod_lua_config * mod_lua_config_new(bool cache_enabled, char * system_path, char
     c->cache_enabled = cache_enabled;
     c->system_path = system_path != NULL ? system_path : strdup("/opt/citrusleaf/sys/udf/lua");
     c->user_path = user_path != NULL ? user_path : strdup("/opt/citrusleaf/usr/udf/lua");
+    c->server_mode = true;
     pthread_rwlockattr_t rwattr;
     if (0 != pthread_rwlockattr_init(&rwattr)) {
         free(c); 
