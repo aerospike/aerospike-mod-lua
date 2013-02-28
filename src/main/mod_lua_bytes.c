@@ -107,7 +107,8 @@ static int mod_lua_bytes_tostring(lua_State * l) {
     return 1;
 }
 
-// get an index value
+// get an index value 
+// 1 indexed for all these!!!!
 
 static int mod_lua_bytes_index(lua_State * l) {
 
@@ -116,13 +117,14 @@ static int mod_lua_bytes_index(lua_State * l) {
     int offset = (int) luaL_optinteger(l, 2, 0); 
 
     uint8_t buf = 0;
-    as_bytes_get(b, offset, &buf, sizeof(buf));
+    as_bytes_get(b, offset-1, &buf, sizeof(buf));
 
     lua_pushinteger(l, buf);
     return 1;
 }
 
 // set a new index value
+// 1 indexed in lua, 0 indexed in C
 
 static int mod_lua_bytes_newindex(lua_State * l) {
 
@@ -134,7 +136,7 @@ static int mod_lua_bytes_newindex(lua_State * l) {
 
     uint8_t buf = (uint8_t) value;
 
-    if (0 != as_bytes_set(b, offset, &buf, 1)) {
+    if (0 != as_bytes_set(b, offset-1, &buf, 1)) {
         lua_pushnil(l);
         return(0);
     }
@@ -163,7 +165,7 @@ static int mod_lua_bytes_put_int16(lua_State * l) {
 
     uint16_t buf = htons(value);
 
-    if (0 != as_bytes_set(b, offset, (uint8_t *) &buf, 2)) {
+    if (0 != as_bytes_set(b, offset-1, (uint8_t *) &buf, 2)) {
         lua_pushnil(l);
         return(0);
     }
@@ -187,7 +189,7 @@ static int mod_lua_bytes_put_int32(lua_State * l) {
 
     uint32_t buf = htonl(value);
 
-    if (0 != as_bytes_set(b, offset, (uint8_t *) &buf, sizeof(buf))) {
+    if (0 != as_bytes_set(b, offset-1, (uint8_t *) &buf, sizeof(buf))) {
         lua_pushnil(l);
         return(0);
     }
@@ -211,7 +213,7 @@ static int mod_lua_bytes_put_int64(lua_State * l) {
 
     uint64_t buf = be64toh(value);
 
-    if (0 != as_bytes_set(b, offset, (uint8_t *) &buf, sizeof(buf))) {
+    if (0 != as_bytes_set(b, offset-1, (uint8_t *) &buf, sizeof(buf))) {
         lua_pushnil(l);
         return(0);
     }
@@ -234,7 +236,7 @@ static int mod_lua_bytes_put_string(lua_State * l) {
     const char *    value = luaL_optstring(l, 3, NULL);
     int     value_len = strlen(value);
 
-    if (0 != as_bytes_set(b, offset, (uint8_t *) value, value_len)) {
+    if (0 != as_bytes_set(b, offset-1, (uint8_t *) value, value_len)) {
         lua_pushnil(l);
         return(0);
     }
@@ -260,7 +262,7 @@ static int mod_lua_bytes_put_bytes(lua_State * l) {
     uint8_t *buf = as_bytes_tobytes(v);
     int buf_len = as_bytes_len(v);
 
-    if (0 != as_bytes_set(b, offset, (uint8_t *) &buf, buf_len)) {
+    if (0 != as_bytes_set(b, offset-1, (uint8_t *) &buf, buf_len)) {
         lua_pushnil(l);
         return(0);
     }
@@ -284,7 +286,7 @@ static int mod_lua_bytes_get_int16(lua_State * l) {
 
     uint16_t buf;
 
-    if (0 != as_bytes_get(b, offset, (uint8_t *) &buf, sizeof(buf))) {
+    if (0 != as_bytes_get(b, offset-1, (uint8_t *) &buf, sizeof(buf))) {
         lua_pushnil(l);
         return(0);
     }
@@ -308,7 +310,7 @@ static int mod_lua_bytes_get_int32(lua_State * l) {
 
     uint32_t buf;
 
-    if (0 != as_bytes_get(b, offset, (uint8_t *) &buf, sizeof(buf))) {
+    if (0 != as_bytes_get(b, offset-1, (uint8_t *) &buf, sizeof(buf))) {
         lua_pushnil(l);
         return(0);
     }
@@ -332,7 +334,7 @@ static int mod_lua_bytes_get_int64(lua_State * l) {
 
     uint64_t buf;
 
-    if (0 != as_bytes_get(b, offset, (uint8_t *) &buf, sizeof(buf))) {
+    if (0 != as_bytes_get(b, offset-1, (uint8_t *) &buf, sizeof(buf))) {
         lua_pushnil(l);
         return(0);
     }
@@ -358,7 +360,7 @@ static int mod_lua_bytes_get_string(lua_State * l) {
     uint8_t * buf = (uint8_t *) malloc(len+1);
 
 
-    if (0 != as_bytes_get(b, offset, (uint8_t *) buf, len)) {
+    if (0 != as_bytes_get(b, offset-1, (uint8_t *) buf, len)) {
         lua_pushnil(l);
         return(0);
     }
@@ -382,7 +384,7 @@ static int mod_lua_bytes_get_bytes(lua_State * l) {
     int len = (int) luaL_optinteger(l, 3, 0); 
 
     // slice is in offset / offset
-    as_bytes *slice = as_bytes_slice_new( b , offset, offset+len);
+    as_bytes *slice = as_bytes_slice_new( b , offset-1, offset-1+len);
 
     if (!slice) {
         lua_pushnil(l);
