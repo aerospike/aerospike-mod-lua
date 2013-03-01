@@ -262,8 +262,7 @@ static int cache_scan_dir(context * ctx, const char * directory) {
  * @sychronization: Caller should have a write lock
  */
 static int update(as_module * m, as_module_event * e) {
-
-as_logger_trace(mod_lua.logger, "FUCK");
+    
     context * ctx = (context *) (m ? m->source : NULL);
 
     if ( ctx == NULL ) return 1;
