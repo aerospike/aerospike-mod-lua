@@ -73,16 +73,26 @@ TEST( record_udf_2, "concat bins a and b of {a = 'abc', b = 'def' }" ) {
  *****************************************************************************/
 
 static bool before(atf_suite * suite) {
+
     test_aerospike_init(&as);
 
-    mod_lua_config_op conf_op = {
-        .optype     = MOD_LUA_CONFIG_OP_INIT,
-        .arg        = NULL,
-        .config     = mod_lua_config_new(true, "src/lua", "src/test/lua")
-    }; 
+    mod_lua_config config = {
+        .server_mode    = true,
+        .cache_enabled  = true,
+        .system_path    = "src/lua",
+        .user_path      = "src/test/lua"
+    };
 
-    as_module_init(&mod_lua);
-    as_module_configure(&mod_lua, &conf_op);
+    if ( mod_lua.logger == NULL ) {
+        mod_lua.logger = test_logger_new();
+    }
+        
+    int rc = as_module_configure(&mod_lua, &config);
+
+    if ( rc != 0 ) {
+        error("as_module_configure failed: %d", rc);
+        return false;
+    }
  
     return true;
 }
