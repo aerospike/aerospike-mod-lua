@@ -573,15 +573,15 @@ static void panic_setjmp(void) {
 }
 
 static int handle_panic(lua_State * l) {
-    // const char * msg = lua_tostring(l, 1);
-    // cf_warning(AS_SPROC, (char *) msg);
+    const char * msg = luaL_optstring(l, 1, 0);
+    as_logger_trace(mod_lua.logger, "Lua Runtime Fault: %s", msg);
     longjmp(panic_jmp, 1);
     return 0;
 }
 
 static int handle_error(lua_State * l) {
-    // const char * msg = luaL_optstring(l, 1, 0);
-    // as_logger_trace(mod_lua.logger, "Lua Runtime Error: %s", msg);
+    const char * msg = luaL_optstring(l, 1, 0);
+    as_logger_trace(mod_lua.logger, "Lua Runtime Error: %s", msg);
     // cf_warning(AS_SPROC, (char *) msg);
     return 0;
 }
