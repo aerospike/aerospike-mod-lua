@@ -103,7 +103,8 @@ int mod_lua_pushval(lua_State * l, const as_val * v) {
             return 1;   
         }
         case AS_BYTES: {
-            lua_pushlstring(l, (const char *)as_bytes_tobytes((as_bytes *) v), as_bytes_len((as_bytes *)v) );
+            as_val_reserve(v);
+            mod_lua_pushbytes(l, (as_bytes *) v);
             return 1;   
         }
         case AS_LIST: {
