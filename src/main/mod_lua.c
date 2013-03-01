@@ -842,6 +842,32 @@ static int apply_stream(as_module * m, as_aerospike * as, const char * filename,
     return rc;
 }
 
+
+int mod_lua_rdlock(as_module * m) {
+    context * c = (context *) ( m ? m->source : NULL );
+    if ( c && c->lock ) {
+        return pthread_rwlock_rdlock(c->lock);
+    }
+    return 1;
+}
+
+int mod_lua_wrlock(as_module * m) {
+    context * c = (context *) ( m ? m->source : NULL );
+    if ( c && c->lock ) {
+        return pthread_rwlock_wrlock(c->lock);
+    }
+    return 1;
+}
+
+int mod_lua_unlock(as_module * m) {
+    context * c = (context *) ( m ? m->source : NULL );
+    if ( c && c->lock ) {
+        return pthread_rwlock_unlock(c->lock);
+    }
+    return 1;
+}
+
+
 /**
  * Module Hooks
  */
