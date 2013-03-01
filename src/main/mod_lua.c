@@ -46,10 +46,10 @@
  * TYPES
  ******************************************************************************/
 
-typedef struct context_s context;
-
+struct cache_entry_s;
 typedef struct cache_entry_s cache_entry;
-cf_rchash *centry_hash;
+
+struct cache_item_s;
 typedef struct cache_item_s cache_item;
 
 struct cache_entry_s {
@@ -61,16 +61,28 @@ struct cache_entry_s {
     cf_atomic32     total;
 };
 
-
 struct cache_item_s {
     char            key[CACHE_ENTRY_KEY_MAX];
     char            gen[CACHE_ENTRY_GEN_MAX];
     lua_State *     state;
 };
 
+
+struct context_s;
+typedef struct context_s context;
+
+struct context_s {
+    mod_lua_config      config;
+    pthread_rwlock_t *  lock;
+};
+
 /******************************************************************************
  * VARIABLES
  ******************************************************************************/
+
+static pthread_rwlock_t lock;
+
+static cf_rchash * centry_hash = NULL;
 
 // static uint32_t cache_size = 0;
 
@@ -82,28 +94,22 @@ static jmp_buf panic_jmp;
  * Lua Module Specific Data
  * This will populate the module.source field
  */
-static struct context_s {
-    lua_State * lua_cache;
-    bool        cache_enabled;
-    char        system_path[256];
-    char        user_path[256];
-    char        filename[256];
-    bool        server_mode;
-    pthread_rwlock_t *lock;
-} lua = {
-    .cache_enabled  = true,
-    .system_path    = "",
-    .user_path      = "",
-    .server_mode    = true
+static context mod_lua_source = {
+    .config = {
+        .cache_enabled  = true,
+        .system_path    = "",
+        .user_path      = "",
+        .server_mode    = true
+    },
+    .lock = NULL
 };
 
 
 /******************************************************************************
- * FUNCTION DECLS
+ * STATIC FUNCTIONS
  ******************************************************************************/
 
-static int init(as_module *);
-static int configure(as_module *, void *);
+static int update(as_module *, as_module_event *);
 static int apply_record(as_module *, as_aerospike *, const char *, const char *, as_rec *, as_list *, as_result *);
 static int apply_stream(as_module *, as_aerospike *, const char *, const char *, as_stream *, as_list *, as_stream *);
 
@@ -121,8 +127,7 @@ static int handle_panic(lua_State *);
  ******************************************************************************/
 
 // Raj (todo) fix stupid hash function
-uint32_t        
-filename_hash_fn(void *filename, uint32_t len) {   
+uint32_t filename_hash_fn(void *filename, uint32_t len) {   
     char *b = filename;
     uint32_t acc = 0;
     for (int i=0;i<len;i++) {
@@ -130,22 +135,6 @@ filename_hash_fn(void *filename, uint32_t len) {
     }
     return(acc);
 }
-
-/**
- * Module Initializer.
- * This sets up the module before use. This is called only once on startup.
- *
- * @param m the module being initialized.
- * @return 0 on success, otherwhise 1
- */
-static int init(as_module * m) {
-    if (CF_RCHASH_OK != cf_rchash_create(&centry_hash, filename_hash_fn, NULL, 
-                            0, 64, CF_RCHASH_CR_MT_LOCKPOOL)) {
-        return 1;
-    }
-    return 0;
-}
-
 
 static inline int cache_entry_cleanup(cache_entry * centry) {
     lua_State *l = NULL;
@@ -211,7 +200,7 @@ int cache_init(context * ctx, const char *key, const char * gen) {
             cf_rc_releaseandfree(centry);
             return 1;
         } else {
-            LOG( "[CACHE] Added [%s:%p]", key, centry);
+            as_logger_trace(mod_lua.logger, "[CACHE] Added [%s:%p]", key, centry);
         }
     } else { 
         cache_entry_init(ctx, centry, key, gen);
@@ -221,7 +210,7 @@ int cache_init(context * ctx, const char *key, const char * gen) {
 	return 0;
 }
 
-static inline int cache_rmfile(context * ctx, const char * filename) {
+static int cache_remove_file(context * ctx, const char * filename) {
     char    key[CACHE_ENTRY_KEY_MAX]    = "";
     memcpy(key, filename, CACHE_ENTRY_KEY_MAX);
     *(rindex(key, '.')) = '\0';
@@ -229,7 +218,7 @@ static inline int cache_rmfile(context * ctx, const char * filename) {
     return 0;
 }
 
-static inline int cache_initfile(context * ctx, const char * filename) {
+static int cache_add_file(context * ctx, const char * filename) {
     char    key[CACHE_ENTRY_KEY_MAX]    = "";
     char    gen[CACHE_ENTRY_GEN_MAX]    = "";
     memcpy(key, filename, CACHE_ENTRY_KEY_MAX);
@@ -238,7 +227,7 @@ static inline int cache_initfile(context * ctx, const char * filename) {
     return 0;
 }
 
-static inline int cache_initdir(context * ctx, const char * directory) {
+static int cache_scan_dir(context * ctx, const char * directory) {
 
     DIR *           dir     = NULL;
     struct dirent * dentry  = NULL;
@@ -269,67 +258,94 @@ static inline int cache_initdir(context * ctx, const char * directory) {
  * arbitrary number of times during the lifetime of the server.
  *
  * @param m the module being configured.
- * @return 0 on success, otherwhise 1
+ * @return 0 = success, 1 = source is NULL, 2 = event.data is invalid, 3 = unable to create lock, 4 = unabled to create cache
  * @sychronization: Caller should have a write lock
  */
-static int configure(as_module * m, void * config_op) {
+static int update(as_module * m, as_module_event * e) {
 
-    context *           ctx = (context *) m->source;
-    mod_lua_config_op * op  = (mod_lua_config_op *) config_op;
-    mod_lua_config *    cfg = op->config;
-    DIR *               dir = NULL;
+as_logger_trace(mod_lua.logger, "FUCK");
+    context * ctx = (context *) (m ? m->source : NULL);
 
-    ctx->server_mode    = cfg->server_mode;
-    ctx->cache_enabled  = cfg->cache_enabled;
-    ctx->lock           = &cfg->lock;
+    if ( ctx == NULL ) return 1;
 
-    // Attempt to open the directory.
-    // If it opens, then set the ctx value.
-    // Otherwise, we alert the user of the error when a UDF is called. (for now)
-    dir = opendir(cfg->system_path);
-    if ( dir == 0 ) {
-        ctx->system_path[0] = '\0';
-        strncpy(ctx->system_path+1, cfg->system_path, 255);
-    }
-    else {
-        strncpy(ctx->system_path, cfg->system_path, 256);
-        closedir(dir);
-    }
-    dir = NULL;
+    switch ( e->type ) {
+        case AS_MODULE_EVENT_CONFIGURE: {
+            mod_lua_config * config     = (mod_lua_config *) e->data.config;
 
-    // Attempt to open the directory.
-    // If it opens, then set the ctx value.
-    // Otherwise, we alert the user of the error when a UDF is called. (for now)
-    dir = opendir(cfg->user_path);
-    if ( dir == 0 ) {
-        ctx->user_path[0] = '\0';
-        strncpy(ctx->user_path+1, cfg->user_path, 255);
-    }
-    else {
-        strncpy(ctx->user_path, cfg->user_path, 256);
-        closedir(dir);
-    }
-    dir = NULL;
+            ctx->config.server_mode     = config->server_mode;
+            ctx->config.cache_enabled   = config->cache_enabled;
 
-    if ( ctx->cache_enabled ) {
-        if (op->optype == MOD_LUA_CONFIG_OP_INIT) {
-            if ( ctx->system_path[0] != '\0' && ctx->user_path[0] != '\0' ) {
-                cache_initdir(ctx, ctx->user_path);
+            if ( centry_hash == NULL && ctx->config.cache_enabled ) {
+                int rc = cf_rchash_create(&centry_hash, filename_hash_fn, NULL, 0, 64, CF_RCHASH_CR_MT_LOCKPOOL);
+                if ( CF_RCHASH_OK != rc ) {
+                    return 1;
+                }
             }
-        } else if (op->optype == MOD_LUA_CONFIG_OP_ADD_FILE) {
-            if (op->arg) {
-                cache_initfile(ctx, (const char *) op->arg);
-            } else {
-                return 1;
+
+            if ( ctx->lock == NULL ) {
+                ctx->lock = &lock;
+                pthread_rwlockattr_t rwattr;
+                if (0 != pthread_rwlockattr_init(&rwattr)) {
+                    return 3;
+                }
+                if (0 != pthread_rwlockattr_setkind_np(&rwattr, PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP)) {
+                    return 3;
+                }
+                if (0 != pthread_rwlock_init(ctx->lock, &rwattr)) {
+                    return 3;
+                }
             }
-        } else if (op->optype == MOD_LUA_CONFIG_OP_REM_FILE) {
-            if (op->arg) {
-                cache_rmfile(ctx, (const char *)op->arg);
-            } else {
-                return 1;
+
+
+            DIR * dir = 0;
+
+            // Attempt to open the directory.
+            // If it opens, then set the ctx value.
+            // Otherwise, we alert the user of the error when a UDF is called. (for now)
+
+            dir = opendir(config->system_path);
+            if ( dir == 0 ) {
+                ctx->config.system_path[0] = '\0';
+                strncpy(ctx->config.system_path+1, config->system_path, 255);
             }
-        } else {
-            return 1;
+            else {
+                strncpy(ctx->config.system_path, config->system_path, 256);
+                closedir(dir);
+            }
+            dir = NULL;
+
+            // Attempt to open the directory.
+            // If it opens, then set the ctx value.
+            // Otherwise, we alert the user of the error when a UDF is called. (for now)
+            dir = opendir(config->user_path);
+            if ( dir == 0 ) {
+                ctx->config.user_path[0] = '\0';
+                strncpy(ctx->config.user_path+1, config->user_path, 255);
+            }
+            else {
+                strncpy(ctx->config.user_path, config->user_path, 256);
+                closedir(dir);
+            }
+            dir = NULL;
+
+            if ( ctx->config.cache_enabled ) cache_scan_dir(ctx, ctx->config.user_path);
+
+            break;
+        }
+        case AS_MODULE_EVENT_FILE_SCAN: {
+            if ( ctx->config.user_path == NULL ) return 2;
+            if ( ctx->config.cache_enabled ) cache_scan_dir(ctx, ctx->config.user_path);
+            break;
+        }
+        case AS_MODULE_EVENT_FILE_ADD: {
+            if ( e->data.filename == NULL ) return 2;
+            if ( ctx->config.cache_enabled ) cache_add_file(ctx, e->data.filename);
+            break;
+        }
+        case AS_MODULE_EVENT_FILE_REMOVE: {
+            if ( e->data.filename == NULL ) return 2;
+            if ( ctx->config.cache_enabled ) cache_remove_file(ctx, e->data.filename);
+            break;
         }
     }
 
@@ -397,8 +413,8 @@ static lua_State * create_state(context * ctx, const char * filename) {
     panic_setjmp();
     lua_atpanic(l, handle_panic);
 
-    package_path_set(l, ctx->system_path, ctx->user_path);
-    package_cpath_set(l, ctx->system_path, ctx->user_path);
+    package_path_set(l, ctx->config.system_path, ctx->config.user_path);
+    package_cpath_set(l, ctx->config.system_path, ctx->config.user_path);
 
     mod_lua_aerospike_register(l);
     mod_lua_record_register(l);
@@ -430,14 +446,14 @@ static lua_State * create_state(context * ctx, const char * filename) {
 static int poll_state(context * ctx, cache_item * citem) {
     uint32_t miss = 0;
     uint32_t total = 1;
-    if ( ctx->cache_enabled == true ) {
+    if ( ctx->config.cache_enabled == true ) {
         cache_entry     * centry = NULL;
         int retval = cf_rchash_get(centry_hash, (void *)citem->key, strlen(citem->key), (void *)&centry);
         if (CF_RCHASH_OK == retval ) {
             if (cf_queue_pop(centry->lua_state_q, &citem->state, CF_QUEUE_NOWAIT) != CF_QUEUE_EMPTY) {
                 strncpy(citem->key, centry->key, CACHE_ENTRY_KEY_MAX);
                 strncpy(citem->gen, centry->gen, CACHE_ENTRY_GEN_MAX);
-                LOG("[CACHE] took state: %s (%d)", citem->key, centry->max_cache_size);
+                as_logger_trace(mod_lua.logger, "[CACHE] took state: %s (%d)", citem->key, centry->max_cache_size);
             } else {
                 miss = cf_atomic32_incr(&centry->cache_miss);
                 citem->state = NULL;
@@ -451,20 +467,20 @@ static int poll_state(context * ctx, cache_item * citem) {
             }
             cf_rc_releaseandfree(centry);
             centry = 0;
-			LOG("[CACHE] Miss %d : Total %d", miss, total);
+			as_logger_trace(mod_lua.logger, "[CACHE] Miss %d : Total %d", miss, total);
         } else {
             centry = NULL;
         }
     }
     else {
-        LOG("[CACHE] is disabled.");
+        as_logger_trace(mod_lua.logger, "[CACHE] is disabled.");
     }
 
     if ( citem->state == NULL ) {
         citem->gen[0] = '\0';
         citem->state = create_state(ctx, citem->key);
 
-        LOG("[CACHE] state created: %s", citem->key);
+        as_logger_trace(mod_lua.logger, "[CACHE] state created: %s", citem->key);
     }
 
     return 0;
@@ -480,7 +496,7 @@ static int poll_state(context * ctx, cache_item * citem) {
  */
 static int offer_state(context * ctx, cache_item * citem) {
 
-    if ( ctx->cache_enabled == true ) {
+    if ( ctx->config.cache_enabled == true ) {
 		// Runnig GCCOLLECT is overkill because with every execution
 		// lua itself does a garbage collection. Also do garbage 
 		// collection outside the spinlock. arg for GCSTEP 2 is a 
@@ -488,22 +504,22 @@ static int offer_state(context * ctx, cache_item * citem) {
         lua_gc(citem->state, LUA_GCSTEP, 2);
         cache_entry *centry = NULL;
         if (CF_RCHASH_OK == cf_rchash_get(centry_hash, (void *)citem->key, strlen(citem->key), (void *)&centry) ) {
-            LOG("[CACHE] found entry: %s (%d)", citem->key, centry->max_cache_size);
+            as_logger_trace(mod_lua.logger, "[CACHE] found entry: %s (%d)", citem->key, centry->max_cache_size);
             if (( CF_Q_SZ(centry->lua_state_q) < centry->max_cache_size ) 
                 && ( !strncmp(centry->gen, citem->gen, CACHE_ENTRY_GEN_MAX) )) {
                 cf_queue_push(centry->lua_state_q, &citem->state);
-                LOG("[CACHE] returning state: %s (%d)", citem->key, centry->max_cache_size);
+                as_logger_trace(mod_lua.logger, "[CACHE] returning state: %s (%d)", citem->key, centry->max_cache_size);
                 citem->state = NULL;
             }
             cf_rc_releaseandfree(centry);
             centry = 0;
         }
         else {
-            LOG("[CACHE] entry not found: %s", citem->key);
+            as_logger_trace(mod_lua.logger, "[CACHE] entry not found: %s", citem->key);
         }
     }
     else {
-        LOG("[CACHE] is disabled.");
+        as_logger_trace(mod_lua.logger, "[CACHE] is disabled.");
     }
     
     // l is not NULL
@@ -511,7 +527,7 @@ static int offer_state(context * ctx, cache_item * citem) {
     // So, we free it up.
     if ( citem->state != NULL) {
         lua_close(citem->state);
-        LOG("[CACHE] state closed: %s", citem->key);
+        as_logger_trace(mod_lua.logger, "[CACHE] state closed: %s", citem->key);
     }
 
     return 0;
@@ -529,7 +545,7 @@ typedef struct {
  */
 static bool pushargs_foreach(as_val * val, void * context) {
     pushargs_data * data = (pushargs_data *) context;
-    LOG("pusharg: %s", as_val_tostring(val));
+    as_logger_trace(mod_lua.logger, "pusharg: %s", as_val_tostring(val));
     data->count += mod_lua_pushval(data->l, val);
     return true;
 }
@@ -548,7 +564,7 @@ static int pushargs(lua_State * l, as_list * args) {
     };
 
     as_list_foreach(args, &data, pushargs_foreach);
-    LOG("pushargs: %d", data.count);
+    as_logger_trace(mod_lua.logger, "pushargs: %d", data.count);
     return data.count;
 }
 
@@ -565,24 +581,24 @@ static int handle_panic(lua_State * l) {
 }
 
 static int handle_error(lua_State * l) {
-    const char * msg = luaL_optstring(l, 1, 0);
-    LOG("Lua Runtime Error: %s", msg);
+    // const char * msg = luaL_optstring(l, 1, 0);
+    // as_logger_trace(mod_lua.logger, "Lua Runtime Error: %s", msg);
     // cf_warning(AS_SPROC, (char *) msg);
     return 0;
 }
 
 static int apply(lua_State * l, int err, int argc, as_result * res) {
 
-    LOG("apply");
+    as_logger_trace(mod_lua.logger, "apply");
 
     // call apply_record(f, r, ...)
-    LOG("call function");
+    as_logger_trace(mod_lua.logger, "call function");
     int rc = lua_pcall(l, argc, 1, err);
 
-    LOG("rc = %d", rc);
+    as_logger_trace(mod_lua.logger, "rc = %d", rc);
 
     // Convert the return value from a lua type to a val type
-    LOG("convert lua type to val");
+    as_logger_trace(mod_lua.logger, "convert lua type to val");
     as_val * rv = mod_lua_retval(l);
 
 
@@ -598,7 +614,7 @@ static int apply(lua_State * l, int err, int argc, as_result * res) {
     }
 
     // Pop the return value off the stack
-    LOG("pop return value from the stack");
+    as_logger_trace(mod_lua.logger, "pop return value from the stack");
     lua_pop(l, -1);
 
     return 0;
@@ -608,8 +624,8 @@ static int verify_environment(context * ctx, as_aerospike * as) {
     int rc = 0;
 
     pthread_rwlock_rdlock(ctx->lock);
-    if ( ctx->system_path[0] == '\0' ) {
-        char * p = ctx->system_path;
+    if ( ctx->config.system_path[0] == '\0' ) {
+        char * p = ctx->config.system_path;
         char msg[256] = {'\0'};
         strcpy(msg, "system-path is invalid: ");
         strncpy(msg+24, p+1, 230);
@@ -617,8 +633,8 @@ static int verify_environment(context * ctx, as_aerospike * as) {
         rc += 1;
     }
 
-    if ( ctx->user_path[0] == '\0' ) {
-        char * p = ctx->user_path;
+    if ( ctx->config.user_path[0] == '\0' ) {
+        char * p = ctx->config.user_path;
         char msg[256] = {'\0'};
         strcpy(msg, "user-path is invalid: ");
         strncpy(msg+22, p+1, 233);
@@ -667,15 +683,15 @@ static int apply_record(as_module * m, as_aerospike * as, const char * filename,
 
     strncpy(citem.key, filename, CACHE_ENTRY_KEY_MAX);
     
-    LOG("apply_record: BEGIN");
+    as_logger_trace(mod_lua.logger, "apply_record: BEGIN");
 
     // lease a state
-    LOG("apply_record: poll state");
+    as_logger_trace(mod_lua.logger, "apply_record: poll state");
     rc = poll_state(ctx, &citem);
     pthread_rwlock_unlock(ctx->lock);
 
     if ( rc != 0 ) {
-        LOG("apply_record: Unable to poll a state");
+        as_logger_trace(mod_lua.logger, "apply_record: Unable to poll a state");
         return rc;
     }
 
@@ -686,40 +702,40 @@ static int apply_record(as_module * m, as_aerospike * as, const char * filename,
     // int err = lua_gettop(l);
     
     // push aerospike into the global scope
-    LOG("apply_record: push aerospike into the global scope");
+    as_logger_trace(mod_lua.logger, "apply_record: push aerospike into the global scope");
     mod_lua_pushaerospike(l, as);
     lua_setglobal(l, "aerospike");
     
     // push apply_record() onto the stack
-    LOG("apply_record: push apply_record() onto the stack");
+    as_logger_trace(mod_lua.logger, "apply_record: push apply_record() onto the stack");
     lua_getglobal(l, "apply_record");
     
     // push function onto the stack
-    LOG("apply_record: push function onto the stack");
+    as_logger_trace(mod_lua.logger, "apply_record: push function onto the stack");
     lua_getglobal(l, function);
 
     // push the record onto the stack
-    LOG("apply_record: push the record onto the stack");
+    as_logger_trace(mod_lua.logger, "apply_record: push the record onto the stack");
     mod_lua_pushrecord(l, r);
 
     // push each argument onto the stack
-    LOG("apply_record: push each argument onto the stack");
+    as_logger_trace(mod_lua.logger, "apply_record: push each argument onto the stack");
     argc = pushargs(l, args);
 
     // function + record + arglist
     argc = argc + 2;
     
     // apply the function
-    LOG("apply_record: apply the function");
+    as_logger_trace(mod_lua.logger, "apply_record: apply the function");
     apply(l, err, argc, res);
 
     // return the state
     pthread_rwlock_rdlock(ctx->lock);
-    LOG("apply_record: offer state");
+    as_logger_trace(mod_lua.logger, "apply_record: offer state");
     offer_state(ctx, &citem);
     pthread_rwlock_unlock(ctx->lock);
     
-    LOG("apply_record: END");
+    as_logger_trace(mod_lua.logger, "apply_record: END");
     return rc;
 }
 
@@ -762,15 +778,15 @@ static int apply_stream(as_module * m, as_aerospike * as, const char * filename,
 
     strncpy(citem.key, filename, CACHE_ENTRY_KEY_MAX);
 
-    LOG("apply_stream: BEGIN");
+    as_logger_trace(mod_lua.logger, "apply_stream: BEGIN");
 
     // lease a state
-    LOG("apply_stream: poll state");
+    as_logger_trace(mod_lua.logger, "apply_stream: poll state");
     rc = poll_state(ctx, &citem);
     pthread_rwlock_unlock(ctx->lock);
 
     if ( rc != 0 ) {
-        LOG("apply_stream: Unable to poll a state");
+        as_logger_trace(mod_lua.logger, "apply_stream: Unable to poll a state");
         return rc;
     }
 
@@ -781,65 +797,66 @@ static int apply_stream(as_module * m, as_aerospike * as, const char * filename,
     err = lua_gettop(l);
     
     // push aerospike into the global scope
-    LOG("apply_stream: push aerospike into the global scope");
+    as_logger_trace(mod_lua.logger, "apply_stream: push aerospike into the global scope");
     mod_lua_pushaerospike(l, as);
     lua_setglobal(l, "aerospike");
 
     // push apply_stream() onto the stack
-    LOG("apply_stream: push apply_stream() onto the stack");
+    as_logger_trace(mod_lua.logger, "apply_stream: push apply_stream() onto the stack");
     lua_getglobal(l, "apply_stream");
     
     // push function onto the stack
-    LOG("apply_stream: push function onto the stack");
+    as_logger_trace(mod_lua.logger, "apply_stream: push function onto the stack");
     lua_getglobal(l, function);
 
     // push the stream onto the stack
     // if server_mode == true then SCOPE_SERVER(1) else SCOPE_CLIENT(2)
-    LOG("apply_stream: push scope onto the stack");
-    lua_pushinteger(l, ctx->server_mode ? 1 : 2);
+    as_logger_trace(mod_lua.logger, "apply_stream: push scope onto the stack");
+    lua_pushinteger(l, ctx->config.server_mode ? 1 : 2);
 
     // push the stream onto the stack
-    LOG("apply_stream: push istream onto the stack");
+    as_logger_trace(mod_lua.logger, "apply_stream: push istream onto the stack");
     mod_lua_pushstream(l, istream);
 
-    LOG("apply_stream: push ostream onto the stack");
+    as_logger_trace(mod_lua.logger, "apply_stream: push ostream onto the stack");
     mod_lua_pushstream(l, ostream);
 
     // push each argument onto the stack
-    LOG("apply_stream: push each argument onto the stack");
+    as_logger_trace(mod_lua.logger, "apply_stream: push each argument onto the stack");
     argc = pushargs(l, args); 
 
     // function + scope + istream + ostream + arglist
     argc = 4 + argc;
     
     // call apply_stream(f, s, ...)
-    LOG("apply_stream: apply the function");
+    as_logger_trace(mod_lua.logger, "apply_stream: apply the function");
     apply(l, err, argc, NULL);
 
     // release the context
     pthread_rwlock_rdlock(ctx->lock);
-    LOG("apply_stream: lose the context");
+    as_logger_trace(mod_lua.logger, "apply_stream: lose the context");
     offer_state(ctx, &citem);
     pthread_rwlock_unlock(ctx->lock);
 
-    LOG("END");
+    as_logger_trace(mod_lua.logger, "apply_stream: END");
     return rc;
 }
 
 /**
  * Module Hooks
  */
-static const as_module_hooks hooks = {
-    init,
-    configure,
-    apply_record,
-    apply_stream
+static const as_module_hooks mod_lua_hooks = {
+    .destroy        = NULL,
+    .update         = update,
+    .apply_record   = apply_record,
+    .apply_stream   = apply_stream
 };
 
 /**
  * Module
  */
 as_module mod_lua = {
-    &lua,
-    &hooks
+    .source         = &mod_lua_source,
+    .logger         = NULL,
+    .hooks          = &mod_lua_hooks
 };
