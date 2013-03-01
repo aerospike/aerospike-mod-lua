@@ -59,6 +59,7 @@ AS_TYPES += as_result.o
 AS_TYPES += as_aerospike.o
 AS_TYPES += as_serializer.o
 AS_TYPES += as_msgpack.o
+AS_TYPES += as_logger.o
 AS_TYPES += internal.o
 
 
@@ -73,7 +74,7 @@ MOD_LUA += mod_lua_map.o
 MOD_LUA += mod_lua_bytes.o
 MOD_LUA += mod_lua_stream.o
 MOD_LUA += mod_lua_val.o
-MOD_LUA += mod_lua_config.o
+# MOD_LUA += mod_lua_config.o
 
 
 TEST = test.o
@@ -87,7 +88,7 @@ VAL_TEST += $(as_types)
 ##  MAIN TARGETS                                                             ##
 ###############################################################################
 
-all: build prepare
+all: | build prepare
 
 .PHONY: prepare
 prepare: $(TARGET_INCL)
@@ -114,11 +115,11 @@ libmod_lua.so: $(TARGET_LIB)/libmod_lua.so
 ##  BUILD TARGETS                                                            ##
 ###############################################################################
 
-$(TARGET_LIB)/libas_types.a $(TARGET_LIB)/libas_types.so: $(AS_TYPES:%=$(TARGET_OBJ)/%) | modules/common/$(TARGET_INCL)/*.h
+$(TARGET_LIB)/libas_types.a $(TARGET_LIB)/libas_types.so: $(AS_TYPES:%=$(TARGET_OBJ)/%) |  modules/common/$(TARGET_INCL)/*.h
 
 $(TARGET_LIB)/libmod_lua.a $(TARGET_LIB)/libmod_lua.so: $(MOD_LUA:%=$(TARGET_OBJ)/%) $(AS_TYPES:%=$(TARGET_OBJ)/%) | modules/common/$(TARGET_INCL)/*.h
 
-$(TARGET_INCL): $(SOURCE_INCL)/*.h 
+$(TARGET_INCL): $(wildcard $(SOURCE_INCL)/*)
 	mkdir -p $(TARGET_INCL)
 	cp -p $(SOURCE_INCL)/*.h $(TARGET_INCL)/.
 
@@ -203,13 +204,14 @@ TEST_STREAM += stream/stream_udf
 TEST_RECORD = 
 # TEST_RECORD += record/record_basics
 TEST_RECORD += record/record_udf
-TEST_RECORD += record/bytes_udf
+# TEST_RECORD += record/bytes_udf
 
 TEST_UTIL = 
 TEST_UTIL += util/consumer_stream
 TEST_UTIL += util/producer_stream
 TEST_UTIL += util/map_rec
 TEST_UTIL += util/test_aerospike
+TEST_UTIL += util/test_logger
 
 TEST_MOD_LUA = mod_lua_test
 TEST_MOD_LUA += $(TEST_UTIL) 
@@ -249,8 +251,8 @@ $(TARGET_OBJ)/test/%.o: $(SOURCE_TEST)/%.c
 test/mod_lua_test: $(TARGET_BIN)/test/mod_lua_test
 $(TARGET_BIN)/test/mod_lua_test: CFLAGS = $(TEST_CFLAGS)
 $(TARGET_BIN)/test/mod_lua_test: LDFLAGS += $(TEST_LDFLAGS)
-$(TARGET_BIN)/test/mod_lua_test: $(TEST_MOD_LUA:%=$(TARGET_OBJ)/test/%.o) $(TARGET_OBJ)/test/test.o | modules build prepare
-	$(executable) $(TARGET_OBJ)/*.o $(TEST_DEPS)
+$(TARGET_BIN)/test/mod_lua_test: $(TEST_MOD_LUA:%=$(TARGET_OBJ)/test/%.o) $(TARGET_OBJ)/test/test.o $(wildcard $(TARGET_OBJ)/*) | modules build prepare
+	$(executable) $(TEST_DEPS)
 
 ###############################################################################
 include project/rules.makefile
