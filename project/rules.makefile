@@ -55,14 +55,15 @@ clean:
 
 
 .PHONY: $(TARGET_OBJ)/%.o
-$(TARGET_OBJ)/%.o : %.c | $(TARGET_OBJ) 
+$(TARGET_OBJ)/%.o : %.c  | $(TARGET_OBJ) 
 	$(object)
 
 .PHONY: all
 
 .DEFAULT_GOAL := all
 
-%.o:
+
+%.o: %.c %.d
 	$(object)
 
 %.a: 
@@ -73,3 +74,5 @@ $(TARGET_OBJ)/%.o : %.c | $(TARGET_OBJ)
 
 %: 
 	$(executable)
+
+-include $(wildcard $(TARGET_DEP)/*.d)

@@ -83,6 +83,7 @@ TARGET_BIN  = $(TARGET_BASE)/bin
 TARGET_DOC  = $(TARGET_BASE)/doc
 TARGET_LIB  = $(TARGET_BASE)/lib
 TARGET_OBJ  = $(TARGET_BASE)/obj
+TARGET_DEP  = $(TARGET_BASE)/dep
 TARGET_INCL = $(TARGET_BASE)/include
 
 ###############################################################################
@@ -121,77 +122,91 @@ TARGET_INCL = $(TARGET_BASE)/include
 #
 
 define build
-  $(if $(filter .o,$(suffix $@)), 
-    $(call object, $(1),$(2),$(3),$(4)),
-    $(if $(filter .so,$(suffix $@)), 
-      $(call library, $(1),$(2),$(3),$(4)),
-      $(if $(filter .a,$(suffix $@)), 
-        $(call archive, $(1),$(2),$(3),$(4)),
-        $(call executable, $(1),$(2),$(3),$(4))
-      )
-    )
-  )
+	$(if $(filter .o,$(suffix $@)), 
+		$(call object, $(1),$(2),$(3),$(4)),
+		$(if $(filter .so,$(suffix $@)), 
+			$(call library, $(1),$(2),$(3),$(4)),
+			$(if $(filter .a,$(suffix $@)), 
+				$(call archive, $(1),$(2),$(3),$(4)),
+				$(call executable, $(1),$(2),$(3),$(4))
+			)
+		)
+	)
 endef
 
 define executable
-  @if [ ! -d `dirname $@` ]; then mkdir -p `dirname $@`; fi
-  $(strip $(CC) \
-    $(addprefix -I, $(SUBMODULES:%=%/$(SOURCE_INCL))) \
-    $(addprefix -I, $(INC_PATH)) \
-    $(addprefix -L, $(SUBMODULES:%=%/$(TARGET_LIB))) \
-    $(addprefix -L, $(LIB_PATH)) \
-    $(addprefix -l, $(LIBRARIES)) \
-    $(LD_FLAGS) \
-    $(LDFLAGS) \
-    $(CC_FLAGS) \
-    $(CFLAGS) \
-    -o $@ \
-    $^ \
-  )
+	@if [ ! -d `dirname $@` ]; then mkdir -p `dirname $@`; fi
+	$(strip $(CC) \
+		$(addprefix -I, $(SUBMODULES:%=%/$(SOURCE_INCL))) \
+		$(addprefix -I, $(INC_PATH)) \
+		$(addprefix -L, $(SUBMODULES:%=%/$(TARGET_LIB))) \
+		$(addprefix -L, $(LIB_PATH)) \
+		$(addprefix -l, $(LIBRARIES)) \
+		$(LD_FLAGS) \
+		$(LDFLAGS) \
+		$(CC_FLAGS) \
+		$(CFLAGS) \
+		-o $@ \
+		$(filter %.o, $^) \
+	)
 endef
 
 define archive
-  @if [ ! -d `dirname $@` ]; then mkdir -p `dirname $@`; fi
-  $(strip $(AR) \
-    rcs \
-    $(AR_FLAGS) \
-    $(ARFLAGS) \
-    $@ \
-    $^ \
-  )
+	@if [ ! -d `dirname $@` ]; then mkdir -p `dirname $@`; fi
+	$(strip $(AR) \
+		rcs \
+		$(AR_FLAGS) \
+		$(ARFLAGS) \
+		$@ \
+		$(filter %.o, $^) \
+	)
 endef
 
 define library
-  @if [ ! -d `dirname $@` ]; then mkdir -p `dirname $@`; fi
-  $(strip $(CC) -shared \
-    $(addprefix -I, $(SUBMODULES:%=%/$(SOURCE_INCL))) \
-    $(addprefix -I, $(INC_PATH)) \
-    $(addprefix -L, $(SUBMODULES:%=%/$(TARGET_LIB))) \
-    $(addprefix -L, $(LIB_PATH)) \
-    $(addprefix -l, $(LIBRARIES)) \
-    $(LD_FLAGS) \
-    $(LDFLAGS) \
-    -o $@ \
-    $^ \
-  )
+	@if [ ! -d `dirname $@` ]; then mkdir -p `dirname $@`; fi
+	$(strip $(CC) -shared \
+		$(addprefix -I, $(SUBMODULES:%=%/$(SOURCE_INCL))) \
+		$(addprefix -I, $(INC_PATH)) \
+		$(addprefix -L, $(SUBMODULES:%=%/$(TARGET_LIB))) \
+		$(addprefix -L, $(LIB_PATH)) \
+		$(addprefix -l, $(LIBRARIES)) \
+		$(LD_FLAGS) \
+		$(LDFLAGS) \
+		-o $@ \
+		$(filter %.o, $^) \
+	)
 endef
 
 define object
-  @if [ ! -d `dirname $@` ]; then mkdir -p `dirname $@`; fi
-  $(strip $(CC) \
-    $(addprefix -I, $(SUBMODULES:%=%/$(SOURCE_INCL))) \
-    $(addprefix -I, $(INC_PATH)) \
-    $(addprefix -L, $(SUBMODULES:%=%/$(TARGET_LIB))) \
-    $(addprefix -L, $(LIB_PATH)) \
-    $(CC_FLAGS) \
-    $(CFLAGS) \
-    -o $@ \
-    -c $^ \
-  )
+	@if [ ! -d `dirname $@` ]; then mkdir -p `dirname $@`; fi
+	$(strip $(CC) \
+		$(addprefix -I, $(SUBMODULES:%=%/$(SOURCE_INCL))) \
+		$(addprefix -I, $(INC_PATH)) \
+		$(addprefix -L, $(SUBMODULES:%=%/$(TARGET_LIB))) \
+		$(addprefix -L, $(LIB_PATH)) \
+		$(CC_FLAGS) \
+		$(CFLAGS) \
+		-o $@ \
+		-c $(filter %.c, $^) \
+	)
+
+	@if [ ! -d `dirname $(subst $(TARGET_OBJ),$(TARGET_DEP),$(@:.o=.d))` ]; then mkdir -p `dirname $(subst $(TARGET_OBJ),$(TARGET_DEP),$(@:.o=.d))`; fi
+	$(strip $(CC) \
+		$(addprefix -I, $(SUBMODULES:%=%/$(SOURCE_INCL))) \
+		$(addprefix -I, $(INC_PATH)) \
+		$(addprefix -L, $(SUBMODULES:%=%/$(TARGET_LIB))) \
+		$(addprefix -L, $(LIB_PATH)) \
+		$(CC_FLAGS) \
+		$(CFLAGS) \
+		-MM \
+		-MT '$@' \
+		-o $(subst $(TARGET_OBJ),$(TARGET_DEP),$(@:.o=.d)) \
+		-c $(filter %.c, $^) \
+	)
 endef
 
 define make_each
-  @for i in $(1); do \
-    make -C $$i $(2);\
-  done;
+	@for i in $(1); do \
+		make -C $$i $(2);\
+	done;
 endef
