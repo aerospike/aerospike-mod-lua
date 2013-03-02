@@ -77,12 +77,13 @@ static int mod_lua_aerospike_rec_update(lua_State * l) {
 /**
  * aerospike.crec_create(record) => result<record>
  */
-static as_rec * mod_lua_aerospike_crec_create(lua_State * l) {
+static int mod_lua_aerospike_crec_create(lua_State * l) {
     as_aerospike *  a   = mod_lua_checkaerospike(l, 1);
     as_rec *        r   = mod_lua_torecord(l, 2);
     as_rec *       rc   = as_aerospike_crec_create(a, r);
-    if (!rc) return NULL;
-    return mod_lua_pushrecord(l, rc);
+    if (!rc) return 0;
+    mod_lua_pushrecord(l, rc);
+    return 1;
 }
 
 /**
@@ -101,13 +102,14 @@ static int mod_lua_aerospike_crec_update(lua_State * l) {
 /**
  * aerospike.crec_open(record, record) => result<bool>
  */
-static as_rec * mod_lua_aerospike_crec_open(lua_State * l) {
+static int mod_lua_aerospike_crec_open(lua_State * l) {
     as_aerospike *  a   = mod_lua_checkaerospike(l, 1);
     as_rec *        r   = mod_lua_torecord(l, 2);
     char *        dig   = (char *)lua_tostring(l, 3);
     as_rec *       rc   = as_aerospike_crec_open(a, r, dig);
     if (!rc) return 0;
-    return mod_lua_pushrecord(l, rc);
+    mod_lua_pushrecord(l, rc);
+    return 1;
 }
 
 /**
