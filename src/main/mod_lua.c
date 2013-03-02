@@ -227,6 +227,15 @@ static int cache_add_file(context * ctx, const char * filename) {
     return 0;
 }
 
+static char * dropext(char * name, size_t name_len, const char * ext, size_t ext_len) {
+    char * p = (name + name_len - ext_len);
+    if ( strncmp(p, ext, ext_len) == 0 ) {
+        *p = '\0';
+        return name;
+    }
+    return NULL;
+}
+
 static int cache_scan_dir(context * ctx, const char * directory) {
 
     DIR *           dir     = NULL;
@@ -238,13 +247,27 @@ static int cache_scan_dir(context * ctx, const char * directory) {
 
     while ( (dentry = readdir(dir)) && dentry->d_name ) {
 
-        char *  filename                    = dentry->d_name;
         char    key[CACHE_ENTRY_KEY_MAX]    = "";
         char    gen[CACHE_ENTRY_GEN_MAX]    = "";
 
-        memcpy(key, filename, CACHE_ENTRY_KEY_MAX);
-        *(rindex(key, '.')) = '\0';
-        cache_init(ctx, key, gen);
+        memcpy(key, dentry->d_name, CACHE_ENTRY_KEY_MAX);
+
+        char *  base    = NULL;
+        size_t  len     = strlen(key);
+
+        // If file ends with ".lua", then drop ".lua"
+        base = dropext(key, len, ".lua", 4);
+        if ( base != NULL ) {
+            cache_init(ctx, key, gen);
+            continue;
+        }
+
+        // If file ends with ".so", then drop ".so"
+        base = dropext(key, len, ".so", 3);
+        if ( base != NULL ) {
+            cache_init(ctx, key, gen);
+            continue;
+        }
     }
 
     closedir(dir);
