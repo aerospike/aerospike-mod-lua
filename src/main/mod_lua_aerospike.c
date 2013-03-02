@@ -105,8 +105,8 @@ static int mod_lua_aerospike_crec_update(lua_State * l) {
 static int mod_lua_aerospike_crec_open(lua_State * l) {
     as_aerospike *  a   = mod_lua_checkaerospike(l, 1);
     as_rec *        r   = mod_lua_torecord(l, 2);
-    char *        dig   = (char *)lua_tostring(l, 3);
-    as_rec *       rc   = as_aerospike_crec_open(a, r, dig);
+    as_bytes *   bdig   = mod_lua_tobytes(l, 3);
+    as_rec *       rc   = as_aerospike_crec_open(a, r, bdig);
     if (!rc) return 0;
     mod_lua_pushrecord(l, rc);
     return 1;
