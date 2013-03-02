@@ -71,6 +71,28 @@ static int mod_lua_record_gen(lua_State * l) {
 }
 
 /**
+ * Get a record digest:
+ *      record.digest(r)
+ */
+static int mod_lua_record_digest(lua_State * l) {
+    as_rec * rec = (as_rec *) mod_lua_checkrecord(l, 1);
+	as_bytes * b = as_rec_digest(rec);
+	fprintf(stderr," Pushing %p", b);	
+	mod_lua_pushbytes(l, b);
+    return 1;
+}
+
+/**
+ * Get a record numbins:
+ *      record.numbins(r)
+ */
+static int mod_lua_record_numbins(lua_State * l) {
+    as_rec * rec = (as_rec *) mod_lua_checkrecord(l, 1);
+    lua_pushinteger(l, as_rec_numbins(rec));
+    return 1;
+}
+
+/**
  * Get a value from the named bin
  */
 static int mod_lua_record_index(lua_State * l) {
@@ -121,6 +143,8 @@ static int mod_lua_record_newindex(lua_State * l) {
 static const luaL_reg object_table[] = {
     {"ttl",        mod_lua_record_ttl},
     {"gen",        mod_lua_record_gen},
+    {"digest",     mod_lua_record_digest},
+    {"numbins",    mod_lua_record_numbins},
     {0, 0}
 };
 
