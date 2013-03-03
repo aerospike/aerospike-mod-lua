@@ -50,25 +50,38 @@ static int mod_lua_bytes_len(lua_State * l) {
     return 1;
 }
 
+static int mod_lua_bytes_set_len(lua_State *l) {
+    as_bytes *  b     = mod_lua_checkbytes(l, 1);
+    int n_args = lua_gettop(l);
+    if (n_args != 2) {
+        lua_pushnil(l);
+        return(0);
+    }
+    int new_len = luaL_optinteger(l, 2, 0);
+    if (as_bytes_set_len(b, new_len) != 0) {
+        lua_pushnil(l);
+        return(0);
+    }
+    lua_pushinteger(l, new_len);
+    return(1);
+}
+
 static int mod_lua_bytes_new(lua_State * l) {
 
     as_bytes * b = 0;
 
     int n_args = lua_gettop(l); // number of elements passed
 
-    if ( n_args == 1) {
-
+    if ( n_args == 1) { // create with size 0
         b = as_bytes_empty_new(0 /*len*/);
-
         mod_lua_pushbytes(l, b);
     }
 
-    else if ( n_args == 2 ) {
+    else if ( n_args == 2 ) { // create with this size
 
         if (lua_type(l, 2) == LUA_TNUMBER) {
             lua_Integer n = luaL_optinteger(l, 2, 0);
             b = as_bytes_empty_new(n);
-
         }
         else {
             // fprintf(stderr, "+=+=+= mod_lua_bytes_new: arg is type %d\n",lua_type(l, 2));
@@ -233,6 +246,9 @@ static int mod_lua_bytes_put_string(lua_State * l) {
     }
 
     int offset = (int) luaL_optinteger(l, 2, 0); 
+    if (offset <= 0) {
+        lua_pushnil(l); return(0);
+    }
     const char *    value = luaL_optstring(l, 3, NULL);
     int     value_len = strlen(value);
 
@@ -248,9 +264,17 @@ static int mod_lua_bytes_put_bytes(lua_State * l) {
 
     as_bytes * b = mod_lua_checkbytes(l, 1);
 
-    int n_args = lua_gettop(l); 
+    int buf_len = 0;
 
-    if (n_args != 3) {
+    int n_args = lua_gettop(l); 
+    if (n_args == 4) { // optional arg: bytes
+        buf_len = (int) luaL_optinteger(l, 4, 0);
+        if (buf_len <= 0) {
+            lua_pushnil(l);
+            return(0);
+        }
+    }
+    else if (n_args != 3) {
         lua_pushnil(l);
         return(0);
     }
@@ -260,9 +284,14 @@ static int mod_lua_bytes_put_bytes(lua_State * l) {
     as_bytes * v = mod_lua_checkbytes(l, 3);
 
     uint8_t *buf = as_bytes_tobytes(v);
-    int buf_len = as_bytes_len(v);
+    int byte_buf_len = as_bytes_len(v);
+    if (buf_len == 0) buf_len = byte_buf_len;
+    else if (buf_len > byte_buf_len) {
+        lua_pushnil(l);
+        return(0);
+    }
 
-    if (0 != as_bytes_set(b, offset-1, (uint8_t *) &buf, buf_len)) {
+    if (0 != as_bytes_set(b, offset-1, (uint8_t *) buf, buf_len)) {
         lua_pushnil(l);
         return(0);
     }
@@ -359,14 +388,13 @@ static int mod_lua_bytes_get_string(lua_State * l) {
 
     uint8_t * buf = (uint8_t *) malloc(len+1);
 
-
     if (0 != as_bytes_get(b, offset-1, (uint8_t *) buf, len)) {
         lua_pushnil(l);
         return(0);
     }
     buf[len] = 0;
 
-    lua_pushlstring(l, buf, len);
+    lua_pushlstring(l, (char *)buf, len);
     return 1;
 }
 
@@ -419,6 +447,7 @@ static const luaL_reg bytes_object_table[] = {
 //    {"set_type",        mod_lua_bytes_set_type},
 //    {"get_type",        mod_lua_bytes_set_type},
 
+    {"set_len",         mod_lua_bytes_set_len},
 //    {"append",          mod_lua_bytes_append},
 //    {"delete",          mod_lua_bytes_delete}
 
