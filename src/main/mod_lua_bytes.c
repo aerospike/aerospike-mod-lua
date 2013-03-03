@@ -250,6 +250,9 @@ static int mod_lua_bytes_put_string(lua_State * l) {
         lua_pushnil(l); return(0);
     }
     const char *    value = luaL_optstring(l, 3, NULL);
+    if (!value) {
+        lua_pushnil(l); return(0);
+    }
     int     value_len = strlen(value);
 
     if (0 != as_bytes_set(b, offset-1, (uint8_t *) value, value_len)) {
@@ -270,18 +273,19 @@ static int mod_lua_bytes_put_bytes(lua_State * l) {
     if (n_args == 4) { // optional arg: bytes
         buf_len = (int) luaL_optinteger(l, 4, 0);
         if (buf_len <= 0) {
-            lua_pushnil(l);
-            return(0);
+            lua_pushnil(l);   return(0);
         }
     }
     else if (n_args != 3) {
-        lua_pushnil(l);
-        return(0);
+        lua_pushnil(l);    return(0);
     }
 
     int offset = (int) luaL_optinteger(l, 2, 0); 
 
     as_bytes * v = mod_lua_checkbytes(l, 3);
+    if (!v) {
+        lua_pushnil(l); return(0);
+    }
 
     uint8_t *buf = as_bytes_tobytes(v);
     int byte_buf_len = as_bytes_len(v);
@@ -436,6 +440,12 @@ static const luaL_reg bytes_object_table[] = {
     {"put_int64",       mod_lua_bytes_put_int64},
     {"put_string",      mod_lua_bytes_put_string},
     {"put_bytes",       mod_lua_bytes_put_bytes},
+
+    {"set_int16",       mod_lua_bytes_put_int16},
+    {"set_int32",       mod_lua_bytes_put_int32},
+    {"set_int64",       mod_lua_bytes_put_int64},
+    {"set_string",      mod_lua_bytes_put_string},
+    {"set_bytes",       mod_lua_bytes_put_bytes},
 
     {"get_int16",       mod_lua_bytes_get_int16},
     {"get_int32",       mod_lua_bytes_get_int32},
