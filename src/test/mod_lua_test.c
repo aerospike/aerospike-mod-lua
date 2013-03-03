@@ -26,5 +26,5 @@ PLAN( mod_lua_test ) {
      */
     // plan_add( record_basics );
     plan_add( record_udf );
-	// plan_add( bytes_udf );
+	plan_add( bytes_udf );
 }

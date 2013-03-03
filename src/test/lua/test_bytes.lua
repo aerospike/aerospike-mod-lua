@@ -29,7 +29,6 @@ function get_set_integer(r, b)
 end
 
 function get_set_index(r, b) 
---    info("get set index test")
 
     local x = bytes(16)
 
@@ -43,6 +42,24 @@ function get_set_index(r, b)
 
 --    info("get16: position 0 %s",tostring(a1))
 --    info("get16: position 1 %s",tostring(a2))
+
+    return "OK"
+
+end
+
+function lists_of_bytes(r, b) 
+
+    local l = list() 
+
+    for i=1, 20 do
+        local x = bytes(5)
+        x[1] = i
+        x[2] = i * 5
+        x[3] = i * 10
+        list.append(l,x)
+    end
+
+    r.b = l
 
     return "OK"
 
