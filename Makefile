@@ -202,9 +202,9 @@ TEST_STREAM += stream/stream_basics
 TEST_STREAM += stream/stream_udf
 
 TEST_RECORD = 
-# TEST_RECORD += record/record_basics
+TEST_RECORD += record/record_basics
 TEST_RECORD += record/record_udf
-# TEST_RECORD += record/bytes_udf
+TEST_RECORD += record/bytes_udf
 
 TEST_UTIL = 
 TEST_UTIL += util/consumer_stream
