@@ -1,5 +1,6 @@
 #include "mod_lua_record.h"
 #include "mod_lua_val.h"
+#include "mod_lua_bytes.h"
 #include "as_rec.h"
 #include "mod_lua_reg.h"
 
@@ -77,7 +78,6 @@ static int mod_lua_record_gen(lua_State * l) {
 static int mod_lua_record_digest(lua_State * l) {
     as_rec * rec = (as_rec *) mod_lua_checkrecord(l, 1);
 	as_bytes * b = as_rec_digest(rec);
-	fprintf(stderr," Pushing %p", b);	
 	mod_lua_pushbytes(l, b);
     return 1;
 }

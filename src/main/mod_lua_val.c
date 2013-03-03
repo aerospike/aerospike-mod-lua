@@ -10,6 +10,7 @@
 #include "mod_lua_list.h"
 #include "mod_lua_map.h"
 #include "mod_lua_record.h"
+#include "mod_lua_bytes.h"
 
 #include "as_val.h"
 #include "internal.h"
