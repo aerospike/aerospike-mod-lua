@@ -180,7 +180,7 @@ int cache_rm(context * ctx, const char *key) {
     centry = 0;
     cf_rchash_delete(centry_hash, (void *)key, strlen(key));
 
-	return 0;
+    return 0;
 }
 
 int cache_init(context * ctx, const char *key, const char * gen) {
@@ -207,7 +207,7 @@ int cache_init(context * ctx, const char *key, const char * gen) {
         cf_rc_releaseandfree(centry);
         centry = 0;
     }
-	return 0;
+    return 0;
 }
 
 static int cache_remove_file(context * ctx, const char * filename) {
@@ -489,7 +489,7 @@ static int poll_state(context * ctx, cache_item * citem) {
             }
             cf_rc_releaseandfree(centry);
             centry = 0;
-			as_logger_trace(mod_lua.logger, "[CACHE] Miss %d : Total %d", miss, total);
+            as_logger_trace(mod_lua.logger, "[CACHE] Miss %d : Total %d", miss, total);
         } else {
             centry = NULL;
         }
@@ -519,10 +519,10 @@ static int poll_state(context * ctx, cache_item * citem) {
 static int offer_state(context * ctx, cache_item * citem) {
 
     if ( ctx->config.cache_enabled == true ) {
-		// Runnig GCCOLLECT is overkill because with every execution
-		// lua itself does a garbage collection. Also do garbage 
-		// collection outside the spinlock. arg for GCSTEP 2 is a 
-		// random number. Experiment to get better number.
+        // Runnig GCCOLLECT is overkill because with every execution
+        // lua itself does a garbage collection. Also do garbage 
+        // collection outside the spinlock. arg for GCSTEP 2 is a 
+        // random number. Experiment to get better number.
         lua_gc(citem->state, LUA_GCSTEP, 2);
         cache_entry *centry = NULL;
         if (CF_RCHASH_OK == cf_rchash_get(centry_hash, (void *)citem->key, strlen(citem->key), (void *)&centry) ) {
@@ -906,5 +906,6 @@ static const as_module_hooks mod_lua_hooks = {
 as_module mod_lua = {
     .source         = &mod_lua_source,
     .logger         = NULL,
+    .memtracker     = NULL,
     .hooks          = &mod_lua_hooks
 };
