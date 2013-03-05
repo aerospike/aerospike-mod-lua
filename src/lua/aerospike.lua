@@ -112,10 +112,10 @@ function apply_record(f, r, ...)
         error("function not found", 2)
     end
     
-   if not sandboxed[f] then
-       setfenv(f,env_record())
-       sandboxed[f] = true
-   end
+    if not sandboxed[f] then
+        setfenv(f,env_record())
+        sandboxed[f] = true
+    end
 
     success, result = pcall(f, r, ...)
     if success then
