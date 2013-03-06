@@ -306,3 +306,34 @@ function StreamOps:filter(...)
     table.insert(self.ops, { scope = SCOPE_EITHER, name = "filter", func = filter, args = {...}})
     return self
 end
+
+-- stream : group(f)
+--
+-- Group By will return a Map of keys to a list of values. The key is determined by applying the 
+-- function `f` to each element in the stream.
+--
+function StreamOps:groupby(f)
+
+    local function _aggregate(m, v)
+        local k = f and f(v) or nil;
+        local l = m[k] or list()
+        list.append(l, v)
+        m[k] = l;
+        return m;
+    end
+
+    local function _merge(l1, l2)
+        info("merge: %s %s", tostring(v1), tostring(v2));
+        local l = list.clone(l1)
+        for v in list.iterator(l2) do
+            list.append(l, v)
+        end
+        return l
+    end
+
+    function _reduce(m1, m2)
+        return map.merge(m1, m2, _merge)
+    end
+
+    return self : aggregate(map(), _aggregate) : reduce(_reduce)
+end
