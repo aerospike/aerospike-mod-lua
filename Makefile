@@ -213,7 +213,7 @@ TEST_UTIL += util/producer_stream
 TEST_UTIL += util/map_rec
 TEST_UTIL += util/test_aerospike
 TEST_UTIL += util/test_logger
-TEST_UTIL += util/test_memtracker
+#TEST_UTIL += util/test_memtracker
 
 TEST_MOD_LUA = mod_lua_test
 TEST_MOD_LUA += $(TEST_UTIL) 
