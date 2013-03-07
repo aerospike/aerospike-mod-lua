@@ -136,6 +136,7 @@ TEST( types_arraylist_list, "as_arraylist w/ list ops" ) {
         assert_int_eq( l.u.arraylist.size, i );
         assert_int_eq( l.u.arraylist.capacity, 10);
     }
+    // list is now: 1 2 3 4 5
 
     for ( int i = 6; i < 11; i++) {
         rc = as_list_prepend(&l, (as_val *) as_integer_new(i));
@@ -144,9 +145,18 @@ TEST( types_arraylist_list, "as_arraylist w/ list ops" ) {
         assert_int_eq( l.u.arraylist.size, i );
         assert_int_eq( l.u.arraylist.capacity, 10);
     }
+    // list is now: 10 9 8 7 6 1 2 3 4 5
+    // indexes:      0 1 2 3 4 5 6 7 8 9
+
+    assert_int_eq(9, as_integer_toint(as_list_get(&l, 1)));
+    assert_int_eq(2, as_integer_toint(as_list_get(&l, 6)));
+    assert(NULL == as_list_get(&l,10)); // off end is safe
     	
-    as_list * t = as_list_take(&l, 5);
+    as_list * t = as_list_take(&l, 5); // take first five
     assert_int_eq( as_list_size(t), 5 );
+
+    assert_int_eq(10, as_integer_toint(as_list_get(t,0)));
+    assert_int_eq(6, as_integer_toint(as_list_get(t,4)));
 
     as_integer * t_head = (as_integer *) as_list_head(t);
     as_integer * l_head = (as_integer *) as_list_head(&l);
@@ -156,11 +166,14 @@ TEST( types_arraylist_list, "as_arraylist w/ list ops" ) {
     as_list_destroy(t);
     t = 0;
 
-    as_list * d = as_list_drop(&l, 5);
+    as_list * d = as_list_drop(&l, 5); // drop returns list from 5 forward, does not change l
     assert_int_eq( as_list_size(d), 5 );
+    assert_int_eq( as_list_size(&l), 10);
 
-    as_integer * d_0 = (as_integer *) as_list_get(d, 0);
-    as_integer * l_5 = (as_integer *) as_list_get(&l, 5);
+    assert_int_eq(2, as_integer_toint(as_list_get(d,1)));
+
+    as_integer * d_0 = (as_integer *) as_list_get(d, 0); // should be 1
+    as_integer * l_5 = (as_integer *) as_list_get(&l, 5); // 5 from 
 
     assert( as_integer_toint(d_0) == as_integer_toint(l_5) );
 
@@ -169,7 +182,7 @@ TEST( types_arraylist_list, "as_arraylist w/ list ops" ) {
     as_list_destroy(&l);
 }
 
-TEST( types_arraylist_iterator, "as_linkedlist w/ iterator ops" ) {
+TEST( types_arraylist_iterator, "as_arraylistlist w/ iterator ops" ) {
 
     as_list l;
     as_arraylist_init(&l,10,10);
