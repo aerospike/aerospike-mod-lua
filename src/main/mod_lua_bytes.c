@@ -55,12 +55,12 @@ static int mod_lua_bytes_set_len(lua_State *l) {
     int n_args = lua_gettop(l);
     if (n_args != 2) {
         lua_pushnil(l);
-        return(0);
+        return(1);
     }
     int new_len = luaL_optinteger(l, 2, 0);
     if (as_bytes_set_len(b, new_len) != 0) {
         lua_pushnil(l);
-        return(0);
+        return(1);
     }
     lua_pushinteger(l, new_len);
     return(1);
@@ -154,10 +154,37 @@ static int mod_lua_bytes_newindex(lua_State * l) {
         return(1);
     }
 
-    // ???
+    // no return
     return(0);
 }
 
+// doing this as a number because users can create their own type
+
+static int mod_lua_bytes_get_type(lua_State * l) {
+
+    as_bytes * b = mod_lua_checkbytes(l, 1);
+
+    lua_pushinteger(l, as_bytes_get_type(b));
+
+    return(1);
+}
+
+static int mod_lua_bytes_set_type(lua_State * l) {
+
+    as_bytes * b = mod_lua_checkbytes(l, 1);
+
+    if (lua_gettop(l) != 2) {
+        // TODO: give nice error
+        lua_pushnil(l);
+        return(1);
+    }
+
+    int t = (int) luaL_optinteger(l, 2, 0);
+
+    as_bytes_set_type(b, t);
+
+    return(0);
+}
 
 
 // put: offset, int
@@ -166,9 +193,8 @@ static int mod_lua_bytes_put_int16(lua_State * l) {
 
     as_bytes * b = mod_lua_checkbytes(l, 1);
 
-    int n_args = lua_gettop(l); 
-
-    if (n_args != 3) {
+    // nargs must be 3
+    if (lua_gettop(l) != 3) {
         lua_pushnil(l);
         return(1);
     }
@@ -190,9 +216,7 @@ static int mod_lua_bytes_put_int32(lua_State * l) {
 
     as_bytes * b = mod_lua_checkbytes(l, 1);
 
-    int n_args = lua_gettop(l); 
-
-    if (n_args != 3) {
+    if (lua_gettop(l) != 3) {
         lua_pushnil(l);
         return(1);
     }
@@ -407,7 +431,7 @@ static int mod_lua_bytes_get_bytes(lua_State * l) {
     as_bytes * b = mod_lua_checkbytes(l, 1);
 
     int n_args = lua_gettop(l); 
-    if (n_args != 2) {
+    if (n_args != 3) {
         lua_pushnil(l);
         return(1);
     }
@@ -416,7 +440,7 @@ static int mod_lua_bytes_get_bytes(lua_State * l) {
     int len = (int) luaL_optinteger(l, 3, 0); 
 
     // slice is in offset / offset
-    as_bytes *slice = as_bytes_slice_new( b , offset-1, offset-1+len);
+    as_bytes *slice = as_bytes_slice_new( b , offset-1, (offset-1)+len);
 
     if (!slice) {
         lua_pushnil(l);
