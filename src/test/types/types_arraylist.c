@@ -14,11 +14,13 @@ TEST( types_arraylist_empty, "as_arraylist is empty" ) {
     as_list_destroy(&l);
 }
 
+#if 0 // DEBUG
 static void print_list(const char *msg, const as_list *l) {
 	char *s = as_val_tostring(l);
 	fprintf(stderr, "%s %s\n",msg,s);
 	free(s);
 }
+#endif
 
 TEST( types_arraylist_cap10_blk0, "as_arraylist w/ capacity 10, block_size 0" ) {
 
@@ -148,15 +150,15 @@ TEST( types_arraylist_list, "as_arraylist w/ list ops" ) {
     // list is now: 10 9 8 7 6 1 2 3 4 5
     // indexes:      0 1 2 3 4 5 6 7 8 9
 
-    assert_int_eq(9, as_integer_toint(as_list_get(&l, 1)));
-    assert_int_eq(2, as_integer_toint(as_list_get(&l, 6)));
+    assert_int_eq(9, as_integer_toint((as_integer *) as_list_get(&l, 1)));
+    assert_int_eq(2, as_integer_toint((as_integer *) as_list_get(&l, 6)));
     assert(NULL == as_list_get(&l,10)); // off end is safe
     	
     as_list * t = as_list_take(&l, 5); // take first five
     assert_int_eq( as_list_size(t), 5 );
 
-    assert_int_eq(10, as_integer_toint(as_list_get(t,0)));
-    assert_int_eq(6, as_integer_toint(as_list_get(t,4)));
+    assert_int_eq(10, as_integer_toint((as_integer *) as_list_get(t,0)));
+    assert_int_eq(6, as_integer_toint((as_integer *) as_list_get(t,4)));
 
     as_integer * t_head = (as_integer *) as_list_head(t);
     as_integer * l_head = (as_integer *) as_list_head(&l);
@@ -170,7 +172,7 @@ TEST( types_arraylist_list, "as_arraylist w/ list ops" ) {
     assert_int_eq( as_list_size(d), 5 );
     assert_int_eq( as_list_size(&l), 10);
 
-    assert_int_eq(2, as_integer_toint(as_list_get(d,1)));
+    assert_int_eq(2, as_integer_toint((as_integer *) as_list_get(d,1)));
 
     as_integer * d_0 = (as_integer *) as_list_get(d, 0); // should be 1
     as_integer * l_5 = (as_integer *) as_list_get(&l, 5); // 5 from 
