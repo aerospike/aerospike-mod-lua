@@ -567,7 +567,6 @@ typedef struct {
  */
 static bool pushargs_foreach(as_val * val, void * context) {
     pushargs_data * data = (pushargs_data *) context;
-    as_logger_trace(mod_lua.logger, "pusharg: %s", as_val_tostring(val));
     data->count += mod_lua_pushval(data->l, val);
     return true;
 }
