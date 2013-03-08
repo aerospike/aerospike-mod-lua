@@ -76,6 +76,7 @@ static int mod_lua_map_index(lua_State * l) {
         as_val * key = mod_lua_takeval(l, 2);
         if ( key ) {
             val = as_map_get(map, key);
+			as_val_destroy(key);
         }
     }
 
