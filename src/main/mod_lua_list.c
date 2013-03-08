@@ -68,7 +68,9 @@ static int mod_lua_list_drop(lua_State * l) {
 
     if ( list ) {
         lua_Integer n = luaL_optinteger(l, 2, 0);
-        sub = as_list_drop(list, (uint32_t) n);
+        if (n > 0) {
+            sub = as_list_drop(list, (uint32_t) (n-1)); // lua is 1 indexed
+        }
     }
 
     if ( sub ) {
@@ -88,7 +90,9 @@ static int mod_lua_list_take(lua_State * l) {
 
     if ( list ) {
         lua_Integer n = luaL_optinteger(l, 2, 0);
-        sub = as_list_take(list, (uint32_t) n);
+        if (n > 0) {
+            sub = as_list_take(list, (uint32_t) (n - 1));  // lua is 1 indexed
+        }
     }
 
     if ( sub ) {
@@ -147,7 +151,9 @@ static int mod_lua_list_index(lua_State * l) {
 
     if ( list ) {
         const uint32_t  idx = (uint32_t) luaL_optlong(l, 2, 0);
-        val = as_list_get(list, idx-1);
+        if (idx > 0) { // Lua is 1 index, C is 0
+            val = as_list_get(list, idx-1);
+        }  
     }
 
     if ( val ) {
@@ -164,13 +170,15 @@ static int mod_lua_list_newindex(lua_State * l) {
     as_list *   list    = mod_lua_checklist(l, 1);
 
     if ( list ) {
-        uint32_t idx = (uint32_t) luaL_optlong(l, 2, 0);
+        const uint32_t idx = (uint32_t) luaL_optlong(l, 2, 0);
         as_val * val = mod_lua_takeval(l, 3);
         if ( val ) {
-            as_list_set(list, idx, val);
+            if (idx > 0) { // Lua is 1 index, C is 0
+                as_list_set(list, idx - 1, val);
+            }
+
         }
     }
-
     return 0;
 }
 
