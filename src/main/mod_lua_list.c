@@ -69,7 +69,7 @@ static int mod_lua_list_drop(lua_State * l) {
     if ( list ) {
         lua_Integer n = luaL_optinteger(l, 2, 0);
         if (n > 0) {
-            sub = as_list_drop(list, (uint32_t) (n-1)); // lua is 1 indexed
+            sub = as_list_drop(list, (uint32_t) n);
         }
     }
 
@@ -91,7 +91,7 @@ static int mod_lua_list_take(lua_State * l) {
     if ( list ) {
         lua_Integer n = luaL_optinteger(l, 2, 0);
         if (n > 0) {
-            sub = as_list_take(list, (uint32_t) (n - 1));  // lua is 1 indexed
+            sub = as_list_take(list, (uint32_t) n);
         }
     }
 
@@ -151,7 +151,8 @@ static int mod_lua_list_index(lua_State * l) {
 
     if ( list ) {
         const uint32_t  idx = (uint32_t) luaL_optlong(l, 2, 0);
-        if (idx > 0) { // Lua is 1 index, C is 0
+        if (idx > 0) { 
+            // Lua is 1 index, C is 0
             val = as_list_get(list, idx-1);
         }  
     }
