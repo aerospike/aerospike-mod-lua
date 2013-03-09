@@ -620,16 +620,17 @@ static int apply(lua_State * l, int err, int argc, as_result * res) {
 
     // Convert the return value from a lua type to a val type
     as_logger_trace(mod_lua.logger, "convert lua type to val");
-    as_val * rv = mod_lua_retval(l);
 
 
     if ( rc == 0 ) {
         if ( res != NULL ) {
+    		as_val * rv = mod_lua_retval(l);
             as_result_setsuccess(res, rv);
         }
     }
     else {
         if ( res != NULL ) {
+    		as_val * rv = mod_lua_retval(l);
             as_result_setfailure(res, rv);
         }
     }
