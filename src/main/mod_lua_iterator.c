@@ -19,23 +19,33 @@
  * FUNCTIONS
  ******************************************************************************/
 
+//
+// NOTE ITERATORS ARE NOT AS_VALS
+//
+
  as_iterator * mod_lua_toiterator(lua_State * l, int index) {
-    mod_lua_box * box = mod_lua_tobox(l, index, CLASS_NAME);
-    return (as_iterator *) mod_lua_box_value(box);
+    as_iterator * itr = (as_iterator *) lua_touserdata(l, index);
+    return (as_iterator *) itr;
 }
 
-as_iterator * mod_lua_pushiterator(lua_State * l, as_iterator * i) {
-    mod_lua_box * box = mod_lua_pushbox(l, i->is_malloc ? MOD_LUA_SCOPE_LUA : MOD_LUA_SCOPE_HOST, i, CLASS_NAME);
-    return (as_iterator *) mod_lua_box_value(box);
+as_iterator * mod_lua_pushiterator(lua_State * l) {
+    as_iterator * i = (as_iterator *) lua_newuserdata(l, sizeof(as_iterator));
+    memset(i, 0, sizeof(as_iterator));
+    luaL_getmetatable(l, CLASS_NAME);
+    lua_setmetatable(l, -2);
+    return i;
 }
 
 static as_iterator * mod_lua_checkiterator(lua_State * l, int index) {
-    mod_lua_box * box = mod_lua_checkbox(l, index, CLASS_NAME);
-    return (as_iterator *) mod_lua_box_value(box);
+    luaL_checktype(l, index, LUA_TUSERDATA);
+    as_iterator * itr = (as_iterator *) luaL_checkudata(l, index, CLASS_NAME);
+    if (itr == NULL) luaL_typerror(l, index, CLASS_NAME);
+    return itr;
 }
 
 static int mod_lua_iterator_gc(lua_State * l) {
-    mod_lua_freebox(l, 1, CLASS_NAME);
+    as_iterator * itr = (as_iterator *) lua_touserdata(l, 1);
+    if (itr) as_iterator_destroy(itr);
     return 0;
 }
 

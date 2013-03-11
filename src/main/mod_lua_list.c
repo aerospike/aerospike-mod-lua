@@ -137,7 +137,8 @@ static int mod_lua_list_new(lua_State * l) {
 // static int mod_lua_list_iterator(lua_State * l) {
 //     as_list * list  = mod_lua_checklist(l, 1);
 //     if ( list ) {
-//         mod_lua_pushiterator(l, as_list_iterator_new(list));
+//         as_iterator * itr = mod_lua_pushiterator(l, as_list_iterator_new(list));
+//          as_list_iterator_init(itr, l);
 //     }
 //     else {
 //         lua_pushnil(l);
@@ -241,12 +242,10 @@ static int mod_lua_list_iterator(lua_State * l) {
     mod_lua_box *   box     = mod_lua_checkbox(l, 1, CLASS_NAME);
     as_list *       list    = (as_list *) mod_lua_box_value(box);
     if ( list ) {
-        as_iterator * iter = as_list_iterator_new(list);
-        if ( iter ) {
-            lua_pushcfunction(l, mod_lua_list_iterator_next);
-            mod_lua_pushiterator(l, iter);
-            return 2;
-        }
+        lua_pushcfunction(l, mod_lua_list_iterator_next);
+        as_iterator * itr = mod_lua_pushiterator(l);
+        as_list_iterator_init(itr, list);
+        return 2;
     }
 
     return 0;

@@ -165,12 +165,10 @@ static int mod_lua_map_pairs(lua_State * l) {
     mod_lua_box *   box     = mod_lua_checkbox(l, 1, CLASS_NAME);
     as_map *        map     = (as_map *) mod_lua_box_value(box);
     if ( map ) {
-        as_iterator * iter = as_map_iterator_new(map);
-        if ( iter ) {
-            lua_pushcfunction(l, mod_lua_map_pairs_next);
-            mod_lua_pushiterator(l, iter);
-            return 2;
-        }
+        lua_pushcfunction(l, mod_lua_map_pairs_next);
+        as_iterator * itr = mod_lua_pushiterator(l);
+        as_map_iterator_init(itr,map);
+        return 2;
     }
 
     return 0;
@@ -200,12 +198,10 @@ static int mod_lua_map_keys(lua_State * l) {
     mod_lua_box *   box     = mod_lua_checkbox(l, 1, CLASS_NAME);
     as_map *        map     = (as_map *) mod_lua_box_value(box);
     if ( map ) {
-        as_iterator * iter = as_map_iterator_new(map);
-        if ( iter ) {
-            lua_pushcfunction(l, mod_lua_map_keys_next);
-            mod_lua_pushiterator(l, iter);
-            return 2;
-        }
+        lua_pushcfunction(l, mod_lua_map_keys_next);
+        as_iterator * iter = mod_lua_pushiterator(l);
+        as_map_iterator_init(iter, map);
+        return 2;
     }
 
     return 0;
@@ -235,12 +231,10 @@ static int mod_lua_map_values(lua_State * l) {
     mod_lua_box *   box     = mod_lua_checkbox(l, 1, CLASS_NAME);
     as_map *        map     = (as_map *) mod_lua_box_value(box);
     if ( map ) {
-        as_iterator * iter = as_map_iterator_new(map);
-        if ( iter ) {
-            lua_pushcfunction(l, mod_lua_map_values_next);
-            mod_lua_pushiterator(l, iter);
-            return 2;
-        }
+        lua_pushcfunction(l, mod_lua_map_values_next);
+        as_iterator * itr = mod_lua_pushiterator(l);
+        as_map_iterator_init(itr, map);
+        return 2;
     }
 
     return 0;
