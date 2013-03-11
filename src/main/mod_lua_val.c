@@ -25,6 +25,7 @@ as_val * mod_lua_retval(lua_State * l) {
 
 /**
  * Reads a val from the Lua stack
+ * the val returned includes a refcount that must be freed later
  *
  * @param l the lua_State to read the val from
  * @param i the position of the val on the stack

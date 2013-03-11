@@ -74,6 +74,7 @@ static int mod_lua_stream_readable(lua_State * l) {
 
 static int mod_lua_stream_write(lua_State * l) {
     as_stream * stream = mod_lua_tostream(l, 1);
+    // increases reference: box has, stream has
     as_val * val = mod_lua_toval(l, 2);
     if ( stream ) {
         int rc = as_stream_write(stream, val);

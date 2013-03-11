@@ -52,6 +52,7 @@ static int mod_lua_map_new(lua_State * l) {
     if ( n == 2 && lua_type(l, 2) == LUA_TTABLE) {
         lua_pushnil(l);
         while ( lua_next(l, 2) != 0 ) {
+            // this will leak or crash if these are not as_val, or k is and v isn't
             as_val * k = mod_lua_takeval(l, -2);
             as_val * v = mod_lua_takeval(l, -1);
             if ( !k || !v ) {

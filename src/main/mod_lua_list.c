@@ -42,6 +42,7 @@ static int mod_lua_list_gc(lua_State * l) {
 static int mod_lua_list_append(lua_State * l) {
     as_list * list = mod_lua_checklist(l, 1);
     if ( list ) {
+        // increases ref, correct - held by box and this list
         as_val * value = mod_lua_toval(l, 2);
         if ( value ) {
             as_list_append(list,value);
