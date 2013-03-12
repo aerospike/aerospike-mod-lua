@@ -174,12 +174,11 @@ static int mod_lua_list_newindex(lua_State * l) {
 
     if ( list ) {
         const uint32_t idx = (uint32_t) luaL_optlong(l, 2, 0);
-        as_val * val = mod_lua_takeval(l, 3);
-        if ( val ) {
-            if (idx > 0) { // Lua is 1 index, C is 0
-                as_list_set(list, idx - 1, val);
+        if (idx > 0) { // Lua is 1 index, C is 0
+            as_val * val = mod_lua_takeval(l, 3);
+            if ( val ) {
+                as_list_set(list, idx - 1, val); 
             }
-
         }
     }
     return 0;

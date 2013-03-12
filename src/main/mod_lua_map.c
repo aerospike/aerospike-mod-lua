@@ -58,9 +58,10 @@ static int mod_lua_map_new(lua_State * l) {
             if ( !k || !v ) {
                 as_val_destroy(k);
                 as_val_destroy(v);
-                continue;
             }
-            as_map_set(map, k, v);
+            else {
+                as_map_set(map, k, v);
+            }
             lua_pop(l, 1);
         }
     }
@@ -95,11 +96,13 @@ static int mod_lua_map_newindex(lua_State * l) {
     as_map * map = mod_lua_checkmap(l, 1);
     if ( map ) {
         as_val * key = mod_lua_takeval(l, 2);
-        if ( key ) {
-            as_val * val = mod_lua_takeval(l, 3);
-            if ( val ) {
-                as_map_set(map, key, val);
-            }
+        as_val * val = mod_lua_takeval(l, 3); 
+        if ( !key || !val ) {
+            as_val_destroy(key);
+            as_val_destroy(val);
+        }
+        else {
+            as_map_set(map, key, val);
         }
     }
     return 0;
