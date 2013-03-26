@@ -42,6 +42,9 @@
 #define CACHE_ENTRY_STATE_MAX 128
 #define CACHE_ENTRY_STATE_MIN 10
 
+#define MOD_LUA_CONFIG_SYSPATH "/opt/citrusleaf/sys/udf/lua"
+#define MOD_LUA_CONFIG_USRPATH "/opt/citrusleaf/usr/udf/lua"
+
 /******************************************************************************
  * TYPES
  ******************************************************************************/
@@ -97,8 +100,8 @@ static jmp_buf panic_jmp;
 static context mod_lua_source = {
     .config = {
         .cache_enabled  = true,
-        .system_path    = "",
-        .user_path      = "",
+        .system_path    = MOD_LUA_CONFIG_SYSPATH,
+        .user_path      = MOD_LUA_CONFIG_USRPATH,
         .server_mode    = true
     },
     .lock = NULL
@@ -317,45 +320,45 @@ static int update(as_module * m, as_module_event * e) {
                     return 3;
                 }
             }
-
-
-            DIR * dir = 0;
+            
+            // Attempt to open the directory.
+            // If it opens, then set the ctx value.
+            // Otherwise, we alert the user of the error when a UDF is called. (for now)
+            if ( config->system_path[0] != '\0' ) {
+                DIR * dir = opendir(config->system_path);
+                if ( dir == 0 ) {
+                    ctx->config.system_path[0] = '\0';
+                    strncpy(ctx->config.system_path+1, config->system_path, 255);
+                }
+                else {
+                    strncpy(ctx->config.system_path, config->system_path, 256);
+                    closedir(dir);
+                }
+                dir = NULL;
+            }
 
             // Attempt to open the directory.
             // If it opens, then set the ctx value.
             // Otherwise, we alert the user of the error when a UDF is called. (for now)
-
-            dir = opendir(config->system_path);
-            if ( dir == 0 ) {
-                ctx->config.system_path[0] = '\0';
-                strncpy(ctx->config.system_path+1, config->system_path, 255);
+            if ( config->user_path[0] != '\0' ) {
+                DIR * dir = opendir(config->user_path);
+                if ( dir == 0 ) {
+                    ctx->config.user_path[0] = '\0';
+                    strncpy(ctx->config.user_path+1, config->user_path, 255);
+                }
+                else {
+                    strncpy(ctx->config.user_path, config->user_path, 256);
+                    closedir(dir);
+                }
+                dir = NULL;
             }
-            else {
-                strncpy(ctx->config.system_path, config->system_path, 256);
-                closedir(dir);
-            }
-            dir = NULL;
-
-            // Attempt to open the directory.
-            // If it opens, then set the ctx value.
-            // Otherwise, we alert the user of the error when a UDF is called. (for now)
-            dir = opendir(config->user_path);
-            if ( dir == 0 ) {
-                ctx->config.user_path[0] = '\0';
-                strncpy(ctx->config.user_path+1, config->user_path, 255);
-            }
-            else {
-                strncpy(ctx->config.user_path, config->user_path, 256);
-                closedir(dir);
-            }
-            dir = NULL;
 
             if ( ctx->config.cache_enabled ) cache_scan_dir(ctx, ctx->config.user_path);
 
             break;
         }
         case AS_MODULE_EVENT_FILE_SCAN: {
-            if ( ctx->config.user_path == NULL ) return 2;
+            if ( ctx->config.user_path[0] == '\0' ) return 2;
             if ( ctx->config.cache_enabled ) cache_scan_dir(ctx, ctx->config.user_path);
             break;
         }
