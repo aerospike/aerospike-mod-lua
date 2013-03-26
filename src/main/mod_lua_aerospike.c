@@ -75,7 +75,7 @@ static int mod_lua_aerospike_rec_update(lua_State * l) {
 }
 
 /**
- * aerospike.crec_create(record) => result<record>
+ * aerospike.create_subrec(record) => result<record>
  */
 static int mod_lua_aerospike_crec_create(lua_State * l) {
     as_aerospike *  a   = mod_lua_checkaerospike(l, 1);
@@ -87,7 +87,7 @@ static int mod_lua_aerospike_crec_create(lua_State * l) {
 }
 
 /**
- * aerospike.crec_update(record, record) => result<bool>
+ * aerospike.update_subrec(record, record) => result<bool>
  */
 static int mod_lua_aerospike_crec_update(lua_State * l) {
     as_aerospike *  a   = mod_lua_checkaerospike(l, 1);
@@ -100,7 +100,7 @@ static int mod_lua_aerospike_crec_update(lua_State * l) {
 }
 
 /**
- * aerospike.crec_open(record, record) => result<bool>
+ * aerospike.open_subrec(record, record) => result<bool>
  */
 static int mod_lua_aerospike_crec_open(lua_State * l) {
     as_aerospike *  a   = mod_lua_checkaerospike(l, 1);
@@ -113,7 +113,7 @@ static int mod_lua_aerospike_crec_open(lua_State * l) {
 }
 
 /**
- * aerospike.crec_update(record, record) => result<bool>
+ * aerospike.update_subrec(record, record) => result<bool>
  */
 static int mod_lua_aerospike_crec_close(lua_State * l) {
     as_aerospike *  a   = mod_lua_checkaerospike(l, 1);
@@ -173,10 +173,10 @@ static const luaL_reg class_table[] = {
     {"exists",      mod_lua_aerospike_rec_exists},
     {"remove",      mod_lua_aerospike_rec_remove},
     {"log",         mod_lua_aerospike_log},
-    {"crec_create", mod_lua_aerospike_crec_create},
-    {"crec_close",  mod_lua_aerospike_crec_close},
-    {"crec_open",   mod_lua_aerospike_crec_open},
-    {"crec_update", mod_lua_aerospike_crec_update},
+    {"create_subrec", mod_lua_aerospike_crec_create},
+    {"close_subrec",  mod_lua_aerospike_crec_close},
+    {"open_subrec",   mod_lua_aerospike_crec_open},
+    {"update_subrec", mod_lua_aerospike_crec_update},
     {0, 0}
 };
 
