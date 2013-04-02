@@ -1,5 +1,5 @@
 -- AS Large Set (LSET) Operations
--- Steelman V3.1 -- (Last Update Mar 30, 2013: tjl)
+-- Steelman V3.2 -- (Last Update April 2, 2013: tjl)
 --
 -- Please refer to lset_design.lua for architecture and design notes.
 --
@@ -20,11 +20,11 @@
 -- ======================================================================
 -- TO DO List:
 -- ======================================================================
--- TODO: (*) Verity that all serious errors call error('msg') rather than
---           just return.
 -- TODO: (*) Do Parameter validation for all external calls.
 -- TODO: (*) Add lset_insert_with_create(), which is insert plus the
 --           creation parms (in case we have to create).
+-- Done: (*) Verity that all serious errors call error('msg') rather than
+--           just return.
 -- Done: (*) Verify order of operations so that the upper level record
 --           is NEVER written before all of the lower level ops have
 --           successfully complete.
