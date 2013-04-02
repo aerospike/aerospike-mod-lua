@@ -1,6 +1,6 @@
 -- ======================================================================
 -- Large Stack Object (LSO or LSTACK) Operations
--- LSTACK.lua:  Superman V4.1 -- (March 30, 2013)
+-- LSTACK.lua:  Superman V4.2 -- (April 2,  2013)
 -- ======================================================================
 -- Please refer to lso_design.lua for architecture and design notes.
 -- ======================================================================
@@ -2164,14 +2164,18 @@ local function validateRecBinAndMap( topRec, lsoBinName, mustExist )
   validateBinName( lsoBinName );
 
   if( topRec[lsoBinName] == nil ) then
-    warn("[ERROR EXIT]: <%s:%s> LSO_BIN (%s) DOES NOT Exists",
-      mod, meth, tostring(lsoBinName) );
-    error('LSO_BIN Does NOT exist');
+    if( mustExist == true ) then
+      warn("[ERROR EXIT]: <%s:%s> LSO_BIN (%s) DOES NOT Exists",
+        mod, meth, tostring(lsoBinName) );
+      error('LSO_BIN Does NOT exist');
+    else
+      return; -- Nothing more to test.
+    end
   end
   
   -- check that our bin is (mostly) there
   local lsoMap = topRec[lsoBinName]; -- The main LSO map
-  if lsoMap.Magic ~= "MAGIC" then
+  if lsoMap ~= nil and lsoMap.Magic ~= "MAGIC" then
     GP=F and warn("[ERROR EXIT]: <%s:%s> LSO_BIN (%s) Is Corrupted (no magic)",
       mod, meth, lsoBinName );
     error('LSO_BIN Is Corrupted');
@@ -2421,12 +2425,12 @@ end -- function localStackPush()
 -- do not encounter a format error if the user passes in nil or any
 -- other incorrect value/type
 -- =======================================================================
-function lstack_push( topRec, lsoBinName, newValue )
-  return localStackPush( topRec, lsoBinName, newValue, nil, nil )
+function lstack_push_with_create( topRec, lsoBinName, newValue )
+  return localStackPushWithCreate( topRec, lsoBinName, newValue, nil, nil )
 end -- end lstack_push()
 
-function lstack_push_with_udf( topRec, lsoBinName, newValue, func, fargs )
-  return localStackPush( topRec, lsoBinName, newValue, func, fargs );
+function lstack_push_with_udf_with_create( topRec, lsoBinName, newValue, func, fargs )
+  return localStackPushWithCreate( topRec, lsoBinName, newValue, func, fargs );
 end -- lstack_push_with_udf()
 
 -- ======================================================================
