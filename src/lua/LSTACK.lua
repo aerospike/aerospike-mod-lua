@@ -1,6 +1,6 @@
 -- ======================================================================
 -- Large Stack Object (LSO or LSTACK) Operations
--- LSTACK.lua:  Superman V3.1 -- (March 27, 2013)
+-- LSTACK.lua:  Superman V4.1 -- (March 30, 2013)
 -- ======================================================================
 -- Please refer to lso_design.lua for architecture and design notes.
 -- ======================================================================
@@ -16,6 +16,7 @@
 --
 -- LSTACK Functions Supported (Note switch to lower case)
 -- (*) lstack_create: Create the LSO structure in the chosen topRec bin
+-- (*) lstack_push_with_create: Push a user value (AS_VAL) onto the stack
 -- (*) lstack_push: Push a user value (AS_VAL) onto the stack
 -- (*) lstack_peek: Read N values from the stack, in LIFO order
 -- (*) lstack_trim: Release all but the top N values.
@@ -39,7 +40,7 @@
 -- TODO: Implement stack_size(): Return size of the stack.
 -- TODO: Implement stack_config(): Return a MAP that includes all of the
 --                                 stack configuration values.
--- TODO: Check all external calls for valid parameter values
+-- DONE: Check all external calls for valid parameter values
 --       e.g. All bin names must be UNDER 14 chars.
 --
 -- DONE: Verify correct recovery order for operations.
@@ -2160,7 +2161,7 @@ local function validateRecBinAndMap( topRec, lsoBinName, mustExist )
   end
 
   -- Validate that lsoBinName follows the Aerospike rules
-  validateBinName( lsoBinName )
+  validateBinName( lsoBinName );
 
   if( topRec[lsoBinName] == nil ) then
     warn("[ERROR EXIT]: <%s:%s> LSO_BIN (%s) DOES NOT Exists",
@@ -2240,22 +2241,27 @@ function lstack_create( topRec, lsoBinName, argList )
     mod, meth, tostring( lsoBinName), tostring( argList ));
   end
 
-  -- Some simple protection if things are weird
-  if lsoBinName == nil  or type(lsoBinName) ~= "string" then
-    warn("[WARNING]: <%s:%s> Bad LSO BIN Name: Using default", mod, meth );
-    lsoBinName = "LsoBin";
-  end
+  -- Some simple protection of faulty records or bad bin names
+    validateRecBinAndMap( topRec, lsoBinName, false );
 
-  -- Validate that lsoBinName follows the Aerospike rules
-  validateBinName( lsoBinName )
-
-  -- Check to see if LSO Structure (or anything) is already there,
-  -- and if so, error
-  if topRec[lsoBinName] ~= nil  then
-    warn("[ERROR EXIT]: <%s:%s> LSO BIN(%s) Already Exists",
-      mod, meth, tostring(lsoBinName) );
-    return('LSO_BIN already exists');
-  end
+    --  Remove this section once we know that the validate method is
+    --  doing its job correctly.
+    --
+--  if lsoBinName == nil  or type(lsoBinName) ~= "string" then
+--    warn("[WARNING]: <%s:%s> Bad LSO BIN Name: Using default", mod, meth );
+--    lsoBinName = "LsoBin";
+--  end
+--
+--  -- Validate that lsoBinName follows the Aerospike rules
+--  validateBinName( lsoBinName )
+--
+--  -- Check to see if LSO Structure (or anything) is already there,
+--  -- and if so, error
+--  if topRec[lsoBinName] ~= nil  then
+--    warn("[ERROR EXIT]: <%s:%s> LSO BIN(%s) Already Exists",
+--      mod, meth, tostring(lsoBinName) );
+--    return('LSO_BIN already exists');
+--  end
 
   -- Create and initialize the LSO MAP -- the main LSO structure
   -- initializeLsoMap() also assigns the map to the record bin.
@@ -2282,6 +2288,146 @@ function lstack_create( topRec, lsoBinName, argList )
   GP=F and trace("[EXIT]: <%s:%s> : Done.  RC(%d)", mod, meth, rc );
   return rc;
 end -- function lstack_create( topRec, namespace, set )
+
+
+-- ======================================================================
+-- |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- || local stackPushWithCreate
+-- |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- ======================================================================
+-- In some cases, users will know when a record (i.e. a key) is new, and
+-- will thus will call ceate() first -- and then will call push() separately.
+-- In other cases, the record (i.e. the key) will NOT be known to be new
+-- or old -- it's just a key to be processed.
+-- This function exists for the second case -- when we need to push a
+-- new value, but do not already know that the key exists.  Thus, we need
+-- to have the Large Object configuration parameters ready for the case
+-- where the create step is needed.
+--
+-- Just like the regular PUSH call, this function does the work of both
+-- types of push calls -- with and without inner UDF.
+--
+-- Push a value onto the stack. There are different cases, with different
+-- levels of complexity:
+-- (*) HotListInsert: Instant: Easy
+-- (*) WarmListInsert: Result of HotList Overflow:  Medium
+-- (*) ColdListInsert: Result of WarmList Overflow:  Complex
+-- Parms:
+-- (*) topRec:
+-- (*) lsoBinName:
+-- (*) newValue:
+-- (*) func:
+-- (*) fargs:
+-- (*) creationArgs:
+-- NOTE: When using info/trace calls, ALL parameters must be protected
+-- with "tostring()" so that we do not encounter a format error if the user
+-- passes in nil or any other incorrect value/type.
+-- ==> In fact, we should have a "validateArgs()" function that checks for
+-- bad values and kicks out EARLY, rather than later.
+-- ======================================================================
+-- =======================================================================
+local function localStackPushWithCreate(
+    topRec, lsoBinName, newValue, func, fargs )
+  local mod = "LsoSuperMan";
+  local meth = "localStackPush()";
+
+  local doTheFunk = 0; -- when == 1, call the func(fargs) on the Push item
+  local functionTable = require('UdfFunctionTable');
+
+  if (func ~= nil and fargs ~= nil ) then
+    doTheFunk = 1;
+    GP=F and trace("[ENTER1]:<%s:%s>LSO BIN(%s) NewVal(%s) func(%s) fargs(%s)",
+      mod, meth, tostring(lsoBinName), tostring( newValue ),
+      tostring(func), tostring(fargs) );
+  else
+    GP=F and trace("[ENTER2]: <%s:%s> LSO BIN(%s) NewValue(%s)",
+      mod, meth, tostring(lsoBinName), tostring( newValue ));
+  end
+
+  -- Some simple protection of faulty records or bad bin names
+    validateRecBinAndMap( topRec, lsoBinName, false );
+
+--  -- Some simple protection if things are weird
+--  if lsoBinName == nil  or type(lsoBinName) ~= "string" then
+--    warn("[WARNING]: <%s:%s> Bad LSO BIN Name: Using default", mod, meth );
+--    lsoBinName = "LsoBin";
+--  end
+--
+--  -- Validate that lsoBinName follows the Aerospike rules
+--  validateBinName( lsoBinName )
+--
+  local lsoMap;
+  if( not aerospike:exists( topRec ) ) then
+    GP=F and trace("[WARNING]:<%s:%s>:Record Does Not exist. Creating",
+      mod, meth );
+    lsoMap = initializeLsoMap( topRec, lsoBinName );
+    aerospike:create( topRec );
+  elseif ( topRec[lsoBinName] == nil ) then
+    GP=F and trace("[WARNING]: <%s:%s> LSO BIN (%s) DOES NOT Exist: Creating",
+                   mod, meth, tostring(lsoBinName) );
+    lsoMap = initializeLsoMap( topRec, lsoBinName );
+    aerospike:create( topRec );
+  end
+  
+  -- check that our bin is (relatively) intact.
+  local lsoMap = topRec[lsoBinName]; -- The main LSO map
+  if lsoMap.Magic ~= "MAGIC" then
+    warn("[ERROR EXIT]: <%s:%s> LSO_BIN (%s) Is Corrupted (no magic)",
+      mod, meth, lsoBinName );
+    error('PUSH Error: LSO_BIN Is Corrupted');
+  end
+
+  -- Now, it looks like we're ready to insert.  If there is an inner UDF
+  -- to apply, do it now.
+  local newStorageValue;
+  if doTheFunk == 1 then 
+    GP=F and trace("[DEBUG]: <%s:%s> Applying UDF (%s) with args(%s)",
+      mod, meth, tostring(func), tostring( fargs ));
+    newValue = functionTable[func]( newValue, fargs );
+  end
+
+  newStorageValue = valueStorage( type(newValue), newValue );
+  GP=F and trace("[DEBUG]: <%s:%s> AFTER UDF (%s) with ValueStorage(%s)",
+      mod, meth, tostring(func), tostring( newStorageValue ));
+
+  -- If we have room, do the simple list insert.  If we don't have
+  -- room, then make room -- transfer half the list out to the warm list.
+  -- That may, in turn, have to make room by moving some items to the
+  -- cold list.
+  if hotListHasRoom( lsoMap, newStorageValue ) == 0 then
+    GP=F and trace("[DEBUG]:<%s:%s>: CALLING TRANSFER HOT LIST!!",mod, meth );
+    hotListTransfer( topRec, lsoMap );
+  end
+  hotListInsert( lsoMap, newStorageValue );
+  -- Must always assign the object BACK into the record bin.
+  topRec[lsoBinName] = lsoMap;
+
+  -- All done, store the topRec.  Note that this is the ONLY place where
+  -- we should be updating the TOP RECORD.  If something fails before here,
+  -- we would prefer that the top record remains unchanged.
+  local rc = -99; -- Use Odd starting Num: so that we know it got changed
+  GP=F and trace("[DEBUG]:<%s:%s>:Update Record", mod, meth );
+  rc = aerospike:update( topRec );
+
+  GP=F and trace("[EXIT]: <%s:%s> : Done.  RC(%d)", mod, meth, rc );
+  return rc
+end -- function localStackPush()
+
+-- =======================================================================
+-- Stack Push -- with and without inner UDFs
+-- These are the globally visible calls -- that call the local UDF to do
+-- all of the work.
+-- NOTE: All parameters must be protected with "tostring()" so that we
+-- do not encounter a format error if the user passes in nil or any
+-- other incorrect value/type
+-- =======================================================================
+function lstack_push( topRec, lsoBinName, newValue )
+  return localStackPush( topRec, lsoBinName, newValue, nil, nil )
+end -- end lstack_push()
+
+function lstack_push_with_udf( topRec, lsoBinName, newValue, func, fargs )
+  return localStackPush( topRec, lsoBinName, newValue, func, fargs );
+end -- lstack_push_with_udf()
 
 -- ======================================================================
 -- |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
@@ -2325,15 +2471,18 @@ local function localStackPush( topRec, lsoBinName, newValue, func, fargs )
       mod, meth, tostring(lsoBinName), tostring( newValue ));
   end
 
-  -- Some simple protection if things are weird
-  if lsoBinName == nil  or type(lsoBinName) ~= "string" then
-    warn("[WARNING]: <%s:%s> Bad LSO BIN Name: Using default", mod, meth );
-    lsoBinName = "LsoBin";
-  end
+  -- Some simple protection of faulty records or bad bin names
+    validateRecBinAndMap( topRec, lsoBinName, false );
 
-  -- Validate that lsoBinName follows the Aerospike rules
-  validateBinName( lsoBinName )
-
+--  -- Some simple protection if things are weird
+--  if lsoBinName == nil  or type(lsoBinName) ~= "string" then
+--    warn("[WARNING]: <%s:%s> Bad LSO BIN Name: Using default", mod, meth );
+--    lsoBinName = "LsoBin";
+--  end
+--
+--  -- Validate that lsoBinName follows the Aerospike rules
+--  validateBinName( lsoBinName )
+--
   local lsoMap;
   if( not aerospike:exists( topRec ) ) then
     GP=F and trace("[WARNING]:<%s:%s>:Record Does Not exist. Creating",
