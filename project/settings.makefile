@@ -207,6 +207,8 @@ endef
 
 define make_each
 	@for i in $(1); do \
-		make -C $$i $(2);\
+		if [ -e "$$i/Makefile" ]; then \
+			make -C $$i $(2);\
+		fi \
 	done;
 endef
