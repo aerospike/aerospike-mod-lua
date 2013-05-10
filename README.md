@@ -26,14 +26,6 @@ If `apt-get` is your package manager, then you should be able to run the followi
 
 	$ sudo apt-get install liblua5.1-dev
 
-
-### Library Dependencies
-
-#### mgspack-0.5.7
-
-mod-lua utilizes msgpack for serializing some types. We recommend you follow the instructions provided on the msgpacks's [QuickStart for C Language](http://wiki.msgpack.org/display/MSGPACK/QuickStart+for+C+Language).
-
-
 ## Build
 
 To build the test app:

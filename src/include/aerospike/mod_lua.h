@@ -19,17 +19,21 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  *****************************************************************************/
-
 #pragma once
 
-//
-// logging
-//
+#include <lua.h>
 
-#define LOG(fmt, args...) \
-    // __log_append(__FILE__, __LINE__, fmt, ## args);
+#include <aerospike/as_module.h>
 
-void __log_append(const char * file, int line, const char * fmt, ...);
+/**
+ * Lua Module
+ */
+extern as_module mod_lua;
 
-#define DO_PRAGMA(x) _Pragma (#x)
-#define TODO(x) DO_PRAGMA(message ("TODO - " #x))
+
+/**
+ * Locks
+ */
+int mod_lua_rdlock(as_module * m);
+int mod_lua_wrlock(as_module * m);
+int mod_lua_unlock(as_module * m);

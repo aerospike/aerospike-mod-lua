@@ -19,17 +19,20 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  *****************************************************************************/
-
 #pragma once
 
-//
-// logging
-//
+#include <stdbool.h>
 
-#define LOG(fmt, args...) \
-    // __log_append(__FILE__, __LINE__, fmt, ## args);
+/*****************************************************************************
+ * TYPES
+ *****************************************************************************/
 
-void __log_append(const char * file, int line, const char * fmt, ...);
+struct mod_lua_config_s;
+typedef struct mod_lua_config_s mod_lua_config;
 
-#define DO_PRAGMA(x) _Pragma (#x)
-#define TODO(x) DO_PRAGMA(message ("TODO - " #x))
+struct mod_lua_config_s {
+    bool    server_mode;
+    bool    cache_enabled;
+    char    system_path[256];
+    char    user_path[256];
+};
