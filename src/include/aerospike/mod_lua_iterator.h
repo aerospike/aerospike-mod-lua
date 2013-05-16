@@ -19,17 +19,17 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  *****************************************************************************/
-
 #pragma once
 
-//
-// logging
-//
+#include <lua.h>
 
-#define LOG(fmt, args...) \
-    // __log_append(__FILE__, __LINE__, fmt, ## args);
+#include <aerospike/as_iterator.h>
 
-void __log_append(const char * file, int line, const char * fmt, ...);
+int mod_lua_iterator_register(lua_State *);
 
-#define DO_PRAGMA(x) _Pragma (#x)
-#define TODO(x) DO_PRAGMA(message ("TODO - " #x))
+// Pushes an iterator userdata object, and returns that
+// object so it can be initialized
+// (works different than some of the other calls)
+as_iterator * mod_lua_pushiterator(lua_State *);
+
+as_iterator * mod_lua_toiterator(lua_State *, int);

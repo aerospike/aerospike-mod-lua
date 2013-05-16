@@ -19,17 +19,13 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  *****************************************************************************/
-
 #pragma once
 
-//
-// logging
-//
+#include <lua.h>
+#include <aerospike/as_stream.h>
 
-#define LOG(fmt, args...) \
-    // __log_append(__FILE__, __LINE__, fmt, ## args);
+int mod_lua_stream_register(lua_State *);
 
-void __log_append(const char * file, int line, const char * fmt, ...);
+as_stream * mod_lua_pushstream(lua_State *, as_stream *);
 
-#define DO_PRAGMA(x) _Pragma (#x)
-#define TODO(x) DO_PRAGMA(message ("TODO - " #x))
+as_stream * mod_lua_tostream(lua_State *, int);

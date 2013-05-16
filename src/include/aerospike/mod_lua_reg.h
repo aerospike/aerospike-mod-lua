@@ -19,17 +19,23 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  *****************************************************************************/
-
 #pragma once
 
-//
-// logging
-//
+#include <lua.h>
+#include <lauxlib.h>
+#include <lualib.h>
+#include <stdio.h>
 
-#define LOG(fmt, args...) \
-    // __log_append(__FILE__, __LINE__, fmt, ## args);
 
-void __log_append(const char * file, int line, const char * fmt, ...);
 
-#define DO_PRAGMA(x) _Pragma (#x)
-#define TODO(x) DO_PRAGMA(message ("TODO - " #x))
+/**
+ * Registers an Object
+ * An Object is a Lua Table that is not bound to userdata.
+ */
+int mod_lua_reg_object(lua_State *, const char *, const luaL_reg *, const luaL_reg *);
+
+/**
+ * Registers a Class
+ * A Class is a Lua Table that is bound to userdata.
+ */
+int mod_lua_reg_class(lua_State *, const char *, const luaL_reg *, const luaL_reg *);
