@@ -1,8 +1,8 @@
 -- AS Large Set (LSET) Operations
--- Steelman V4.22.0 -- (Last Update April 22, 2013: tjl)
+-- Steelman (Last Update May 15, 2013: tjl)
 --
 -- Keep this in sync with the version above.
-local MOD="LsetSteelman4.22.0"; -- the module name used for tracing
+local MOD="LsetSteelman_05.15.0"; -- the module name used for tracing
 
 -- Please refer to lset_design.lua for architecture and design notes.
 --
@@ -441,7 +441,7 @@ local function lsetSummary( lsetMap )
   resultMap.BinaryStoreSize      = lsetMap.BinaryStoreSize;
   resultMap.KeyType              = lsetMap.KeyType;
 
-return tostring( resultMap );
+return resultMap;
 end -- lsetSummary()
 
 -- ======================================================================

@@ -1,8 +1,8 @@
 -- Large Ordered List (LLIST)
--- Last Update May  06,  2013: tjl
+-- Last Update May  13,  2013: tjl
 --
 -- Keep this MOD value in sync with version above
-local MOD = "LlistStrawman05.06.0"; -- module name used for tracing.  
+local MOD = "LlistStrawman05.13.0"; -- module name used for tracing.  
 -- ======================================================================
 -- The Large Ordered List is a sorted list, organized according to a Key
 -- value.  It is assumed that the stored object is more complex than just an
@@ -128,24 +128,24 @@ local MOD = "LlistStrawman05.06.0"; -- module name used for tracing.
 -- with the index of the key in the block, or "null" if the key was not found:
 -- 
 -- ++=============================================================++
--- || B-Tree-Search (x, k) // search starting at node x for key k ||
+-- || B-Tree-Search (x, k) -- search starting at node x for key k ||
 -- ++=============================================================++
 --     i = 1
---     // search for the correct child
+--     -- search for the correct child
 --     while i <= n[x] and k > keyi[x] do
 --         i++
 --     end while
 -- 
---     // now i is the least index in the key array such that k <= keyi[x],
---     // so k will be found here or in the i'th child
+--     -- now i is the least index in the key array such that k <= keyi[x],
+--     -- so k will be found here or in the i'th child
 -- 
 --     if i <= n[x] and k = keyi[x] then 
---         // we found k at this node
+--         -- we found k at this node
 --         return (x, i)
 --     
 --     if leaf[x] then return null
 -- 
---     // we must read the block before we can work with it
+--     -- we must read the block before we can work with it
 --     Disk-Read (ci[x])
 --     return B-Tree-Search (ci[x], k)
 -- 
@@ -154,14 +154,16 @@ local MOD = "LlistStrawman05.06.0"; -- module name used for tracing.
 -- ++===========================++
 -- 
 -- To initialize a B+ Tree, we build an empty root node, which means
--- we initialize the LListMap in topRec[LdtBinName]
--- 
--- B+ Tree-Create (T)
---     x = allocate-node ();
---     leaf[x] = True
---     n[x] = 0
---     Disk-Write (x)
---     root[T] = x
+-- we initialize the LListMap in topRec[LdtBinName].
+--
+-- Recall that we maintain a compact list of N elements (for values of N
+-- usually between 20 and 50).  So, we always start with a group insert.
+-- In fact, we'd prefer to take our initial list, then SORT IT, then
+-- load directly into a leaf with the largest key in the leaf as the
+-- first Root Value.  This initial insert sets up a special case where
+-- there's a key value in the root, but only a single leaf, so there must
+-- be a test to create the second leaf when the search value is >= the
+-- single root key value.
 -- 
 -- This assumes there is an allocate-node function that returns a node with
 -- key, c, leaf fields, etc., and that each node has a unique "address",
@@ -190,11 +192,13 @@ local MOD = "LlistStrawman05.06.0"; -- module name used for tracing.
 -- (5) Simple Delete
 -- (6) Complex Insert
 -- ======================================================================
--- Aerospike Calls:
--- newRec = aerospike:crec_create( topRec )
--- newRec = aerospike:crec_open( topRec, childRecDigest)
--- status = aerospike:crec_update( topRec, childRec )
--- status = aerospike:crec_close( topRec, childRec )
+-- ======================================================================
+-- Aerospike SubRecord Calls:
+-- newRec = aerospike:create_subrec( topRec )
+-- newRec = aerospike:open_subrec( topRec, childRecDigest)
+-- status = aerospike:update_subrec( topRec, childRec )
+-- status = aerospike:close_subrec( topRec, childRec )
+-- status = aerospike:delete_subrec( topRec, childRec ) (not yet ready)
 -- digest = record.digest( childRec )
 -- ======================================================================
 -- For additional Documentation, please see llist_design.lua
@@ -247,8 +251,7 @@ local ST_NOTFOUND = 'N';
 
 -- Bin Names for Interior Nodes and Leaf Nodes
 local NODE_CTRL_BIN = "NodeCtrlBin";
-
--- (1) nodeRec['NodeCtrlBin']: The control Map (defined here)
+local LEAF_CTRL_BIN = "NodeCtrlBin";
 
 -- Key Compare Function for Complex Objects
 -- By default, a complex object will have a "KEY" field, which the
@@ -322,6 +325,7 @@ local function initializeLListMap( topRec, ldtBinName, transFunc, untransFunc,
   ldtMap.LdtType="LLIST";   -- Mark this as a Large Ordered List
   ldtMap.ItemCount = 0;     -- A count of all items in the LLIST
   ldtMap.TotalCount = 0;    -- A count of all "slots" used in LLIST
+  ldtMap.LeafCount = 0;     -- A count of all Leaf Nodes
   ldtMap.DesignVersion = 1; -- Current version of the code
   ldtMap.Magic = "MAGIC";   -- Used to verify we have a valid map
   ldtMap.ExistSubRecDig = 0; -- Pt to the LDT "Exists" subrecord (digest)
@@ -341,6 +345,7 @@ local function initializeLListMap( topRec, ldtBinName, transFunc, untransFunc,
   --
   -- Top Node Tree Root Directory
   ldtMap.RootDirMax = 100;
+  ldtMap.KeyCountMax = 100; -- Each CtrlMap has this field
   ldtMap.KeyByteArray = 0; -- Byte Array, when in compressed mode
   ldtMap.DigestByteArray = 0; -- DigestArray, when in compressed mode
   ldtMap.KeyList = 0; -- Key List, when in List Mode
@@ -386,6 +391,7 @@ local function packageStandardList( ldtMap )
   ldtMap.KeyType = KT_ATOMIC; -- Atomic Keys
   ldtMap.BinName = ldtBinName;
   ldtMap.ThreshHold = DEFAULT_THRESHHOLD; -- Rehash after this many inserts
+  return 0;
 
 end -- packageStandardList()
 
@@ -404,6 +410,7 @@ local function packageTestModeNumber( ldtMap )
   ldtMap.BinName = ldtBinName;
   ldtMap.ThreshHold = DEFAULT_THRESHHOLD; -- Rehash after this many have been inserted
  
+  return 0;
 end -- packageTestModeList()
 
 
@@ -421,6 +428,7 @@ local function packageTestModeList( ldtMap )
   ldtMap.KeyType = KT_COMPLEX; -- Complex Object (need key function)
   ldtMap.BinName = ldtBinName;
   ldtMap.ThreshHold = DEFAULT_THRESHHOLD; -- Rehash after this many have been inserted
+  return 0;
  
 end -- packageTestModeList()
 
@@ -438,6 +446,7 @@ local function packageTestModeBinary( ldtMap )
   ldtMap.KeyType = KT_COMPLEX; -- Complex Object (need key function)
   ldtMap.BinName = ldtBinName;
   ldtMap.ThreshHold = DEFAULT_THRESHHOLD; -- Rehash after this many have been inserted
+  return 0;
 
 end -- packageTestModeBinary( ldtMap )
 
@@ -456,6 +465,7 @@ local function packageProdListValBinStore( ldtMap )
   ldtMap.KeyType = KT_ATOMIC; -- Atomic Keys (a number)
   ldtMap.BinName = ldtBinName;
   ldtMap.ThreshHold = 100; -- Rehash after this many have been inserted
+  return 0;
   
 end -- packageProdListValBinStore()
 
@@ -475,6 +485,7 @@ local function packageDebugModeList( ldtMap )
   ldtMap.KeyType = KT_ATOMIC; -- Atomic Keys
   ldtMap.BinName = ldtBinName;
   ldtMap.ThreshHold = 4; -- Rehash after this many have been inserted
+  return 0;
 
 end -- packageDebugModeList()
 
@@ -494,6 +505,7 @@ local function packageDebugModeBinary( ldtMap )
   ldtMap.KeyType = KT_COMPLEX; -- special function for list compare.
   ldtMap.BinName = ldtBinName;
   ldtMap.ThreshHold = 4; -- Rehash after this many have been inserted
+  return 0;
 
 end -- packageDebugModeBinary( ldtMap )
 
@@ -519,6 +531,7 @@ local function packageDebugModeNumber( ldtMap )
 
   GP=F and trace("[EXIT]: <%s:%s>:: LdtMap(%s)",
     MOD, meth, tostring(ldtMap) );
+  return 0;
 end -- packageDebugModeNumber( ldtMap )
 
 -- ======================================================================
@@ -658,12 +671,14 @@ local function initializeNodeMap(topRec, parentRec, nodeRec, nodeMap, ldtMap)
   nodeMap.PageMode = ldtMap.PageMode;
   nodeMap.Digest = record.digest( nodeRec );
   -- Note: Item Count is implicitly the KeyList size
-  nodeMap.KeyListMax = 100; -- Digest List is ONE MORE than Key List
+  -- Also, Remember that Digest List Size is ONE MORE than Key List Size
+  ldtMap.KeyCountMax = 100; -- Each CtrlMap has this field
   nodeMap.ByteEntrySize = ldtMap.LdrByteEntrySize; -- ByteSize of Fixed Entries
   nodeMap.ByteEntryCount = 0;  -- A count of Byte Entries
   nodeMap.ByteCountMax = ldtMap.LdrByteCountMax; -- Max # of bytes in ByteArray
   nodeMap.Version = ldtMap.Version;
   nodeMap.LogInfo = 0;
+  return 0;
 end -- initializeNodeMap()
 
 -- ======================================================================
@@ -726,6 +741,7 @@ local function initializeLeafMap(topRec, parentRec, leafRec, leafMap, ldtMap)
   leafMap.ByteCountMax = ldtMap.LdrByteCountMax; -- Max # of bytes in ByteArray
   leafMap.Version = ldtMap.Version;
   leafMap.LogInfo = 0;
+  return 0;
 end -- initializeLeafMap()
 
 -- ======================================================================
@@ -767,13 +783,32 @@ local function adjustLListMap( ldtMap, argListMap )
 end -- adjustLListMap
 
 -- ======================================================================
+-- Convenience function to return the Control Map given a subrec
+-- ======================================================================
+local function getLeafMap( leafSubRec )
+  local meth = "getLeafMap()";
+  GP=F and trace("[ENTER]: <%s:%s> ", MOD, meth );
+  return leafSubRec[LEAF_CTRL_BIN]; -- this should be a map.
+end -- getLeafMap
+
+
+-- ======================================================================
+-- Convenience function to return the Control Map given a subrec
+-- ======================================================================
+local function getNodeMap( nodeSubRec )
+  local meth = "getNodeMap()";
+  GP=F and trace("[ENTER]: <%s:%s> ", MOD, meth );
+  return nodeSubRec[NODE_CTRL_BIN]; -- this should be a map.
+end -- getNodeMap
+
+-- ======================================================================
 -- validateTopRec( topRec, ldtMap )
 -- ======================================================================
 -- Validate that the top record looks valid:
 -- Get the LDT bin from the rec and check for magic
 -- Return: "good" or "bad"
 -- ======================================================================
-local function  validateTopRec( topRec, ldtMap )
+local function validateTopRec( topRec, ldtMap )
   local thisMap = topRec[ldtMap.BinName];
   if thisMap.Magic == "MAGIC" then
     return "good"
@@ -800,6 +835,7 @@ local function validateBinName( binName )
   elseif string.len( binName ) > 14 then
     error('Bin Name Validation Error: Exceeds 14 characters');
   end
+  return 0;
 end -- validateBinName
 
 
@@ -863,6 +899,7 @@ local function validateRecBinAndMap( topRec, ldtBinName, mustExist )
       end
     end -- if worth checking
   end -- else for must exist
+  return 0;
 
 end -- validateRecBinAndMap()
 
@@ -942,7 +979,7 @@ end -- summarizeList()
 -- ======================================================================
 -- Print out interesting stats about this B+ Tree Root
 -- ======================================================================
-local function  rootNodeSummary( topRec, ldtMap )
+local function rootNodeSummary( topRec, ldtMap )
   local resultMap = ldtMap;
 
   -- Add to this -- move selected fields into resultMap and return it.
@@ -956,8 +993,8 @@ end -- rootNodeSummary
 -- ======================================================================
 -- Print out interesting stats about this Interior B+ Tree Node
 -- ======================================================================
-local function  interiorNodeSummary( intNode )
-  local resultMap = intNode['NodeCtrlBin'];
+local function interiorNodeSummary( intNode )
+  local resultMap = intNode[NODE_CTRL_BIN];
 
   -- Add to this -- move selected fields into resultMap and return it.
 
@@ -970,42 +1007,40 @@ end -- interiorNodeSummary()
 -- ======================================================================
 -- Print out interesting stats about this B+ Tree Leaf (Data) node
 -- ======================================================================
-local function  leafNodeSummary( leafNode )
+local function leafNodeSummary( leafNode )
   local resultMap = map();
-  local nodeMap = nodeRecord['NodeCtrlBin'];
+  local nodeMap = nodeRecord[LEAF_CTRL_BIN];
 
   return tostring( resultMap );
 end -- leafNodeSummary()
 
 -- ======================================================================
--- nodeHasRoom: Check that there's enough space for an insert in the 
--- node list.
--- 
--- Return: true=There is room.   false=Not enough room.
+-- keyCompare: (Compare ONLY Key values, not Object values)
 -- ======================================================================
--- Parms:
--- (*) keyList
--- (*) listMax
--- Return: TRUE if there's room, otherwise FALSE
+-- Compare Search Key Value with KeyList, following the protocol for data
+-- compare types.  Since compare uses only atomic key types (the value
+-- that would be the RESULT of the extractKey() function), we can do the
+-- simple compare here, and we don't need "keyType".
+-- Return -1 for SV < data, 0 for SV == data, 1 for SV > data
+-- Return -2 if either of the values is null
 -- ======================================================================
-local function nodeHasRoom( keyList, listMax )
-  local meth = "nodeHasRoom()";
-  GP=F and trace("[ENTER]: <%s:%s> keyList(%s) ListMax(%s)",
-    MOD, meth, tostring(keyList), tostring(listMax) );
-
-  local result = 1;  -- Be optimistic 
-
-  -- TODO: Finish Method
-  print("[!!! FINISH THIS METHOD !!! (%s) ", meth );
-
-
-  GP=F and trace("[EXIT]: <%s:%s> result(%d) ", MOD, meth, result );
-  return result;
-end -- nodeHasRoom()
-
+local function keyCompare( searchKey, dataKey )
+  local result = 0;
+  -- For atomic types (keyType == 0), compare objects directly
+  if searchKey == nil or dataKey == nil then return -2 end;
+  if searchKey == dataKey then
+    return 0;
+  elseif searchKey < dataKey then
+      return -1;
+  else
+    return 1;
+  end
+  
+  return -3; -- we should never be here.
+end -- keyCompare()
 
 -- ======================================================================
--- compare:
+-- compare: (Value Compare)
 -- ======================================================================
 -- Compare Search Value with data, following the protocol for data
 -- compare types.
@@ -1016,7 +1051,7 @@ local function compare( keyType, sv, data )
   local result = 0;
   -- For atomic types (keyType == 0), compare objects directly
   if sv == nil or data == nil then return -2 end;
-  if keyType == 0 then
+  if keyType == KT_ATOMIC then
     if sv == data then
       return 0;
     elseif sv < data then
@@ -1036,6 +1071,7 @@ local function compare( keyType, sv, data )
       return 1;
     end
   end
+  return -3; -- we should never be here.
 end -- compare()
 
 -- ======================================================================
@@ -1054,23 +1090,23 @@ end -- compare()
 -- end
 -- searchLeaf( node )
 -- ======================================================================
--- B-Tree-Search (x, k) // search starting at node x for key k
+-- B-Tree-Search (x, k) -- search starting at node x for key k
 --     i = 1
---     // search for the correct child
+--     -- search for the correct child
 --     while i <= n[x] and k > keyi[x] do
 --         i++
 --     end while
 -- 
---     // now i is the least index in the key array such that k <= keyi[x],
---     // so k will be found here or in the i'th child
+--     -- now i is the least index in the key array such that k <= keyi[x],
+--     -- so k will be found here or in the i'th child
 -- 
 --     if i <= n[x] and k = keyi[x] then 
---         // we found k at this node
+--         -- we found k at this node
 --         return (x, i)
 --     
 --     if leaf[x] then return null
 -- 
---     // we must read the block before we can work with it
+--     -- we must read the block before we can work with it
 --     Disk-Read (ci[x])
 --     return B-Tree-Search (ci[x], k)
 
@@ -1088,7 +1124,7 @@ end -- compare()
 -- (*) fargs:
 -- (*) flag:
 -- ======================================================================
-local function searchKeyList( keyList, keyType, searchValue, func, fargs, flag)
+local function searchKeyList( keyList, keyType, searchValue )
   -- Linear scan of the KeyList.  Find the appropriate entry and return
   -- the index.
   local resultIndex = 0;
@@ -1113,14 +1149,45 @@ local function searchKeyList( keyList, keyType, searchValue, func, fargs, flag)
     -- otherwise, keep looking.  We haven't passed the spot yet.
   end -- for each list item
 
+  return 0;
 end -- searchKeyList()
 
 -- ======================================================================
--- searchKeyList(): 
+-- createSearchPath: Create and initialize a search path structure so
+-- that we can fill it in during our tree search.
 -- ======================================================================
--- Given a Key List, return the index of the digest to take next.
-local function searchKeyList( keyList, searchValue )
-end -- searcKeyhList()
+local function createSearchPath( )
+  local sp = map();
+  sp.LevelCount = 0;
+  sp.DigestList = list();  -- The mechanism to open each level
+  sp.PositionList = list(); -- Remember where the key was
+  sp.HasRoom = list(); -- Check each level so we'll know if we have to split
+  return sp;
+end -- createSearchPath()
+
+-- ======================================================================
+-- updateSearchPath: Rememeber the path that we took during the search
+-- so that we can retrace our steps if we need to update the rest of the
+-- tree after an insert or delete (although, it's unlikely that we'll do
+-- any significant tree change after a delete).
+-- Parms:
+-- (*) SearchPath: a map that holds all of the secrets
+-- (*) nodeRec: a subrec
+-- (*) position: location in the current list
+-- (*) keyCount: Number of keys in the list
+-- ======================================================================
+local function updateSearchPath(searchPath, cMap, nodeRec, position, keyCount)
+  local levelCount = searchPath.LevelCount;
+  searchPath.LevelCount = levelCount + 1;
+  list.append( searchPath.DigestList, record.digest( nodeRec ) );
+  list.append( searchPath.PositionList, position );
+  if( keyCount >= cMap.KeyCountMax ) then
+    list.append( searchPath.HasRoom, false );
+  else
+    list.append( searchPath.HasRoom, true );
+  end
+  return 0;
+end -- updateSearchPath()
 
 
 -- ======================================================================
@@ -1138,12 +1205,11 @@ local function keyListInsert( ldtMap, keyList, newKey, digestList, newDigest )
 
   local rc = 0;
 
--- function searchKeyList( keyList, keyType, searchValue, func, fargs, flag)
-  local position = searchKeyList( keyList, ldtMap.KeyType, newKey, nil, nil, 0);
+  local position = searchKeyList( keyList, ldtMap.KeyType, newKey )
   GP=F and trace("[DEBUG]:<%s:%s>:searchKeyList Returns(%d) ",
     MOD, meth, position );
 
-  rc = insertIntoKeyList( keyList, newKey, digestList, newDigest );
+  rc = insertIntoList( keyList, newKey, digestList, newDigest );
 
   -- Assuming there's room, Move items to the right to make room for
 
@@ -1213,6 +1279,7 @@ local function searchLeaf(topRec, leafNode, searchPath, ldtMap, resultList,
     end -- for each list item
   end -- end else list mode
 
+  return 0;
 end -- searchLeaf()
 
 
@@ -1228,7 +1295,8 @@ end -- searchLeaf()
 -- (*) searchPath: A list of maps that describe each level searched
 -- (*) ldtMap: 
 -- (*) searchValue:
--- Return: ST_FOUND or ST_NOTFOUND;
+-- Return: ST_FOUND or ST_NOTFOUND; 
+-- And, implicitly, the updated searchPath Object.
 local function treeSearch( topRec, searchPath, ldtMap, searchValue )
   local meth = "treeSearch()";
   local rc = 0;
@@ -1240,33 +1308,210 @@ local function treeSearch( topRec, searchPath, ldtMap, searchValue )
   -- inner node level until we get to a LEAF NODE.  We search the leaf node
   -- differently than the inner (and root) nodes.
   local keyList = getRootKeyList( ldtMap );
+  local keyCount = list.size( keyList );
   local digestList = getRootDigestList( ldtMap );
   local position = 0;
-  local nodeRec = topRec;
+  local nodeSubRec = topRec;
   local ctrlMap;
-  for i = 1, i < treeLevel,  1 do
-      position = searchKeyList( ldtMap, keyList, searchValue );
-      updateSearchPath( searchPath, nodeRec, position ); -- Save this info
-      nodeRec = getTreeNodeRec( topRec, ldtMap, digestList, position );
-      if i > ( treeLevel + 1 ) then
-          ctrlMap = nodeRec[NODE_CTRL_BIN];
-          keyList = ctrlMap.KeyList;
-          digestList = ctrlMap.DigestList;
-      else -- then this is a leaf node
-      end -- if set up for next level
+  for i = 1, i < treeLevel, 1 do
+    position = searchKeyList( ldtMap, keyList, searchValue );
+    updateSearchPath( searchPath, nodeSubRec, position, keyCount );
+    nodeSubRec = getTreeNodeRec( topRec, ldtMap, digestList, position );
+    if i > ( treeLevel + 1 ) then
+      print("[DEBUG]<%s:%s> INNER NODE", MOD, meth );
+      ctrlMap = nodeSubRec[NODE_CTRL_BIN];
+      keyList = ctrlMap.KeyList;
+      keyCount = list.size( keyList );
+      digestList = ctrlMap.DigestList;
+    else -- then this is a leaf node
+      print("[DEBUG]<%s:%s> LEAF NODE", MOD, meth );
+    end -- if set up for next level
   end -- end for each tree level
 
   -- We've made it thru the inner nodes, so now search the leaf:
   -- TODO : Update searchLeaf() to do the NEW thing
-  position = searchLeaf(nodeRec, ldtMap, searchValue );
-  updateSearchPath( searchPath, nodeRec, position ); -- Save this info for later
+  position = searchLeaf(nodeSubRec, ldtMap, searchValue );
+  updateSearchPath( searchPath, nodeSubRec, position, keyCount );
 
   if position == 0 then
     return ST_NOTFOUND;
   else
     return ST_FOUND;
   end
+
+  return 0;
 end -- treeSearch()
+
+-- ======================================================================
+-- ======================================================================
+local function populateLeaf( newLeafSubRec, ldtMap.KeyList, splitPosition )
+  local meth = "populateLeaf()";
+  print("[WARNING]<%s:%s> Function Not yet Implemented", MOD, meth );
+  return 0;
+end -- populateLeaf()
+
+-- ======================================================================
+-- listInsert()
+-- Here's a general List Insert function that can be used to insert
+-- keys, digests or objects.
+-- ======================================================================
+local function listInsert( myList, newValue, position )
+  local meth = "listInsert()";
+  
+  local listSize = list.size( myList );
+  if( position > listSize ) then
+    -- Just append to the list
+    list.append( myList, newValue );
+  else
+    -- Move elements in the list from "Position" to the end (end + 1)
+    -- and then insert the new value at "Position"
+    for i = listSize, position, -1  do
+      myList[i+1] = myList[i];
+    end -- for()
+    myList[position] = newValue;
+  end
+end -- listInsert
+
+
+-- ======================================================================
+-- leafInsert()
+-- Use the search position to mark the location where we have to make
+-- room for the new value.
+-- If we're at the end, we just append to the list.
+-- ======================================================================
+local function leafInsert( leafSubRec, ldtMap, newValue, position)
+  local meth = "leafInsert()";
+  print("[WARNING]<%s:%s> Function Not Complete", MOD, meth );
+
+  -- if "position" is 0, then we need to search for the new location of
+  -- of the new value.  Otherwise, position marks the place where we are
+  -- going to insert the new value -- and everything at that place (and to
+  -- the right) has to slide one position to the right.
+  local leafPosition = position;
+  if( leafPosition == 0 ) then
+  end
+  local leafLevel = searchPath.TreeLevel;
+  local leafPosition = searchPath.Position[leafLevel];
+  local leafMap = getLeafMap( leafSubRec );
+
+  listInsert( leafMap.ValueList, newValue, position ); -- TODO: CHECK THIS
+
+  -- This next section is no longer needed -- done by "listInsert()".
+
+  local listSize = list.size( ldtMap.KeyList );
+  -- local i;
+  if( leafPosition > listSize ) then
+    -- Just append to the list
+    list.append( ldtMap.KeyList, newValue );
+  else
+    -- Move elements in the list from "Position" to the end (end + 1)
+    -- and then insert the new value at "Position"
+    for i = listSize, leafPosition, -1  do
+      ldtMap.KeyList[i+1] = ldtMap.KeyList[i];
+    end -- for()
+    ldtMap.KeyList[leafPosition] = newValue;
+  end
+
+  -- Check the code and delete the above section.
+  --
+  --
+  return 0;
+end -- leafInsert()
+
+-- ======================================================================
+-- getSplitPosition()
+-- Find the right place to split the B+ Tree Leaf
+-- ======================================================================
+local function getLeafSplitPosition( ldtMap, leafPosition, newValue )
+  local meth = "getLeafSplitPosition()";
+  print("[WARNING]<%s:%s> Function Not Complete", MOD, meth );
+
+  -- This is only an approximization
+  local listSize = list.size( ldtMap.KeyList );
+  return listSize / 2;
+end -- getLeafSplitPosition
+
+-- ======================================================================
+-- ======================================================================
+local function insertParentNode(topRec,searchPath,ldtMap, nVal, nDig, curLevel)
+  local meth = "insertParentNode()";
+  print("[WARNING]<%s:%s> Function Not Complete", MOD, meth );
+
+  -- From our "current" level, insert this value and related digest into
+  -- the parent node.
+
+  
+
+  return 0;
+end -- insertParentNode()
+
+-- ======================================================================
+-- After splitting a leaf, reset the list so that we have just the first
+-- half (the part BEFORE the split position).
+-- ======================================================================
+local function resetLeafAfterSplit( topRec, leafSubRec, splitPosition )
+  local meth = "resetLeafAfterSplit()";
+  print("[WARNING]<%s:%s> Function Not Complete", MOD, meth );
+
+  return 0;
+end -- resetLeafAfterSplit
+
+-- ======================================================================
+-- splitLeafInsert()
+-- We already know that there isn't enough room for the item, so we'll
+-- have to split the leaf in order to insert it.
+-- The searchPath position tells us the insert location in THIS leaf,
+-- but, since this leaf will have to be split, it gets more complicated.
+-- We split, THEN decide which leaf to use.
+-- ALSO -- since we don't want to split the page in the middle of a set of
+-- duplicates, we have to find the closest "key break" to the middle of
+-- the page.  More thinking needed on how to handle duplicates without
+-- making the page MUCH more complicated.
+-- ======================================================================
+local function splitLeafInsert( topRec, searchPath, ldtMap, newKey, newValue )
+  local meth = "splitLeafInsert()";
+  print("[WARNING]<%s:%s> Function Not Complete", MOD, meth );
+
+  local leafLevel = searchPath.TreeLevel;
+  local leafPosition = searchPath.Position[leafLevel];
+  local leafSubRecDigest = searchPath.DigestList[leafLevel];
+  -- Open the Leaf and look inside.
+  local leafSubRec = aerospike:open_subrec( topRec, leafSubRecDigest );
+  local leafMap = getLeafMap( leafSubRec );
+
+  local listSize = list.size( ldtMap.KeyList );
+  local splitPosition = getLeafSplitPosition( ldtMap, leafPosition, newValue );
+  local newLeafKey = getParentNodeKey( ldtMap, splitPosition );
+
+  -- Move the section [split position, end] to the NEXT subrec and move
+  -- the value at splitPosition up to the parent node.
+  local newLeafSubRec = createLeaf( topRec );
+  local newLeafSubRecDigest = record.digest( newSubRec );
+  populateLeaf( newLeafSubRec, ldtMap.KeyList, splitPosition );
+
+  -- Propagate the split value up to the parent (recursively).
+  insertParentNode(topRec,searchPath,ldtMap,newValue,newLeafSubRec,leafLevel);
+
+  -- Fix up the original leaf (remove the stuff that moved)
+  resetLeafAfterSplit( topRec, leafSubRec, splitPosition );
+
+  -- Now figure out WHICH of the two leaves (original or new) we have to
+  -- insert the new value.
+  -- Compare against the SplitValue -- if less, insert into the original leaf,
+  -- and otherwise insert into the new leaf.
+  local compareResult = keyCompare( newValue, newLeafKey );
+  if( compareResult == -1 ) then
+    -- We choose the LEFT Leaf
+    leafInsert( topRec, searchPath, ldtMap, newValue )
+  elseif( compareResult >= 0 ) then
+    -- We choose the RIGHT (new) Leaf
+  else
+    -- We got some sort of goofy error.
+  end
+
+  return 0;
+end -- splitLeafInsert()
+
 
 -- ======================================================================
 -- treeInsert( topRec, ldtMap, newValue, stats )
@@ -1282,13 +1527,15 @@ local function treeInsert( topRec, ldtMap, newValue, stats )
   -- Map: Path from root to leaf, with indexes
   -- The Search path is a map of values, including lists from root to leaf
   -- showing node/list states, counts, fill factors, etc.
-  local searchPath = map();
+  local searchPath = createSearchPath();
   local status = treeSearch( topRec, searchPath, ldtMap, searchValue );
 
   if( status == ST_FOUND and ldtMap.KeyUnique == true ) then
     error('[Error]: Unique Key Violation');
   end
-  if( searchPath.HasRoom == true ) then
+  local leafLevel = searchPath.LevelCount;
+  if( searchPath.HasRoom[leafLevel] == true ) then
+    local leafSubRec = searchPath.subRec[leafLevel];
     leafInsert( topRec, searchPath, ldtMap, newValue );
   else
     splitLeafInsert( topRec, searchPath, ldtMap, newValue );
@@ -1580,14 +1827,14 @@ local function scanList( resultList, ldtMap, binList, searchValue, flag,
 end -- scanList()
 
 -- ======================================================================
--- listInsert( topRec, ldtMap, newValue, stats )
+-- compactListInsert( topRec, ldtMap, newValue, stats )
 -- ======================================================================
 -- Pass the work on to "scanList()" who is used to heavy lifting
-local function listInsert( topRec, ldtMap, newValue, stats )
+local function compactListInsert( topRec, ldtMap, newValue, stats )
   local rc = 
     scanList( nil, ldtMap, ldtMap.CompactList, newValue, FV_INSERT, nil, nil);
   return rc;
-end -- listInsert
+end -- compactListInsert
 
 -- ======================================================================
 -- localInsert( topRec, ldtMap, newValue, stats )
@@ -1608,7 +1855,7 @@ local function localInsert( topRec, ldtMap, newValue, stats )
   -- real tree insert.
   local insertResult = 0;
   if( ldtMap.StoreState == SS_COMPACT ) then 
-    insertResult = listInsert( topRec, ldtMap, newValue, stats );
+    insertResult = compactListInsert( topRec, ldtMap, newValue, stats );
   else
     insertResult = treeInsert( topRec, ldtMap, newValue, stats );
   end
@@ -1666,10 +1913,11 @@ local function convertList( topRec, ldtBinName, ldtMap )
   -- Start with the SIMPLE way.
   -- TODO: Change this to build the tree in one operation.
   for i = 1, list.size(listCopy), 1 do
-    localLListInsert( topRec, ldtMap, listCopy[i], 0 ); -- do NOT update counts.
+    treeInsert( topRec, ldtMap, listCopy[i], 0 ); -- do NOT update counts.
   end
 
   GP=F and trace("[EXIT]: <%s:%s>", MOD, meth );
+  return 0;
 end -- convertList()
 
 -- ======================================================================
@@ -1879,8 +2127,7 @@ local function localLListSearch( topRec, ldtBinName, searchValue, func, fargs )
   local binNumber = computeSetBin( searchValue, ldtMap );
   local binName = getBinName( binNumber );
   local binList = topRec[binName];
-  rc =
-  scanList(resultList,ldtMap,binList,searchValue,FV_SCAN,filter,fargs);
+  rc = scanList(resultList,ldtMap,binList,searchValue,FV_SCAN,filter,fargs);
   
   GP=F and trace("[EXIT]: <%s:%s>: Search Returns (%s)",
   MOD, meth, tostring(result));
@@ -1900,21 +2147,21 @@ function llist_search( topRec, ldtBinName, searchValue )
   local meth = "listSearch()";
   GP=F and trace("[ENTER]: <%s:%s> LLIST BIN(%s) searchValue(%s)",
     MOD, meth, tostring(ldtBinName), tostring(searchValue) )
-  return localLListSearch( topRec, ldtBinName, searchValue, nil, nil )
+  return localLListSearch( topRec, ldtBinName, searchValue, nil, nil );
 end -- end llist_search()
 
-function llist_search_with_filter( topRec, ldtBinName, searchValue, func, fargs )
+function llist_search_with_filter(topRec,ldtBinName,searchValue,func,fargs )
   local meth = "listSearch()";
   GP=F and trace("[ENTER]: <%s:%s> BIN(%s) searchValue(%s) func(%s) fargs(%s)",
     MOD, meth, tostring(ldtBinName), tostring(searchValue),
     tostring(func), tostring(fargs));
 
-  return localLListSearch( topRec, ldtBinName, searchValue, func, fargs )
+  return localLListSearch( topRec, ldtBinName, searchValue, func, fargs );
 end -- end llist_search_with_filter()
 
 
 -- ======================================================================
--- || llistDelete ||
+-- || llist_delete ||
 -- ======================================================================
 -- Delete the specified item(s).
 --
