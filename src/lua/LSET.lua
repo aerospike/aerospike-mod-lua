@@ -1337,7 +1337,7 @@ local function localLSetSearch(resultList, topRec, lsetBinName, searchValue,
   GP=F and trace("[EXIT]: <%s:%s>: Search Returns (%s)",
                  MOD, meth, tostring(result));
 
-  return rc;
+  return resultList;
 end -- function lset_search()
 
 -- ======================================================================
