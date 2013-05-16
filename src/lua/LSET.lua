@@ -1465,7 +1465,7 @@ function lset_config( topRec, lsetBinName )
 
   local config = lsetSummary( topRec[ LSET_CONTROL_BIN ] );
 
-  GP=F and trace("[EXIT]: <%s:%s> : config(%s)", MOD, meth, config );
+  GP=F and trace("[EXIT]:<%s:%s>:config(%s)", MOD, meth, tostring(config));
 
   return config;
 end -- function lset_config()
