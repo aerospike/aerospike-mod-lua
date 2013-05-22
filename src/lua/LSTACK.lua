@@ -1,8 +1,8 @@
 -- Large Stack Object (LSO or LSTACK) Operations
--- LSTACK.lua:  (May 5, 2013)
+-- LSTACK.lua:  (May 9, 2013)
 --
 -- Module Marker: Keep this in sync with the stated version
-local MOD="LsoSuperman_5.05.1"; -- the module name used for tracing
+local MOD="LsoSuperman_5.09.0"; -- the module name used for tracing
 
 -- ======================================================================
 -- Please refer to lstack_design.lua for architecture and design notes.
@@ -2700,5 +2700,20 @@ function lstack_config( topRec, lsoBinName )
 
   return config;
 end -- function lstack_config()
+
+
+-- ========================================================================
+-- lstack_get_subrec_list() -- Return a list of subrecs
+-- Parms:
+-- (1) topRec: the user-level record holding the LSO Bin
+-- (2) lsoBinName: The name of the LSO Bin
+-- Result:
+--   res = (when successful) List of SUBRECs
+--   res = (when error) Empty List
+-- ========================================================================
+function lstack_get_subrec_list( topRec, lsoBinName )
+    local resultList = list();
+
+end
 
 -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> --

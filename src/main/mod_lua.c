@@ -195,7 +195,7 @@ static inline int cache_entry_init(context * ctx, cache_entry * centry, const ch
 }
 
 int cache_rm(context * ctx, const char *key) {
-    if (strlen(key) == 0) return 0;
+    if ( !key || ( strlen(key) == 0 )) return 0;
     cache_entry     * centry = NULL;
     if (CF_RCHASH_OK != cf_rchash_get(centry_hash, (void *)key, strlen(key), (void *)&centry)) {
         return 0;
@@ -239,7 +239,9 @@ int cache_init(context * ctx, const char *key, const char * gen) {
 static int cache_remove_file(context * ctx, const char * filename) {
     char    key[CACHE_ENTRY_KEY_MAX]    = "";
     memcpy(key, filename, CACHE_ENTRY_KEY_MAX);
-    *(rindex(key, '.')) = '\0';
+    if( rindex(key, '.') ) {
+		*(rindex(key, '.')) = '\0';
+	}
     cache_rm(ctx, key);
     return 0;
 }
