@@ -1,4 +1,8 @@
 
+
+-- A table to track whether we had sandboxed a function
+sandboxed = {}
+
 -- ############################################################################
 --
 -- LOG FUNCTIONS
@@ -30,13 +34,9 @@ end
 --
 -- Creates a new environment for use in apply_record functions
 --
-function sandbox()
+function env_record()
     return {
 
-        -- ####################################################################
-        -- Aerospike Whitelist
-        -- ####################################################################
-        
         -- aerospike types
         ["record"] = record,
         ["iterator"] = iterator,
@@ -53,10 +53,7 @@ function sandbox()
         ["info"] = info,
         ["warn"] = warn,
         
-        -- ####################################################################
-        -- Lua Standard Whitelist
-        -- ####################################################################
-
+        -- standard lua functions
         ["error"] = error,
         ["getmetatable"] = getmetatable,
         ["ipairs"] = ipairs,
@@ -95,9 +92,11 @@ function sandbox()
         ["package"] = package,
         ["string"] = string,
         ["table"] = table,
+
+        -- standard lua variables
+        ["_G"] = {}
     }
 end
-
 
 --
 -- Apply function to a record and arguments.
@@ -114,11 +113,11 @@ function apply_record(f, r, ...)
     end
     
     if not sandboxed[f] then
-        setfenv(f,sandbox())
+        setfenv(f,env_record())
         sandboxed[f] = true
     end
 
-    local success, result = pcall(f, r, ...)
+    success, result = pcall(f, r, ...)
     if success then
         return result
     else
@@ -126,6 +125,71 @@ function apply_record(f, r, ...)
         return nil
     end
 end
+
+--
+-- Creates a new environment for use in apply_stream functions
+--
+-- function env_stream()
+--     return {
+
+--         -- aerospike types
+--         ["record"] = record,
+--         ["iterator"] = iterator,
+--         ["list"] = list,
+--         ["map"] = map,
+--         ["bytes"] = bytes,
+--         ["aerospike"] = aerospike,
+
+--         -- logging functions
+--         ["trace"] = trace,
+--         ["debug"] = debug,
+--         ["info"] = info,
+--         ["warn"] = warn,
+        
+--         -- standard lua functions
+--         ["error"] = error,
+--         ["getmetatable"] = getmetatable,
+--         ["ipairs"] = ipairs,
+--         ["load"] = load,
+--         ["module"] = module,
+--         ["next"] = next,
+--         ["pairs"] = pairs,
+--         ["print"] = print,
+--         ["pcall"] = pcall,
+--         ["rawequal"] = rawequal,
+--         ["rawget"] = rawget,
+--         ["rawset"] = rawset,
+--         ["require"] = require,
+--         ["require"] = require,
+--         ["select"] = select,
+--         ["setmetatable"] = setmetatable,
+--         ["setfenv"] = setfenv,
+--         ["tonumber"] = tonumber,
+--         ["tostring"] = tostring,
+--         ["type"] = type,
+--         ["unpack"] = unpack,
+--         ["xpcall"] = xpcall,
+
+--         -- standard lua objects
+--         ["math"] = math,
+--         ["io"] = io,
+--         ["os"] = {
+--             ['clock'] = os.clock,
+--             ['date'] = os.date,
+--             ['difftime'] = os.difftime,
+--             ['getenv'] = os.getenv,
+--             ['setlocale'] = os.setlocale,
+--             ['time'] = os.time,
+--             ['tmpname'] = os.tmpname
+--         },
+--         ["package"] = package,
+--         ["string"] = string,
+--         ["table"] = table,
+
+--         -- standard lua variables
+--         ["_G"] = {}
+--     }
+-- end
 
 --
 -- Apply function to an iterator and arguments.
@@ -145,7 +209,7 @@ function apply_stream(f, scope, istream, ostream, ...)
     require("stream_ops")
 
     if not sandboxed[f] then
-        setfenv(f,sandbox())
+        setfenv(f,env_record())
         sandboxed[f] = true
     end
 
@@ -154,7 +218,7 @@ function apply_stream(f, scope, istream, ostream, ...)
     success, result = pcall(f, stream_ops, ...)
 
     -- info("apply_stream: success=%s, result=%s", tostring(success), tostring(result))
-    
+
     if success then
 
         local ops = StreamOps_select(result.ops, scope);
@@ -177,5 +241,4 @@ function apply_stream(f, scope, istream, ostream, ...)
         return 2
     end
 end
-
 
