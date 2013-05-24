@@ -113,11 +113,10 @@ function apply_record(f, r, ...)
         error("function not found", 2)
     end
     
-    local g = sandbox(f)
-    -- if not sandboxed[f] then
-        -- setfenv(f,sandbox())
-        -- sandboxed[f] = true
-    -- end
+    if not sandboxed[f] then
+        setfenv(f,sandbox())
+        sandboxed[f] = true
+    end
 
     local success, result = pcall(f, r, ...)
     if success then
@@ -146,7 +145,7 @@ function apply_stream(f, scope, istream, ostream, ...)
     require("stream_ops")
 
     if not sandboxed[f] then
-        setfenv(f,env_record())
+        setfenv(f,sandbox())
         sandboxed[f] = true
     end
 
@@ -155,7 +154,7 @@ function apply_stream(f, scope, istream, ostream, ...)
     success, result = pcall(f, stream_ops, ...)
 
     -- info("apply_stream: success=%s, result=%s", tostring(success), tostring(result))
-
+    
     if success then
 
         local ops = StreamOps_select(result.ops, scope);
