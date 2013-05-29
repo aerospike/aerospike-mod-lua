@@ -83,7 +83,7 @@ libmod_lua.so: $(TARGET_LIB)/libmod_lua.so
 ##  BUILD TARGETS                                                            ##
 ###############################################################################
 
-$(TARGET_OBJ)/%.o: COMMON-prepare $(SOURCE_MAIN)/%.c
+$(TARGET_OBJ)/%.o: COMMON-prepare $(SOURCE_MAIN)/%.c | modules
 	$(object)
 
 $(TARGET_LIB)/libmod_lua.a $(TARGET_LIB)/libmod_lua.so: $(MOD_LUA:%=$(TARGET_OBJ)/%) | $(COMMON)/$(TARGET_INCL)/aerospike/*.h
