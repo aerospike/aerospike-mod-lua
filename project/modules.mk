@@ -76,6 +76,9 @@ MSGPACK-clean:
 	@if [ -e "$(MSGPACK)/Makefile" ]; then \
 		$(MAKE) -e -C $(MSGPACK) clean; \
 		$(MAKE) -e -C $(MSGPACK) distclean; \
+	fi \
+	@if [ -e "$(MSGPACK)/configure" ]; then \
+		rm $(MSGPACK)/configure \
 	fi
 
 $(MSGPACK)/configure: $(MSGPACK)/configure.in
