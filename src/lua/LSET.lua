@@ -726,6 +726,128 @@ local function complexScanList(lsetCtrlMap, binList, value, flag )
 end -- complexScanList
 
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- Scan a List, append all the items in the list to result. 
+-- This is SIMPLE SCAN, where we are assuming ATOMIC values.
+-- Parms:
+-- (*) binList: the list of values from the record
+-- Return: resultlist 
+-- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+local function simpleScanListAll(topRec, resultList, lsetCtrlMap) 
+  local meth = "simpleScanListAll()";
+  GP=F and trace("[ENTER]: <%s:%s> Appending all the elements of List ",
+                 MOD, meth)
+
+  local listCount = 0;
+  local transform = nil;
+  local unTransform = nil;
+  local retValue = nil;
+
+  -- Check once for the transform/untransform functions -- so we don't need
+  -- to do it inside the loop.
+  if lsetCtrlMap.Transform ~= nil then
+    transform = functionTable[lsetCtrlMap.Transform];
+  end
+
+  if lsetCtrlMap.UnTransform ~= nil then
+    unTransform = functionTable[lsetCtrlMap.UnTransform];
+  end
+
+  -- Loop through all the modulo n lset-record bins 
+  local distrib = lsetCtrlMap.Modulo;
+
+  GP=F and trace(" Number of Lset bins to parse: %d ", distrib)
+
+  for j = 0, (distrib - 1), 1 do
+	local binName = getBinName( j );
+   
+    GP=F and trace(" Parsing through :%s ", tostring(binName))
+
+	if topRec[binName] ~= nil then
+		local binList = topRec[binName];
+		for i = 1, list.size( binList ), 1 do
+			if binList[i] ~= nil and binList[i] ~= FV_EMPTY then
+				retValue = binList[i]; 
+				if unTransform ~= nil then
+					retValue = unTransform( binList[i] );
+				end
+		        list.append( resultList, retValue);
+				listCount = listCount + 1; 
+   			end -- end if not null and not empty
+  		end -- end for each item in the list
+    end -- end of topRec null check 
+  end -- end for distrib list for-loop 
+
+  GP=F and trace("[EXIT]: <%s:%s> Appending %d elements to ResultList ",
+                 MOD, meth, listCount)
+
+  return 0; 
+end -- simpleScanListAll
+
+-- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- Scan a List, append all the items in the list to result.
+--
+-- TODO :  
+-- This is COMPLEX SCAN, currently an exact copy of the simpleScanListAll().
+-- I need to first write an unTransformComplexCompare() which involves
+-- using the compare function, to write a new complexScanListAll()  
+--
+-- Parms:
+-- (*) binList: the list of values from the record
+-- Return: resultlist 
+-- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+local function complexScanListAll(topRec, resultList, lsetCtrlMap) 
+  local meth = "complexScanListAll()";
+  GP=F and trace("[ENTER]: <%s:%s> Appending all the elements of List ",
+                 MOD, meth)
+
+  local listCount = 0;
+  local transform = nil;
+  local unTransform = nil;
+  local retValue = nil;
+
+  -- Check once for the transform/untransform functions -- so we don't need
+  -- to do it inside the loop.
+  if lsetCtrlMap.Transform ~= nil then
+    transform = functionTable[lsetCtrlMap.Transform];
+  end
+
+  if lsetCtrlMap.UnTransform ~= nil then
+    unTransform = functionTable[lsetCtrlMap.UnTransform];
+  end
+
+  -- Loop through all the modulo n lset-record bins 
+  local distrib = lsetCtrlMap.Modulo;
+
+  GP=F and trace(" Number of Lset bins to parse: %d ", distrib)
+
+  for j = 0, (distrib - 1), 1 do
+	local binName = getBinName( j );
+    GP=F and trace(" Parsing through :%s ", tostring(binName))
+	local binList = topRec[binName];
+	local resultValue = nil;
+    if topRec[binName] ~= nil then
+		for i = 1, list.size( binList ), 1 do
+			if binList[i] ~= nil and binList[i] ~= FV_EMPTY then
+				retValue = binList[i]; 
+				if unTransform ~= nil then
+					retValue = unTransform( binList[i] );
+				end
+		  	    list.append( resultList, retValue);
+				listCount = listCount + 1; 
+   			end -- end if not null and not empty
+  		end -- end for each item in the list
+    end -- end of topRec null check 
+  end -- end for distrib list for-loop 
+
+ GP=F and trace("[EXIT]: <%s:%s> Appending %d elements to ResultList ",
+                 MOD, meth, listCount)
+
+  return 0; 
+end -- complexScanListAll
+
+-- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- Scan a List for an item.  Return the item if found.
 -- This is SIMPLE SCAN, where we are assuming ATOMIC values.
 -- We've added a delete flag that will allow us to remove the element if
@@ -1264,7 +1386,7 @@ end -- lset_create_and_insert()
 -- Return:
 -- ======================================================================
 local function localLSetExists(topRec,lsetBinName,searchValue,filter,fargs )
-  local meth = "localLSetSearch()";
+  local meth = "localLSetExists()";
   GP=F and trace("[ENTER]: <%s:%s> Search for Value(%s)",
                  MOD, meth, tostring( searchValue ) );
 
@@ -1338,20 +1460,76 @@ local function localLSetSearch(resultList, topRec, lsetBinName, searchValue,
                  MOD, meth, tostring(result));
 
   return resultList;
-end -- function lset_search()
+end -- function localLSetSearch()
+
+-- ======================================================================
+-- |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- || as Large Set Search All
+-- |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- ======================================================================
+--
+-- Version of lset-search when search-value is null
+-- Return all the list-items from the lset-bin as a result-list 
+-- This is basically a nested for-loop version of localLSetSearch() 
+--
+-- ======================================================================
+local function localLSetSearchAll(resultList, topRec, lsetBinName,
+                filter, fargs)
+
+  local meth = "localLSetSearchAll()";
+  rc = 0; -- start out OK.
+  GP=F and trace(" <%s:%s> Null search-value, return all elements. Name: %s, top-rec %s ",
+                 MOD, meth, tostring(lsetBinName), tostring(topRec));
+
+  -- Define our return list.
+  local resultList = list();
+  local distrib_list = list();
+
+  -- Validate the topRec, the bin and the map.  If anything is weird, then
+  -- this will kick out with a long jump error() call.
+  validateRecBinAndMap( topRec, lsetBinName, true );
+
+  -- Find the appropriate bin for the Search value
+  local lsetCtrlMap = topRec[LSET_CONTROL_BIN];
+ 
+  if lsetCtrlMap.KeyType == KT_ATOMIC then
+	rc = simpleScanListAll(topRec, resultList, lsetCtrlMap) 
+  else
+	rc = complexScanListAll(topRec, resultList, lsetCtrlMap)
+  end
+
+  GP=F and trace("[EXIT]: <%s:%s>: Search Returns (%s) Size : %d",
+                 MOD, meth, tostring(resultList), list.size(resultList));
+
+  return resultList; 
+end -- function localLSetSearchAll()
 
 -- ======================================================================
 -- lset_search() -- with and without filter
 -- ======================================================================
 function lset_search( topRec, lsetBinName, searchValue )
   resultList = list();
-  return localLSetSearch(resultList,topRec,lsetBinName,searchValue,nil,nil)
+  -- if we dont have a searchValue, get all the list elements.
+  -- Note that this means an empty searchValue which is not 
+  -- the same as a nil or a NULL searchValue
+  if( searchValue == nil ) then
+	  return localLSetSearchAll(resultList,topRec,lsetBinName,nil,nil)
+  else
+	  return localLSetSearch(resultList,topRec,lsetBinName,searchValue,nil,nil)
+  end
 end -- lset_search()
 
 function lset_search_then_filter( topRec, lsetBinName, searchValue,
                                   filter, fargs )
   resultList = list();
-  return localLSetSearch(resultList,topRec,lsetBinName,searchValue,filter,fargs)
+  -- if we dont have a searchValue, get all the list elements.
+  -- Note that this means an empty searchValue which is not 
+  -- the same as a nil or a NULL searchValue
+  if( searchValue == nil ) then
+	return localLSetSearchAll(resultList,topRec,lsetBinName,filter,fargs)
+  else
+  	return localLSetSearch(resultList,topRec,lsetBinName,searchValue,filter,fargs)
+  end
 end -- lset_search_then_filter()
 
 -- ======================================================================
