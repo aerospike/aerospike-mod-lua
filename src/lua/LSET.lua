@@ -1,8 +1,8 @@
 -- AS Large Set (LSET) Operations
--- Steelman (Last Update May 20, 2013: tjl)
+-- Last Update June 05, 2013: tjl
 --
 -- Keep this in sync with the version above.
-local MOD="LsetSteelman_05.20.0"; -- the module name used for tracing
+local MOD="Lset_06.05.0"; -- the module name used for tracing
 
 -- Please refer to lset_design.lua for architecture and design notes.
 --
