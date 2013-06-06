@@ -53,7 +53,7 @@ $(warning ***************************************************************)
 $(error )
 endif
 
-ifeq ($(wildcard $(MSGPACK)/configure),) 
+ifeq ($(wildcard $(MSGPACK)/configure.in),) 
 $(warning ***************************************************************)
 $(warning *)
 $(warning *  MSGPACK is '$(MSGPACK)')
@@ -71,14 +71,21 @@ MSGPACK-build: $(MSGPACK)/src/.libs/libmsgpackc.a
 MSGPACK-prepare: 
 	$(noop)
 
-.PHONY: MSGPACK-clean
+PHONY: MSGPACK-clean
 MSGPACK-clean:
-	if [ -e "$(MSGPACK)/Makefile" ]; then \
-		$(MAKE) -e -C $(MSGPACK) clean \
+	@if [ -e "$(MSGPACK)/Makefile" ]; then \
+		$(MAKE) -e -C $(MSGPACK) clean; \
+		$(MAKE) -e -C $(MSGPACK) distclean; \
+	fi
+	@if [ -e "$(MSGPACK)/configure" ]; then \
+		rm -f $(MSGPACK)/configure; \
 	fi
 
+$(MSGPACK)/configure: $(MSGPACK)/configure.in
+	cd $(MSGPACK) && autoreconf -v
+
 $(MSGPACK)/Makefile: $(MSGPACK)/configure
-	cd $(MSGPACK) && ./configure
+	cd $(MSGPACK) && ./configure CFLAGS="-fPIC"
 
 $(MSGPACK)/src/.libs/libmsgpackc.a: $(MSGPACK)/Makefile
 	cd $(MSGPACK) && $(MAKE) CFLAGS="-fPIC"
