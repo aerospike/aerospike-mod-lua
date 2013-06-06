@@ -1,8 +1,8 @@
 -- Large Stack Object (LSO or LSTACK) Operations
--- LSTACK.lua:  (May 9, 2013)
+-- LSTACK.lua:  (May 23, 2013)
 --
 -- Module Marker: Keep this in sync with the stated version
-local MOD="LsoSuperman_5.09.0"; -- the module name used for tracing
+local MOD="lstack_2013_05_23.0"; -- the module name used for tracing
 
 -- ======================================================================
 -- Please refer to lstack_design.lua for architecture and design notes.
@@ -26,6 +26,7 @@ local MOD="LsoSuperman_5.09.0"; -- the module name used for tracing
 -- (*) lstack_trim: Release all but the top N values.
 -- (*) lstack_config: retrieve all current config settings in map format
 -- (*) lstack_size: Report the NUMBER OF ITEMS in the stack.
+-- (*) lstack_subrec_list: Return the list of subrec digests
 --
 -- REMEMBER THAT ALL INSERTS ARE INTO HOT LIST -- and transforms are done
 -- there.  All UNTRANSFORMS are done reading from the List (Hot List or
@@ -1811,14 +1812,6 @@ local function coldDirRecInsert(lsoMap,coldHeadRec,digestListIndex,digestList)
   GP=F and trace("[ENTER]:<%s:%s> ColdHead(%s) ColdDigestList(%s)",
       MOD, meth, coldDirRecSummary(coldHeadRec), tostring( digestList ));
 
-  trace("\n[ATTENTION!!!!]:<%s:%s> WRITING COLD LIST!!!!!!!!!!!!!!", MOD, meth);
-  trace("\n[ATTENTION!!!!]:<%s:%s> WRITING COLD LIST!!!!!!!!!!!!!!", MOD, meth);
-  trace("\n[ATTENTION!!!!]:<%s:%s> WRITING COLD LIST!!!!!!!!!!!!!!", MOD, meth);
-  trace("\n[ATTENTION!!!!]:<%s:%s> WRITING COLD LIST!!!!!!!!!!!!!!", MOD, meth);
-  trace("\n[ATTENTION!!!!]:<%s:%s> WRITING COLD LIST!!!!!!!!!!!!!!", MOD, meth);
-  trace("\n[ATTENTION!!!!]:<%s:%s> WRITING COLD LIST!!!!!!!!!!!!!!", MOD, meth);
-  trace("\n[ATTENTION!!!!]:<%s:%s> WRITING COLD LIST!!!!!!!!!!!!!!", MOD, meth);
-
   local coldDirMap = coldHeadRec[COLD_DIR_CTRL_BIN];
   local coldDirList = coldHeadRec[COLD_DIR_LIST_BIN];
   local coldDirMax = coldDirMap.ColdListMax;
@@ -2703,7 +2696,7 @@ end -- function lstack_config()
 
 
 -- ========================================================================
--- lstack_get_subrec_list() -- Return a list of subrecs
+-- lstack_subrec_list() -- Return a list of subrecs
 -- Parms:
 -- (1) topRec: the user-level record holding the LSO Bin
 -- (2) lsoBinName: The name of the LSO Bin
@@ -2711,9 +2704,57 @@ end -- function lstack_config()
 --   res = (when successful) List of SUBRECs
 --   res = (when error) Empty List
 -- ========================================================================
-function lstack_get_subrec_list( topRec, lsoBinName )
-    local resultList = list();
+function lstack_subrec_list( topRec, lsoBinName )
 
-end
+  -- Copy the warm list into the result list
+  local transAmount = list.size( lsoMap.WarmDigestList );
+  local resultList = list.take( lsoMap.WarmDigestList, transAmount );
+
+  -- Now pull the digests from the Cold List
+  -- There are TWO types subrecords:
+  -- (*) There are the LDRs (Data Records) subrecs
+  -- (*) There are the Cold List Directory subrecs
+  -- We will read a Directory Head, and enter it's digest
+  -- Then we'll pull the digests out of it (just like a warm list)
+
+  -- If there is no Cold List, then return immediately -- nothing more read.
+  if ( lsoMap.ColdDirListHead == nil or lsoMap.ColdDirListHead == 0 ) then
+    return resultList;
+  end
+
+  -- Process the coldDirList (a linked list) head to tail (that is "append"
+  -- order).  For each dir, read in the LDR Records (in reverse list order),
+  -- and then each page (in reverse list order), until we've read "count"
+  -- items.  If the 'all' flag is true, then read everything.
+  local coldDirRecDigest = lsoMap.ColdDirListHead;
+
+  while coldDirRecDigest ~= nil and coldDirRecDigest ~= 0 do
+    -- Save the Dir Digest
+    list.append( resultList, coldDirRecDigest );
+
+    -- Open the Directory Page, read the digest list
+    local stringDigest = tostring( coldDirRecDigest ); -- must be a string
+    local dirPageRec = aerospike:open_subrec( topRec, stringDigest );
+    local digestList = dirPageRec[COLD_DIR_LIST_BIN];
+    for i = 1, list.size(digestList), 1 do 
+      list.append( resultList, digestList[i] );
+    end
+
+    -- Get the next Cold Dir Node in the list
+    local dirPageCtrlMap = dirPageRec[COLD_DIR_CTRL_BIN];
+    coldDirRecDigest = dirPageCtrlMap.NextDirRec; -- Next in Linked List.
+    -- If no more, we'll drop out of the loop, and if there's more, 
+    -- we'll get it in the next round.
+    -- Close this directory subrec before we open another one.
+    aerospike:close_subrec( topRec, dirPageRec );
+
+  end -- Loop thru each cold directory
+
+  GP=F and trace("[EXIT]:<%s:%s> SubRec Digest Result List(%s)",
+      MOD, meth, tostring( resultList ) );
+
+  return resultList
+
+end -- lstack_subrec_list()
 
 -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> --
