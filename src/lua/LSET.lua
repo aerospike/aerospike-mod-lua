@@ -1543,7 +1543,7 @@ end -- lset_search_then_filter()
 local function localLSetDelete( topRec, lsetBinName, deleteValue,
         filter, fargs)
 
-  local meth = "lset_delete()";
+  local meth = "localLSetDelete()";
   GP=F and trace("[ENTER]: <%s:%s> Delete Value(%s)",
                  MOD, meth, tostring( deleteValue ) );
 
@@ -1579,15 +1579,17 @@ local function localLSetDelete( topRec, lsetBinName, deleteValue,
     if( rc < 0 ) then
       error('Delete Error on Update Record');
     end
-  else
-    resultList = list();
+  elseif rc == 0 and list.size( resultList ) == 0 then 
+	-- This item does not exist
+	-- return a not-found error  
+    error('Record not found');
   end
 
   GP=F and trace("[EXIT]: <%s:%s>: Delete RC(%d) ResultList(%s)",
                  MOD, meth, rc, tostring( resultList ));
 
   return resultList;
-end -- function lset_delete()
+end -- function localLSetDelete()
 
 -- ======================================================================
 -- lset_delete() -- with and without filter
