@@ -115,9 +115,11 @@ static int mod_lua_aerospike_crec_create(lua_State * l) {
  */
 static int mod_lua_aerospike_crec_update(lua_State * l) {
     as_aerospike *  a   = mod_lua_checkaerospike(l, 1);
-    as_rec *        r   = mod_lua_torecord(l, 2);
-    as_rec *        cr  = mod_lua_torecord(l, 3);
-    int             rc  = as_aerospike_crec_update(a, r, cr);
+//    as_rec *        r   = mod_lua_torecord(l, 2);
+    as_rec *        cr  = mod_lua_torecord(l, 2);
+    // Remove the TOP Rec parameter
+//    int             rc  = as_aerospike_crec_update(a, r, cr);
+    int             rc  = as_aerospike_crec_update(a, cr);
     if (!rc) return 0;
     lua_pushinteger(l, rc);
     return 1;
@@ -141,9 +143,11 @@ static int mod_lua_aerospike_crec_open(lua_State * l) {
  */
 static int mod_lua_aerospike_crec_close(lua_State * l) {
     as_aerospike *  a   = mod_lua_checkaerospike(l, 1);
-    as_rec *        r   = mod_lua_torecord(l, 2);
-    as_rec *        cr  = mod_lua_torecord(l, 3);
-    int             rc  = as_aerospike_crec_close(a, r, cr);
+//    as_rec *        r   = mod_lua_torecord(l, 2);
+    as_rec *        cr  = mod_lua_torecord(l, 2);
+    // We're no longer using TOP Rec parameter
+//    int             rc  = as_aerospike_crec_close(a, r, cr);
+    int             rc  = as_aerospike_crec_close(a, cr);
     if (!rc) return 0;
     lua_pushinteger(l, rc);
     return 1;

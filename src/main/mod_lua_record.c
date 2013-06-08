@@ -116,6 +116,23 @@ static int mod_lua_record_numbins(lua_State * l) {
 }
 
 /**
+ * Set a FLAG in the named bin
+ */
+static int mod_lua_record_set_flags(lua_State * l) {
+    as_rec *        rec     = mod_lua_checkrecord(l, 1);
+    const char *    name    = luaL_optstring(l, 2, 0);
+
+    // Get the third arg off the stack -- and process as flag (@LDT @TOBY)
+    uint8_t   flags    = luaL_optinteger(l, 3, 0);
+
+    // This function just sets up the arguments,
+    // The udf record method will do the real work.
+    as_rec_set_flags( rec, name, flags );  // DONE !!!
+
+    return 0;
+}
+
+/**
  * Get a value from the named bin
  */
 static int mod_lua_record_index(lua_State * l) {
@@ -138,6 +155,7 @@ static int mod_lua_record_index(lua_State * l) {
         return 1;
     }
 }
+
 
 /**
  * Set a value in the named bin
@@ -168,6 +186,7 @@ static const luaL_reg object_table[] = {
     {"gen",        mod_lua_record_gen},
     {"digest",     mod_lua_record_digest},
     {"numbins",    mod_lua_record_numbins},
+    {"set_flags",  mod_lua_record_set_flags},
     {0, 0}
 };
 

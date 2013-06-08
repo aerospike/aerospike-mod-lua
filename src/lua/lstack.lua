@@ -1,8 +1,17 @@
 -- Large Stack Object (LSO or LSTACK) Operations
--- lstack.lua:  June 05, 2013
+-- lstack.lua:  June 07, 2013
 --
 -- Module Marker: Keep this in sync with the stated version
-local MOD="lstack_2013_06_05.0"; -- the module name used for tracing
+local MOD="lstack_2013_06_07.0"; -- the module name used for tracing
+
+-- ======================================================================
+-- || GLOBAL PRINT ||
+-- ======================================================================
+-- Use this flag to enable/disable global printing (the "detail" level
+-- in the server).
+-- ======================================================================
+local GP=true; -- Leave this ALWAYS true (but value seems not to matter)
+local F=true; -- Set F (flag) to true to turn ON global print
 
 -- ======================================================================
 -- Please refer to lstack_design.lua for architecture and design notes.
@@ -209,15 +218,6 @@ local MOD="lstack_2013_06_05.0"; -- the module name used for tracing
 -- |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- Table of Functions: Used for Transformation and Filter Functions.
 -- This is held in UdfFunctionTable.lua.  Look there for details.
--- ======================================================================
--- || GLOBAL PRINT ||
--- ======================================================================
--- Use this flag to enable/disable global printing (the "detail" level
--- in the server).
--- ======================================================================
-local GP=true; -- Leave this ALWAYS true (but value seems not to matter)
-local F=true; -- Set F (flag) to true to turn ON global print
-
 -- ++==================++
 -- || GLOBAL CONSTANTS || -- Local, but global to this module
 -- ++==================++
@@ -230,6 +230,19 @@ local functionTable = require('UdfFunctionTable');
 local SM_BINARY='B'; -- Using a Transform function to compact values
 local SM_LIST='L'; -- Using regular "list" mode for storing values.
 
+-- Record Types
+local RT_REG = 'R'; -- Regular Record
+local RT_ESR = 'E'; -- Existence Sub Record
+local RT_SUB = 'S'; -- Regular Sub Record (LDR, CDIR, etc)
+local RT_TOP = 'T'; -- Top Record (contains an LDT)
+
+-- Bin Flag Types
+local BF_LDT_BIN = 'L';  -- Main LDT Bin
+local BF_LDT_HIDDEN 'H';  -- Set the Hidden Flag on this bin
+
+-- LDT TYPES 
+local LDT_TYPE_LSTACK = "LSTACK";
+
 -- ++====================++
 -- || INTERNAL BIN NAMES || -- Local, but global to this module
 -- ++====================++
@@ -241,6 +254,12 @@ local COLD_DIR_CTRL_BIN = "ColdDirCtrlBin";
 local LDR_CTRL_BIN = "LdrControlBin";  
 local LDR_LIST_BIN = "LdrListBin";  
 local LDR_BNRY_BIN = "LdrBinaryBin";
+
+-- All LDT subrecords have a properties bin that holds a map that defines
+-- the specifics of the record and the LDT.
+-- NOTE: Even the TopRec has a property map -- but it's stashed in the
+-- user-named LDT Bin.
+local SUBREC_PROP_BIN="SR_PROP_BIN";
 --
 -- Package Names for "pre-packaged" settings:
 local PackageStandardList=   "StandardList";
@@ -255,6 +274,7 @@ local PackageDebugModeBinary="DebugModeBinary";
 
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- <><><><> <Initialize Control Maps> <Initialize Control Maps> <><><><>
+-- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- There are three main Record Types used in the LSO Package, and their
 -- initialization functions follow.  The initialization functions
 -- define the "type" of the control structure:
@@ -314,7 +334,7 @@ local function initializeLsoMap( topRec, lsoBinName )
   -- General LSO Parms:
   lsoMap.ItemCount = 0;        -- A count of all items in the stack
   lsoMap.Version = 1 ; -- Current version of the code
-  lsoMap.LdtType = "LSTACK"; -- we will use this to verify we have a valid map
+  lsoMap.LdtType = LDT_TYPE_LSTACK; -- we will use this to verify we have a valid map
   lsoMap.Magic = MAGIC; -- we will use this to verify we have a valid map
   lsoMap.BinName = lsoBinName; -- Defines the LSO Bin
   lsoMap.NameSpace = "test"; -- Default NS Name -- to be overridden by user
@@ -360,6 +380,50 @@ local function initializeLsoMap( topRec, lsoBinName )
 end -- initializeLsoMap
 
 -- ======================================================================
+-- initPropMap( propMap, subDigest, topDigest, rtFlag )
+-- ======================================================================
+-- Initialize the LDT Property Map.
+-- I'm still thinking about what all will go in here.
+-- ======================================================================
+local function initPropMap( propMap, subDigest, topDigest, rtFlag, lsoMap )
+  local meth = "initPropMap()";
+  GP=F and trace("[ENTER]: <%s:%s>", MOD, meth );
+
+  propMap.RtFlag = rtFlag;
+  propMap.SubDigest = subDigest;
+  propMap.TopDigest = topDigest;
+
+end -- initPropMap()
+
+-- ======================================================================
+-- Create and Init ESR
+-- ======================================================================
+-- The Existence SubRecord is the synchronization point for the lDTs that
+-- have multiple records (top rec and many children).  It's a little like
+-- the baby sitter for the children -- it helps keeps track of them.
+--
+-- All LDT subrecs have a properties bin that describes the subrec.  This
+-- bin contains a map that is "un-msg-packed" by the C code on the server
+-- and read.  It must be the same for all LDT recs.
+--
+-- ======================================================================
+local function createAndInitESR( topRec, lsoMap )
+  local meth = "createAndInitESR()";
+  GP=F and trace("[ENTER]: <%s:%s>", MOD, meth );
+
+  local esr = aerospike:create_subrec( topRec );
+  local propMap = map();
+  local esrDigest = record.digest( esr );
+  local topDigest = record.digest( topRec );
+  initPropMap( propMap, esrDigest, topDigest, RT_ESR, lsoMap );
+
+  record.set_flags( topRec, lsoMap.BinName, BF_HIDDEN );
+
+  return esrDigest;
+
+end -- createAndInitESR()
+
+-- ======================================================================
 -- initializeLdrMap( ldrMap )
 -- ======================================================================
 -- Set the values in a LSO Data Record (LDR) Control Bin map. LDR Records
@@ -370,6 +434,10 @@ end -- initializeLsoMap
 -- (1) ldrRec[LDR_CTRL_BIN]: The control Map (defined here)
 -- (2) ldrRec[LDR_LIST_BIN]: The Data Entry List (when in list mode)
 -- (3) ldrRec[LDR_BNRY_BIN]: The Packed Data Bytes (when in Binary mode)
+--
+-- When we call this method, we have just created a LDT SubRecord.  Thus,
+-- we must check to see if that is the FIRST one, and if so, we must also
+-- create the Existence Sub-Record for this LDT.
 -- ======================================================================
 local function initializeLdrMap( topRec, ldrRec, ldrMap, lsoMap )
   local meth = "initializeLdrMap()";
@@ -384,6 +452,11 @@ local function initializeLdrMap( topRec, ldrRec, ldrMap, lsoMap )
   ldrMap.ByteCountMax = lsoMap.LdrByteCountMax; -- Max # of bytes in ByteArray
   ldrMap.Version = lsoMap.Version;
   ldrMap.LogInfo = 0;
+
+  if( lsoMap.ExistSubRecDig == 0 ) then
+    lsoMap.ExistSubRecDig = createAndInitESR( topRec, lsoMap );
+  end
+
 end -- initializeLdrMap()
 
 
@@ -425,12 +498,17 @@ end -- initializeColdDirMap()
 -- These are all local functions to this module and serve various
 -- utility and assistance functions.
 -- ======================================================================
---
---
 -- ++======================++
 -- || Prepackaged Settings ||
 -- ++======================++
---
+-- Since it takes a lot to configure an lstack map for a particulare app,
+-- we use these named packages to set a block of values in a consistent
+-- way.  That way, users need to remember just a package name, rather then
+-- 20 different settings -- any one of which can create strange behavior
+-- if set badly.
+-- For now (June 2013), we have just some generic settings for "Standard",
+-- "Debug" and "Test". The "Debug" one is special, since it sets the
+-- config values artificially low so that it exercises the system.
 -- ======================================================================
 -- This is the standard (default) configuration
 -- Package = "StandardList"
@@ -1403,11 +1481,13 @@ local function digestListRead(topRec, resultList, lsoMap, digestList, count,
     then
       GP=F and trace("[Early EXIT]:<%s:%s>totalAmountRead(%d) ResultList(%s) ",
         MOD, meth, totalAmountRead, tostring(resultList));
-      status = aerospike:close_subrec( topRec, ldrChunk );
+      -- status = aerospike:close_subrec( topRec, ldrChunk );
+      status = aerospike:close_subrec( ldrChunk );
       return totalAmountRead;
     end
 
-    status = aerospike:close_subrec( topRec, ldrChunk );
+    -- status = aerospike:close_subrec( topRec, ldrChunk );
+    status = aerospike:close_subrec( ldrChunk );
     GP=F and trace("[DEBUG]: <%s:%s> as:close() status(%s) ",
     MOD, meth, tostring( status ) );
 
@@ -1601,7 +1681,8 @@ local function   warmListChunkCreate( topRec, lsoMap )
   GP=F and trace("[DEBUG]: <%s:%s> Chunk Create: CTRL Contents(%s)",
     MOD, meth, tostring(ldrMap) );
 
-  aerospike:update_subrec( topRec, newLdrChunkRecord );
+  -- aerospike:update_subrec( topRec, newLdrChunkRecord );
+  aerospike:update_subrec( newLdrChunkRecord );
 
   -- Add our new chunk (the digest) to the WarmDigestList
   GP=F and trace("[DEBUG]: <%s:%s> Appending NewChunk(%s) to WarmList(%s)",
@@ -1788,8 +1869,12 @@ local function warmListInsert( topRec, lsoMap, entryList )
   end
   local itemsLeft = totalEntryCount - countWritten;
   if itemsLeft > 0 then
-    aerospike:update_subrec( topRec, topWarmChunk );
-    aerospike:close_subrec( topRec, topWarmChunk );
+    -- aerospike:update_subrec( topRec, topWarmChunk );
+    aerospike:update_subrec( topWarmChunk );
+
+    -- aerospike:close_subrec( topRec, topWarmChunk );
+    aerospike:close_subrec( topWarmChunk );
+
     GP=F and trace("[DEBUG]:<%s:%s>Calling Chunk Create: AGAIN!!", MOD, meth );
     topWarmChunk = warmListChunkCreate( topRec, lsoMap ); -- create new
     -- Unless we've screwed up our parameters -- we should never have to do
@@ -1824,11 +1909,13 @@ local function warmListInsert( topRec, lsoMap, entryList )
     MOD, meth, ldrChunkSummary( topWarmChunk ));
 
   GP=F and trace("[DEBUG]: <%s:%s> Calling SUB-REC  Update ", MOD, meth );
-  local status = aerospike:update_subrec( topRec, topWarmChunk );
+  -- local status = aerospike:update_subrec( topRec, topWarmChunk );
+  local status = aerospike:update_subrec( topWarmChunk );
   GP=F and trace("[DEBUG]: <%s:%s> SUB-REC  Update Status(%s) ",MOD,meth, tostring(status));
   GP=F and trace("[DEBUG]: <%s:%s> Calling SUB-REC  Close ", MOD, meth );
 
-  status = aerospike:close_subrec( topRec, topWarmChunk );
+  -- status = aerospike:close_subrec( topRec, topWarmChunk );
+  status = aerospike:close_subrec( topWarmChunk );
   GP=F and trace("[DEBUG]: <%s:%s> SUB-REC  Close Status(%s) ",
     MOD,meth, tostring(status));
 
@@ -1880,7 +1967,8 @@ local function coldDirHeadCreate( topRec, lsoMap )
   newColdHead[COLD_DIR_LIST_BIN] = list(); -- allocate a new digest list
   newColdHead[COLD_DIR_CTRL_BIN] = coldDirMap;
 
-  aerospike:update_subrec( topRec, newColdHead );
+  -- aerospike:update_subrec( topRec, newColdHead );
+  aerospike:update_subrec( newColdHead );
 
   -- NOTE: We don't want to update the TOP RECORD until we know that
   -- the  underlying children record operations are complete.
@@ -2056,8 +2144,10 @@ local function coldListInsert( topRec, lsoMap, digestList )
     -- If we have more to do -- then write/close the current coldHeadRec and
     -- allocate ANOTHER one (woo hoo).
     if digestsLeft > 0 then
-      aerospike:update_subrec( topRec, coldHeadRec );
-      aerospike:close_subrec( topRec, coldHeadRec );
+      -- aerospike:update_subrec( topRec, coldHeadRec );
+      aerospike:update_subrec( coldHeadRec );
+      -- aerospike:close_subrec( topRec, coldHeadRec );
+      aerospike:close_subrec( coldHeadRec );
       GP=F and trace("[DEBUG]: <%s:%s> Calling Cold DirHead Create: AGAIN!!",
           MOD, meth );
       coldHeadRec = coldDirHeadCreate( topRec, lsoMap );
@@ -2079,11 +2169,13 @@ local function coldListInsert( topRec, lsoMap, digestList )
 
   GP=F and trace("[DEBUG]: <%s:%s> New Cold Head Save: Summary(%s) ",
     MOD, meth, coldDirRecSummary( coldHeadRec ));
+  -- local status = aerospike:update_subrec( topRec, coldHeadRec );
   local status = aerospike:update_subrec( topRec, coldHeadRec );
   GP=F and trace("[DEBUG]: <%s:%s> SUB-REC  Update Status(%s) ",
     MOD,meth, tostring(status));
 
-  status = aerospike:close_subrec( topRec, coldHeadRec );
+  -- status = aerospike:close_subrec( topRec, coldHeadRec );
+  status = aerospike:close_subrec( coldHeadRec );
   GP=F and trace("[EXIT]: <%s:%s> SUB-REC  Close Status(%s) RC(%d)",
     MOD,meth, tostring(status), rc );
 
@@ -2172,7 +2264,8 @@ local function coldListRead(topRec, resultList, lsoMap, count,
     if countRemaining <= 0 or dirPageCtrlMap.NextDirRec == 0 then
         GP=F and trace("[EARLY EXIT]:<%s:%s>:Cold Read: (%d) Items",
           MOD, meth, totalNumRead );
-        aerospike:close_subrec( topRec, dirPageRec );
+        -- aerospike:close_subrec( topRec, dirPageRec );
+        aerospike:close_subrec( dirPageRec );
         return totalNumRead;
     end
 
@@ -2190,7 +2283,8 @@ local function coldListRead(topRec, resultList, lsoMap, count,
     GP=F and trace("[DEBUG]:<%s:%s>Getting Next Digest in Dir Chain(%s)",
       MOD, meth, coldDirRecDigest );
 
-    aerospike:close_subrec( topRec, dirPageRec );
+    -- aerospike:close_subrec( topRec, dirPageRec );
+    aerospike:close_subrec( dirPageRec );
 
   end -- while Dir Page not empty.
   GP=F and trace("[EXIT]:<%s:%s> After ColdListRead:LsoMap(%s) ColdHeadMap(%s)",
@@ -2847,7 +2941,8 @@ function lstack_subrec_list( topRec, lsoBinName )
     -- If no more, we'll drop out of the loop, and if there's more, 
     -- we'll get it in the next round.
     -- Close this directory subrec before we open another one.
-    aerospike:close_subrec( topRec, dirPageRec );
+    -- aerospike:close_subrec( topRec, dirPageRec );
+    aerospike:close_subrec( dirPageRec );
 
   end -- Loop thru each cold directory
 
