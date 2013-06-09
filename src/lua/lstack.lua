@@ -2,7 +2,7 @@
 -- lstack.lua:  June 08, 2013
 --
 -- Module Marker: Keep this in sync with the stated version
-local MOD="lstack_2013_06_08.1"; -- the module name used for tracing
+local MOD="lstack_2013_06_08.2"; -- the module name used for tracing
 
 -- ======================================================================
 -- || GLOBAL PRINT ||
