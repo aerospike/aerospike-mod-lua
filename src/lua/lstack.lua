@@ -1,8 +1,8 @@
 -- Large Stack Object (LSO or LSTACK) Operations
--- lstack.lua:  June 07, 2013
+-- lstack.lua:  June 08, 2013
 --
 -- Module Marker: Keep this in sync with the stated version
-local MOD="lstack_2013_06_07.0"; -- the module name used for tracing
+local MOD="lstack_2013_06_08.1"; -- the module name used for tracing
 
 -- ======================================================================
 -- || GLOBAL PRINT ||
@@ -227,8 +227,8 @@ local MAGIC="MAGIC";     -- the magic value for Testing LSO integrity
 local functionTable = require('UdfFunctionTable');
 
 -- StoreMode (SM) values (which storage Mode are we using?)
-local SM_BINARY='B'; -- Using a Transform function to compact values
-local SM_LIST='L'; -- Using regular "list" mode for storing values.
+local SM_BINARY ='B'; -- Using a Transform function to compact values
+local SM_LIST   ='L'; -- Using regular "list" mode for storing values.
 
 -- Record Types
 local RT_REG = 'R'; -- Regular Record
@@ -237,8 +237,8 @@ local RT_SUB = 'S'; -- Regular Sub Record (LDR, CDIR, etc)
 local RT_TOP = 'T'; -- Top Record (contains an LDT)
 
 -- Bin Flag Types
-local BF_LDT_BIN = 'L';  -- Main LDT Bin
-local BF_LDT_HIDDEN 'H';  -- Set the Hidden Flag on this bin
+local BF_LDT_BIN    = 'L';  -- Main LDT Bin
+local BF_LDT_HIDDEN = 'H';  -- Set the Hidden Flag on this bin
 
 -- LDT TYPES 
 local LDT_TYPE_LSTACK = "LSTACK";
@@ -332,48 +332,48 @@ local function initializeLsoMap( topRec, lsoBinName )
   -- Note: All Field Names start with UPPER CASE.
   local lsoMap = map();
   -- General LSO Parms:
-  lsoMap.ItemCount = 0;        -- A count of all items in the stack
-  lsoMap.Version = 1 ; -- Current version of the code
-  lsoMap.LdtType = LDT_TYPE_LSTACK; -- we will use this to verify we have a valid map
-  lsoMap.Magic = MAGIC; -- we will use this to verify we have a valid map
-  lsoMap.BinName = lsoBinName; -- Defines the LSO Bin
-  lsoMap.NameSpace = "test"; -- Default NS Name -- to be overridden by user
-  lsoMap.Set = "set";       -- Default Set Name -- to be overridden by user
-  lsoMap.StoreMode = SM_LIST; -- SM_LIST or SM_BINARY:
+  lsoMap.ItemCount   = 0; -- A count of all items in the stack
+  lsoMap.Version     = 1 ; -- Current version of the code
+  lsoMap.LdtType     = LDT_TYPE_LSTACK; -- we will use this to verify we have a valid map
+  lsoMap.Magic       = MAGIC; -- we will use this to verify we have a valid map
+  lsoMap.BinName     = lsoBinName; -- Defines the LSO Bin
+  lsoMap.NameSpace   = "test"; -- Default NS Name -- to be overridden by user
+  lsoMap.Set         = "set";  -- Default Set Name -- to be overridden by user
+  lsoMap.StoreMode   = SM_LIST; -- SM_LIST or SM_BINARY:
   lsoMap.ExistSubRecDig = 0; -- Pt to the LDT "Exists" subrecord (digest)
 
   -- LSO Data Record Chunk Settings: Passed into "Chunk Create"
   lsoMap.LdrEntryCountMax = 100;  -- Max # of items in a Data Chunk (List Mode)
   lsoMap.LdrByteEntrySize =  0;  -- Byte size of a fixed size Byte Entry
-  lsoMap.LdrByteCountMax =   0; -- Max # of BYTES in a Data Chunk (binary mode)
+  lsoMap.LdrByteCountMax  =   0; -- Max # of BYTES in a Data Chunk (binary mode)
 
   -- Hot Entry List Settings: List of User Entries
-  lsoMap.HotEntryList = list(); -- the list of data entries
-  lsoMap.HotEntryListItemCount = 0; -- Number of elements in the Top List
-  lsoMap.HotListMax = 100; -- Max Number for the List -- when we transfer
-  lsoMap.HotListTransfer =  50; -- How much to Transfer at a time.
+  lsoMap.HotEntryList          = list(); -- the list of data entries
+  lsoMap.HotEntryListItemCount =   0; -- Number of elements in the Top List
+  lsoMap.HotListMax            = 100; -- Max Number for the List -- when we transfer
+  lsoMap.HotListTransfer       =  50; -- How much to Transfer at a time.
 
   -- Warm Digest List Settings: List of Digests of LSO Data Records
-  lsoMap.WarmDigestList = list(); -- the list of digests for LDRs
-  lsoMap.WarmTopFull = false; -- true when top chunk is full (for next write)
-  lsoMap.WarmListDigestCount = 0; -- Number of Warm Data Record Chunks
-  lsoMap.WarmListMax = 100; -- Number of Warm Data Record Chunks
-  lsoMap.WarmListTransfer = 2; -- Number of Warm Data Record Chunks
+  lsoMap.WarmDigestList         = list(); -- the list of digests for LDRs
+  lsoMap.WarmTopFull            = false; -- true when top chunk is full (for next write)
+  lsoMap.WarmListDigestCount    = 0; -- Number of Warm Data Record Chunks
+  lsoMap.WarmListMax            = 100; -- Number of Warm Data Record Chunks
+  lsoMap.WarmListTransfer       = 2; -- Number of Warm Data Record Chunks
   lsoMap.WarmTopChunkEntryCount = 0; -- Count of entries in top warm chunk
-  lsoMap.WarmTopChunkByteCount = 0; -- Count of bytes used in top warm Chunk
+  lsoMap.WarmTopChunkByteCount  = 0; -- Count of bytes used in top warm Chunk
 
   -- Cold Directory List Settings: List of Directory Pages
-  lsoMap.ColdDirListHead  = 0; -- Head (Rec Digest) of the Cold List Dir Chain
-  lsoMap.ColdTopFull = false; -- true when cold head is full (for next write)
-  lsoMap.ColdDataRecCount = 0; -- Number of Cold DATA Records (data chunks)
-  lsoMap.ColdDirRecCount = 0; -- Number of Cold DIRECTORY Records
-  lsoMap.ColdListMax = 100;  -- Number of list entries in a Cold list dir node
+  lsoMap.ColdDirListHead        = 0; -- Head (Rec Digest) of the Cold List Dir Chain
+  lsoMap.ColdTopFull            = false; -- true when cold head is full (for next write)
+  lsoMap.ColdDataRecCount       = 0; -- Number of Cold DATA Records (data chunks)
+  lsoMap.ColdDirRecCount        = 0; -- Number of Cold DIRECTORY Records
+  lsoMap.ColdListMax            = 100;  -- Number of list entries in a Cold list dir node
 
   GP=F and trace("[DEBUG]: <%s:%s> : CTRL Map after Init(%s)",
       MOD, meth , tostring(lsoMap));
 
   -- Put our new map in the record, then store the record.
-  topRec[lsoBinName] = lsoMap;
+  topRec[lsoBinName]            = lsoMap;
 
   GP=F and trace("[EXIT]:<%s:%s>:", MOD, meth );
   return lsoMap
@@ -389,7 +389,7 @@ local function initPropMap( propMap, subDigest, topDigest, rtFlag, lsoMap )
   local meth = "initPropMap()";
   GP=F and trace("[ENTER]: <%s:%s>", MOD, meth );
 
-  propMap.RtFlag = rtFlag;
+  propMap.RtFlag    = rtFlag;
   propMap.SubDigest = subDigest;
   propMap.TopDigest = topDigest;
 
@@ -411,14 +411,20 @@ local function createAndInitESR( topRec, lsoMap )
   local meth = "createAndInitESR()";
   GP=F and trace("[ENTER]: <%s:%s>", MOD, meth );
 
-  local esr = aerospike:create_subrec( topRec );
-  local propMap = map();
+  local esr       = aerospike:create_subrec( topRec );
+  local propMap   = map();
   local esrDigest = record.digest( esr );
   local topDigest = record.digest( topRec );
   initPropMap( propMap, esrDigest, topDigest, RT_ESR, lsoMap );
 
-  record.set_flags( topRec, lsoMap.BinName, BF_HIDDEN );
+  GP=F and trace("[DEBUG]:<%s:%s>About to call record.set_flags(Bin(%s)F(%s))",
+    MOD, meth, lsoMap.BinName, tostring(BF_LDT_HIDDEN) );
+  record.set_flags( topRec, lsoMap.BinName, 64 );
+  GP=F and trace("[DEBUG]: <%s:%s> Back from calling record.set_flags()",
+    MOD, meth );
 
+  GP=F and trace("[ESIT]: <%s:%s> Leaving with ESR Digest(%s)",
+    MOD, meth, tostring(esrDigest));
   return esrDigest;
 
 end -- createAndInitESR()
@@ -443,18 +449,18 @@ local function initializeLdrMap( topRec, ldrRec, ldrMap, lsoMap )
   local meth = "initializeLdrMap()";
   GP=F and trace("[ENTER]: <%s:%s>", MOD, meth );
 
-  ldrMap.ParentDigest = record.digest( topRec );
-  ldrMap.StoreMode = lsoMap.StoreMode;
-  ldrMap.Digest = record.digest( ldrRec );
-  ldrMap.ListEntryMax = lsoMap.LdrEntryCountMax; -- Max entries in value list
-  ldrMap.ByteEntrySize = lsoMap.LdrByteEntrySize; -- ByteSize of Fixed Entries
-  ldrMap.ByteEntryCount = 0;  -- A count of Byte Entries
-  ldrMap.ByteCountMax = lsoMap.LdrByteCountMax; -- Max # of bytes in ByteArray
-  ldrMap.Version = lsoMap.Version;
-  ldrMap.LogInfo = 0;
+  ldrMap.ParentDigest       = record.digest( topRec );
+  ldrMap.StoreMode          = lsoMap.StoreMode;
+  ldrMap.Digest             = record.digest( ldrRec );
+  ldrMap.ListEntryMax       = lsoMap.LdrEntryCountMax; -- Max entries in value list
+  ldrMap.ByteEntrySize      = lsoMap.LdrByteEntrySize; -- ByteSize of Fixed Entries
+  ldrMap.ByteEntryCount     = 0;  -- A count of Byte Entries
+  ldrMap.ByteCountMax       = lsoMap.LdrByteCountMax; -- Max # of bytes in ByteArray
+  ldrMap.Version            = lsoMap.Version;
+  ldrMap.LogInfo            = 0;
 
   if( lsoMap.ExistSubRecDig == 0 ) then
-    lsoMap.ExistSubRecDig = createAndInitESR( topRec, lsoMap );
+    lsoMap.ExistSubRecDig   = createAndInitESR( topRec, lsoMap );
   end
 
 end -- initializeLdrMap()
@@ -515,21 +521,21 @@ end -- initializeColdDirMap()
 -- ======================================================================
 local function packageStandardList( lsoMap )
   -- General LSO Parms:
-  lsoMap.StoreMode = SM_LIST;
-  lsoMap.Transform = nil;
-  lsoMap.UnTransform = nil;
+  lsoMap.StoreMode        = SM_LIST;
+  lsoMap.Transform        = nil;
+  lsoMap.UnTransform      = nil;
   -- LSO Data Record Chunk Settings: Passed into "Chunk Create"
   lsoMap.LdrEntryCountMax = 100;  -- Max # of items in a Data Chunk (List Mode)
   lsoMap.LdrByteEntrySize = 0;  -- Byte size of a fixed size Byte Entry
-  lsoMap.LdrByteCountMax = 2000; -- Max # of BYTES in a Data Chunk (binary mode)
+  lsoMap.LdrByteCountMax  = 2000; -- Max # of BYTES in a Data Chunk (binary mode)
   -- Hot Entry List Settings: List of User Entries
-  lsoMap.HotListMax = 100; -- Max Number for the List -- when we transfer
-  lsoMap.HotListTransfer = 50; -- How much to Transfer at a time.
+  lsoMap.HotListMax       = 100; -- Max Number for the List -- when we transfer
+  lsoMap.HotListTransfer  = 50; -- How much to Transfer at a time.
   -- Warm Digest List Settings: List of Digests of LSO Data Records
-  lsoMap.WarmListMax = 100; -- Number of Warm Data Record Chunks
+  lsoMap.WarmListMax      = 100; -- Number of Warm Data Record Chunks
   lsoMap.WarmListTransfer = 50; -- Number of Warm Data Record Chunks
   -- Cold Directory List Settings: List of Directory Pages
-  lsoMap.ColdListMax = 100;  -- Number of list entries in a Cold list dir node
+  lsoMap.ColdListMax      = 100;  -- Number of list entries in a Cold list dir node
 
 end
 
@@ -2974,7 +2980,7 @@ function lstack_delete( topRec, lsoBinName )
   -- initializeLsoMap() also assigns the map to the record bin.
   local lsoMap = topRec[lsoBinName];
 
-  print("LSTACK_DELETE IS NOT YET IMPLEMENTED!!!);
+  print("LSTACK_DELETE IS NOT YET IMPLEMENTED!!!");
 
   return rc;
 
