@@ -1,8 +1,8 @@
 -- Large Stack Object (LSO or LSTACK) Operations
--- lstack.lua:  June 08, 2013
+-- lstack.lua:  June 09, 2013
 --
 -- Module Marker: Keep this in sync with the stated version
-local MOD="lstack_2013_06_08.2"; -- the module name used for tracing
+local MOD="lstack_2013_06_09.3"; -- the module name used for tracing
 
 -- ======================================================================
 -- || GLOBAL PRINT ||
@@ -423,7 +423,12 @@ local function createAndInitESR( topRec, lsoMap )
   GP=F and trace("[DEBUG]: <%s:%s> Back from calling record.set_flags()",
     MOD, meth );
 
-  GP=F and trace("[ESIT]: <%s:%s> Leaving with ESR Digest(%s)",
+  -- Set the record type as "ESR"
+  trace("[TRACE]<%s:%s> SETTING RECORD TYPE(%s)", MOD, meth, tostring(RT_ESR));
+  record.set_type( esr, 100 );
+  trace("[TRACE]<%s:%s> DONE SETTING RECORD TYPE", MOD, meth );
+
+  GP=F and trace("[EXIT]: <%s:%s> Leaving with ESR Digest(%s)",
     MOD, meth, tostring(esrDigest));
   return esrDigest;
 
@@ -2536,6 +2541,9 @@ function lstack_create( topRec, lsoBinName, createSpec )
   -- initializeLsoMap() also assigns the map to the record bin.
   local lsoMap = initializeLsoMap( topRec, lsoBinName );
 
+  -- Set the type of this record to LDT (it might already be set)
+  record.set_type( esr, RT_TOP ); -- LDT Type Rec
+
   -- If the user has passed in settings that override the defaults
   -- (the createSpec), then process that now.
   if createSpec ~= nil then
@@ -2980,7 +2988,7 @@ function lstack_delete( topRec, lsoBinName )
   -- initializeLsoMap() also assigns the map to the record bin.
   local lsoMap = topRec[lsoBinName];
 
-  print("LSTACK_DELETE IS NOT YET IMPLEMENTED!!!");
+  trace("[ATTENTION!!!]::LSTACK_DELETE IS NOT YET IMPLEMENTED!!!");
 
   return rc;
 

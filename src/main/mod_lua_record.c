@@ -133,6 +133,22 @@ static int mod_lua_record_set_flags(lua_State * l) {
 }
 
 /**
+ * Set a record TYPE (Reg, LDT, ESR, SubRec
+ */
+static int mod_lua_record_set_type(lua_State * l) {
+    as_rec *        rec     = mod_lua_checkrecord(l, 1);
+
+    // Get the 2nd arg off the stack -- and process as rec Type (@LDT @TOBY)
+    uint8_t   rec_type    = luaL_optinteger(l, 2, 0);
+
+    // This function just sets up the arguments,
+    // The udf record method will do the real work.
+    as_rec_set_type( rec, rec_type );  // DONE !!!
+
+    return 0;
+}
+
+/**
  * Get a value from the named bin
  */
 static int mod_lua_record_index(lua_State * l) {
@@ -187,6 +203,7 @@ static const luaL_reg object_table[] = {
     {"digest",     mod_lua_record_digest},
     {"numbins",    mod_lua_record_numbins},
     {"set_flags",  mod_lua_record_set_flags},
+    {"set_type",   mod_lua_record_set_type},
     {0, 0}
 };
 
