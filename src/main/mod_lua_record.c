@@ -53,8 +53,8 @@ as_rec * mod_lua_torecord(lua_State * l, int index) {
  * Push a record on to the lua stack
  */
 as_rec * mod_lua_pushrecord(lua_State * l, as_rec * r) {
-    // I am hoping the following is correct use of the is_malloc flag
-    mod_lua_box * box = mod_lua_pushbox(l, r->_.is_malloc ? MOD_LUA_SCOPE_LUA : MOD_LUA_SCOPE_HOST, r, CLASS_NAME);
+    // I am hoping the following is correct use of the free flag
+    mod_lua_box * box = mod_lua_pushbox(l, r->_.free ? MOD_LUA_SCOPE_LUA : MOD_LUA_SCOPE_HOST, r, CLASS_NAME);
     return (as_rec *) mod_lua_box_value(box);
 }
 
