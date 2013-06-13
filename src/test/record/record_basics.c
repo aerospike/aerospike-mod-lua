@@ -1,14 +1,14 @@
 
 #include "../test.h"
-#include <as_arraylist.h>
-#include <as_linkedlist.h>
-#include <as_list.h>
-#include <as_integer.h>
-#include <as_stream.h>
-#include <as_string.h>
-#include <as_rec.h>
-#include <as_map.h>
-#include <as_hashmap.h>
+#include <aerospike/as_arraylist.h>
+#include <aerospike/as_linkedlist.h>
+#include <aerospike/as_list.h>
+#include <aerospike/as_integer.h>
+#include <aerospike/as_stream.h>
+#include <aerospike/as_string.h>
+#include <aerospike/as_rec.h>
+#include <aerospike/as_map.h>
+#include <aerospike/as_hashmap.h>
 #include <limits.h>
 #include <stdlib.h>
 

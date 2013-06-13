@@ -3,18 +3,8 @@
 
 PLAN( mod_lua_test ) {
 
-    test_logger.level = AS_LOG_INFO;
-
-    /**
-     * types - tests types
-     */
-    plan_add( types_string );
-    plan_add( types_integer );
-    plan_add( types_bytes );
-    plan_add( types_arraylist );
-    plan_add( types_linkedlist );
-    plan_add( types_hashmap );
-
+    test_logger.level = AS_LOGGER_LEVEL_INFO;
+    
     /**
      * stream - stream tests
      */

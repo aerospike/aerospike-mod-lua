@@ -1,13 +1,13 @@
 
 #include "../test.h"
-#include <as_stream.h>
-#include <as_types.h>
+#include <aerospike/as_stream.h>
+#include <aerospike/as_types.h>
 #include <limits.h>
 #include <stdlib.h>
 
-#include <as_module.h>
-#include <mod_lua.h>
-#include <mod_lua_config.h>
+#include <aerospike/as_module.h>
+#include <aerospike/mod_lua.h>
+#include <aerospike/mod_lua_config.h>
 
 
 #include "../util/test_aerospike.h"

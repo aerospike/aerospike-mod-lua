@@ -11,21 +11,12 @@ TEST_CFLAGS += -Imodules/common/$(TARGET_INCL)
 TEST_LDFLAGS = -lssl -lcrypto -llua -lpthread -lm -lrt 
 
 TEST_DEPS =
-TEST_DEPS += modules/common/$(TARGET_OBJ)/client/*.o 
-TEST_DEPS += modules/common/$(TARGET_OBJ)/shared/*.o 
-TEST_DEPS += $(MSGPACK_PATH)/src/.libs/libmsgpackc.a
+TEST_DEPS += $(COMMON)/$(TARGET_LIB)/libaerospike-common.a 
+TEST_DEPS += $(MSGPACK)/src/.libs/libmsgpackc.a
 
 ###############################################################################
 ##  TEST OBJECTS                                                       		 ##
 ###############################################################################
-
-TEST_TYPES = 
-TEST_TYPES += types/types_integer
-TEST_TYPES += types/types_string
-TEST_TYPES += types/types_bytes
-TEST_TYPES += types/types_arraylist
-TEST_TYPES += types/types_linkedlist
-TEST_TYPES += types/types_hashmap
 
 TEST_STREAM = 
 TEST_STREAM += stream/stream_basics
@@ -34,7 +25,6 @@ TEST_STREAM += stream/stream_udf
 TEST_RECORD = 
 TEST_RECORD += record/record_basics
 TEST_RECORD += record/record_udf
-TEST_RECORD += record/bytes_udf
 
 TEST_UTIL = 
 TEST_UTIL += util/consumer_stream

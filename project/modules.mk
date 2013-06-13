@@ -23,21 +23,34 @@ $(warning ***************************************************************)
 $(error )
 endif
 
-.PHONY: COMMON
-COMMON: common-prepare
 
-.PHONY: COMMON-prepare
-COMMON-prepare: $(COMMON)/$(TARGET_INCL)/aerospike/*.h $(COMMON)/$(TARGET_INCL)/citrusleaf/*.h
+.PHONY: COMMON-build
+COMMON-build: $(COMMON)/$(TARGET_LIB)/libaerospike-common.a
 
 .PHONY: COMMON-clean
 COMMON-clean:
 	$(MAKE) -e -C $(COMMON) clean MSGPACK=$(MSGPACK)
 
-$(COMMON)/$(TARGET_INCL)/aerospike/%.h: $(COMMON)/$(SOURCE_INCL)/aerospike/%.h
+$(COMMON)/$(TARGET_LIB)/libaerospike-common.a:
+	$(MAKE) -e -C $(COMMON) libaerospike-common.a MSGPACK=$(MSGPACK)
+
+
+
+COMMON-HEADERS := $(wildcard $(COMMON)/$(TARGET_INCL)/aerospike/*.h) $(wildcard $(COMMON)/$(TARGET_INCL)/citrusleaf/*.h)
+
+.PHONY: COMMON-prepare
+COMMON-prepare: COMMON-make-prepare $(subst $(COMMON)/$(SOURCE_INCL),$(TARGET_INCL),$(COMMON-HEADERS)) 
+	$(noop)
+
+.PHONY: COMMON-make-prepare
+COMMON-make-prepare:
 	$(MAKE) -e -C $(COMMON) prepare MSGPACK=$(MSGPACK)
 
-$(COMMON)/$(TARGET_INCL)/citrusleaf/%.h: $(COMMON)/$(SOURCE_INCL)/citrusleaf/%.h
-	$(MAKE) -e -C $(COMMON) prepare MSGPACK=$(MSGPACK)
+$(TARGET_INCL)/aerospike/%.h: $(COMMON)/$(TARGET_INCL)/aerospike/%.h | $(TARGET_INCL)/aerospike
+	 cp $^ $@
+
+$(TARGET_INCL)/citrusleaf/%.h: $(COMMON)/$(TARGET_INCL)/citrusleaf/%.h | $(TARGET_INCL)/citrusleaf
+	 cp $^ $@
 
 ###############################################################################
 ##  MSGPACK MODULE                                                           ##

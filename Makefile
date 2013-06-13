@@ -94,5 +94,9 @@ $(TARGET_INCL)/aerospike: | $(TARGET_INCL)
 $(TARGET_INCL)/aerospike/%.h:: $(SOURCE_INCL)/aerospike/%.h | $(TARGET_INCL)/aerospike
 	cp -p $^ $(TARGET_INCL)/aerospike
 
+.PHONY: test
+test: 
+	@echo "No tests"
+
 ###############################################################################
 include project/modules.mk project/rules.mk

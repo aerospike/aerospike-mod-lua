@@ -1,15 +1,16 @@
 
 #include "../test.h"
-#include <as_stream.h>
-#include <as_types.h>
+#include <aerospike/as_stream.h>
+#include <aerospike/as_types.h>
 #include <limits.h>
 #include <stdlib.h>
 
-#include <as_module.h>
-#include <mod_lua.h>
-#include <mod_lua_config.h>
+#include <aerospike/as_module.h>
+#include <aerospike/mod_lua.h>
+#include <aerospike/mod_lua_config.h>
 
 #include "../util/test_aerospike.h"
+#include "../util/test_logger.h"
 #include "../util/map_rec.h"
 
 /******************************************************************************
@@ -28,7 +29,7 @@ TEST( record_udf_1, "echo bin a of {a = 123, b = 456 }" ) {
     as_rec_set(rec, "a", (as_val *) as_integer_new(123));
 
     as_list * arglist = as_arraylist_new(1,0);
-    as_list_add_string(arglist, "a");
+    as_list_append_str(arglist, "a");
 
     as_result * res = as_success_new(NULL);
 
@@ -51,8 +52,8 @@ TEST( record_udf_2, "concat bins a and b of {a = 'abc', b = 'def' }" ) {
     as_rec_set(rec, "b", (as_val *) as_string_new("def",false));
 
     as_list * arglist = as_arraylist_new(2,0);
-    as_list_add_string(arglist, "a");
-    as_list_add_string(arglist, "b");
+    as_list_append_str(arglist, "a");
+    as_list_append_str(arglist, "b");
 
     as_result * res = as_success_new(NULL);
 

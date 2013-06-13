@@ -612,7 +612,7 @@ static int pushargs(lua_State * l, as_list * args) {
         .count = 0
     };
 
-    as_list_foreach(args, &data, pushargs_foreach);
+    as_list_foreach(args, pushargs_foreach, &data);
     as_logger_trace(mod_lua.logger, "pushargs: %d", data.count);
     return data.count;
 }

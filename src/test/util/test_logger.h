@@ -4,18 +4,15 @@
  * An as_logger for tests.
  */
 
-#include <as_logger.h>
+#include <aerospike/as_logger.h>
 
 /*****************************************************************************
  * FUNCTIONS
  *****************************************************************************/
 
-struct test_logger_context_s;
-typedef struct test_logger_context_s test_logger_context;
-
-struct test_logger_context_s {
+typedef struct test_logger_context_s {
     as_logger_level level;
-};
+} test_logger_context;
 
 /*****************************************************************************
  * VARIABLES
