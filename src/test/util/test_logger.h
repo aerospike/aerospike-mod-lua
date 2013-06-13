@@ -14,7 +14,7 @@ struct test_logger_context_s;
 typedef struct test_logger_context_s test_logger_context;
 
 struct test_logger_context_s {
-    as_log_level level;
+    as_logger_level level;
 };
 
 /*****************************************************************************
