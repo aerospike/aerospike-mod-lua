@@ -70,7 +70,7 @@ static int mod_lua_map_size(lua_State * l) {
 }
 
 static int mod_lua_map_new(lua_State * l) {
-    as_map * map = as_hashmap_new(320);
+    as_map * map = (as_map *) as_hashmap_new(320);
     int n = lua_gettop(l);
     if ( n == 2 && lua_type(l, 2) == LUA_TTABLE) {
         lua_pushnil(l);

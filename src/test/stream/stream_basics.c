@@ -76,7 +76,7 @@ TEST( stream_basics_recs, "piping recs from stream a to stream b" ) {
         if ( produced >= limit ) return AS_STREAM_END;
         produced++;
 
-        as_map * m = as_hashmap_new(4);
+        as_map * m = (as_map *) as_hashmap_new(4);
         as_map_set(m, (as_val *) as_string_new(strdup("id"),true), (as_val *) as_integer_new(produced));
         as_map_set(m, (as_val *) as_string_new(strdup("campaign"),true), (as_val *) as_integer_new(produced % 10));
         as_map_set(m, (as_val *) as_string_new(strdup("views"),true), (as_val *) as_integer_new(produced * 2919 % 1000));

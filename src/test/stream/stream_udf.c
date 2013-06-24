@@ -190,7 +190,7 @@ TEST( stream_udf_5, "campaign rollup w/ map & reduce" ) {
 
     as_stream * istream = producer_stream_new(produce);
     as_stream * ostream = consumer_stream_new(consume);
-    as_list *   arglist = as_arraylist_new(0,0);
+    as_list *   arglist = (as_list *) as_arraylist_new(0,0);
 
     int rc = as_module_apply_stream(&mod_lua, &as, "aggr", "rollup", istream, arglist, ostream);
 
@@ -246,7 +246,7 @@ TEST( stream_udf_6, "campaign rollup w/ aggregate" ) {
 
     as_stream * istream = producer_stream_new(produce);
     as_stream * ostream = consumer_stream_new(consume);
-    as_list *   arglist = as_arraylist_new(0,0);
+    as_list *   arglist = (as_list *) as_arraylist_new(0,0);
 
     int rc = as_module_apply_stream(&mod_lua, &as, "aggr", "rollup2", istream, arglist, ostream);
 
