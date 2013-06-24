@@ -1,8 +1,124 @@
 -- Large Map (LMAP) Design
 -- (May 28, 2013) (Last Updated)
+-- 
+--=============================================================================
+-- LMAP Design and Type Comments:
+--=============================================================================
 --
--- ======================================================================
--- Aerospike Large Map (LMAP) Operations
+-- What is LMAP ?
+-- 
+-- The LMAP value is a new "particle type" that exists ONLY on the server.
+-- It is a complex type (it includes infrastructure that is used by
+-- server storage), so it can only be viewed or manipulated by Lua and C
+-- functions on the server.  It is represented by a Lua MAP object that
+-- comprises control information and a set of record bins that contain
+-- fixed-sized list of digests which directly point to a record. LMAP can be
+-- viewed as a version of LSET object which points to a fixed-size warm-list
+-- of digests, instead of having a Lset control-bin pointing to a map object 
+-- and additional Lset bins (1 to N) each pointing to list-values. 
+-- The LMAP object does not have a separate control-bin and value-bins.
+-- We just have one direct LMAP bin object. 
+--
+-- Advantages over LSET :
+--
+-- 1. Lmap gets rid of a separate control-bin, instead control-information is 
+--    at the top of each lmap map. 
+-- 2. Lmap achieves vertical-scaling by having a list of digests, each of which
+--    points to a LDR, instead of a list of values. 
+-- 3. Users can add as many lmap-type bins to a record and customize the names
+--    of the records. In the case of LSET, there can be only one lset-type bin
+--    in a record and their names are fixed.
+--      
+-- |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- Visual Depiction
+-- |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- 
+--
+--(Standard Mode)
+-- +-----+-----+-----+-----+----------------------------------------+
+-- |User |User |. .  |LMAP |LMAP |. . .|LMAP |                |
+-- |Bin 1|Bin 2|     |Bin  |Bin  |     |Bin  |                |
+-- |     |     |. .  |Name |Name |. . .|Name |
+-- +-----+-----+-----+-----+----------------------------------------+
+--                      |     |-------------------------------------------->+---------+                      
+--                      V                     								| LMAP    |    
+--                    +---------+             								| control |
+--   		          | LMAP    |            							    | bin     |
+--                    | control |			  								| bin     |
+--                    | bin     |		      								+---------+ 						 LDR 1	
+--   		          +---------+                          LDR 1			|Digest 1 |	+---------------------->+--------+							
+--         	          |Digest 1 |+----------------------->+--------+	    |---------|              LDR 2      |Entry 1 |
+--                    |---------|              LDR 2      |Entry 1 |		|Digest 2 |+------------>+--------+ |Entry 2 |
+--                    |Digest 2 |+------------>+--------+ |Entry 2 |	    +---------+              |Entry 1 | |   o    |
+--                    +---------+              |Entry 1 | |   o    |	    | o o o   |              |Entry 2 | |   o    |
+--                    | o o o   |              |Entry 2 | |   o    |		|---------|				 |   o    |	|Entry n |
+--                    |---------|    LDR N     |   o    | |   o    |		|Digest N |				 |Entry n |	+--------+
+--                    |Digest N |+->+--------+ |   o    | |Entry n |		+---------+				 +--------+
+--                    +---------+   |Entry 1 | |   o    | +--------+
+--                                  |Entry 2 | |Entry n |
+--                                  |   o    | +--------+
+--                                  |   o    |
+--                                  |   o    |
+--                                  |Entry n |
+--                                  +--------+
+--
+--  
+--
+-- (Compact Mode)
+-- +-----+-----+-----+-----+----------------------------------------+
+-- |User |User |. .  |LMAP |                
+-- |Bin 1|Bin 2|     |Bin  |                
+-- |     |     |. .  |Name |                  
+-- +-----+-----+-----+-----+----------------------------------------+
+--                      |        
+--                      V       
+--                    +---------+                                 
+--                    | LMAP    |
+--                    | control |
+--                    | info    |
+--   		          +---------+                          LDR 1
+--         	          |Digest 1 |+----------------------->+--------+
+--                    |---------|              LDR 2      |Entry 1 |
+--                    |Digest 2 |+------------>+--------+ |Entry 2 |
+--                    +---------+              |Entry 1 | |   o    |
+--                    | o o o   |              |Entry 2 | |   o    |
+--                    |---------|    LDR N     |   o    | |   o    |
+--                    |Digest N |+->+--------+ |   o    | |Entry n |
+--                    +---------+   |Entry 1 | |   o    | +--------+
+--                                  |Entry 2 | |Entry n |
+--                                  |   o    | +--------+
+--                                  |   o    |
+--                                  |   o    |
+--                                  |Entry n |
+--                                  +--------+
+--
+--=============================================================================
+-- How does LMAP work ?
+--
+-- The Large Map data structure has a control-bin (with a user-defined name) 
+-- which points to a list of digests. 
+-- 
+-- a. In the compact mode, there is only one LMAP bin pointing to a list of N
+--    digest items. We compute the digest for the record, hash the digest over
+--    the list of N bins, hash(digest) Modulo N, insert the digest in the 
+--    appropriate list-index of the first and only lmap bin with a pointer 
+--    to the actual LDR. 
+--
+-- b. In the standard mode, there are multiple LMAP bins in a record. When 
+--    an LDR needss to be inserted, we first pick the matching lmap bin-name
+--    and then proceed to hashing the digest and finding its place in the list. 
+--
+-- c. Unlike lstack which grows as a list but is read in reverse as a stack, 
+--    lmap digest entries are meant to behave as a simple linear list. So a 
+-- 	  lmap search is very much similar to the lset-search of hash-matching, 
+-- 	  except that in the case of lset, we would hash to find the correct bin, 
+--    but in the case of lmap, we look-up by bin-name, but hash to find the 
+--    digest entry amongst the list-indices. 
+--  
+---- ======================================================================
+-- 
+-- Aerospike Large Map (LMAP) Operations :
+--
 -- (*) lmap_create():
 --          :: Create the LMAP object in the bin specified, using the
 --          :: creation arguments passed in (probably a package).
@@ -22,118 +138,13 @@
 -- (*) lmap_size():   Return the size (e.g. item count) of the map
 --
 -- ======================================================================
--- LMAP Design and Type Comments:
---
--- The LMAP value is a new "particle type" that exists ONLY on the server.
--- It is a complex type (it includes infrastructure that is used by
--- server storage), so it can only be viewed or manipulated by Lua and C
--- functions on the server.  It is represented by a Lua MAP object that
--- comprises control information and a set of record bins that contain
--- fixed-sized list of digests which directly point to a record. LMAP can be
--- viewed as a version of LSET object which points to a fixed-size warm-list
--- of digests, instead of having a Lset control-bin pointing to a map object 
--- and additional Lset bins (1 to N) each pointing to list-values. 
--- The LMAP object does not have a separate control-bin and value-bins.
--- We just have one direct LMAP bin object. 
---
--- Advantages :
--- 1. Lmap gets rid of a separate control-bin, instead control-information is 
---    at the top of each lmap map. 
--- 2. Lmap achieves vertical-scaling by having a list of digests, instead of 
---    a list of values. 
--- 3. There can be only one lset-type bin in a record, their names are fixed.
---    Users can add as many lmap-type bins to a record and customize the names
---    of the records.  
---
--- |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
--- Visual Depiction
--- |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
--- In a user record, the bin holding the Large Map list-bin takes on a name
--- chosen by the user. 
--- 
--- TODO : Design for multiple lmap bins in a record
---
---(Standard Mode)
--- +-----+-----+-----+-----+----------------------------------------+
--- |User |User |. .  |LMAP |LMAP |. . .|LMAP |                |
--- |Bin 1|Bin 2|     |Bin  |Bin  |     |Bin  |                |
--- |     |     |. .  |Name |Name |. . .|Name |
--- +-----+-----+-----+-----+----------------------------------------+
---                      |                             
---                      V                                  
---                    +---------+                                 
---                    | LMAP    |
---                    | control |
---                    | bin     |
---   		      +---------+                          LDR 1
---         	      |Digest 1 |+----------------------->+--------+
---                    |---------|              LDR 2      |Entry 1 |
---                    |Digest 2 |+------------>+--------+ |Entry 2 |
---                    +---------+              |Entry 1 | |   o    |
---                    | o o o   |              |Entry 2 | |   o    |
---                    |---------|    LDR N     |   o    | |   o    |
---                    |Digest N |+->+--------+ |   o    | |Entry n |
---                    +---------+   |Entry 1 | |   o    | +--------+
---                                  |Entry 2 | |Entry n |
---                                  |   o    | +--------+
---                                  |   o    |
---                                  |   o    |
---                                  |Entry n |
---                                  +--------+
---
--- ******************** TBD *************************************
---
--- The Large Map distributes searches over N lists.  Searches are done
--- with linear scan in one of the bin lists.  The set values are hashed
--- and then the specific bin is picked "hash(val) Modulo N".  The N bins
--- are organized by name using the method:  prefix "LsetBin_" and the
--- modulo N number.
---
--- The modulo number is always a prime number -- to minimize the amount
--- of "collisions" that are often found in power of two modulo numbers.
--- Common choices are 17, 31 and 61.
---
--- The initial state of the LMAP is "Compact Mode", which means that ONLY
--- ONE LIST IS USED -- in Bin 0.  Once there are a "Threshold Number" of
--- entries, the Bin 0 entries are rehashed into the full set of bin lists.
--- Note that a more general implementation could keep growing, using one
--- of the standard "Linear Hashing-style" growth patterns.
---
--- (Compact Mode)
--- +-----+-----+-----+-----+----------------------------------------+
--- |User |User |. .  |LMAP |                
--- |Bin 1|Bin 2|     |Bin  |                
--- |     |     |. .  |Name |                  
--- +-----+-----+-----+-----+----------------------------------------+
---                      |        
---                      V       
---                    +---------+                                 
---                    | LMAP    |
---                    | control |
---                    | info    |
---   		      +---------+                          LDR 1
---         	      |Digest 1 |+----------------------->+--------+
---                    |---------|              LDR 2      |Entry 1 |
---                    |Digest 2 |+------------>+--------+ |Entry 2 |
---                    +---------+              |Entry 1 | |   o    |
---                    | o o o   |              |Entry 2 | |   o    |
---                    |---------|    LDR N     |   o    | |   o    |
---                    |Digest N |+->+--------+ |   o    | |Entry n |
---                    +---------+   |Entry 1 | |   o    | +--------+
---                                  |Entry 2 | |Entry n |
---                                  |   o    | +--------+
---                                  |   o    |
---                                  |   o    |
---                                  |Entry n |
---                                  +--------+
---
 -- |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- || LMAP Bin CONTENTS  |||||||||||||||||||||||||||||||||||||||||||||||||
 -- |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- 
--- The definition of control-info of the main record (top rec) and
--- the subrecords is essentially what we use to initialize the fixed-size 
--- warm-list, so we use the init routines to show what's in those control maps
+-- The definition of control-info of the main record (top rec) and the subrecords
+-- is essentially what we use to initialize the fixed-size lmap digest list, 
+-- so we use the init routines to show what's in the lmap-control info field. 
 
 -- ======================================================================
 -- initializeLMap:
@@ -152,39 +163,67 @@ local function initializeLMap( topRec, lmapBinName )
 
   -- Create the map, and fill it in.
   -- Note: All Field Names start with UPPER CASE.
-  local lmap = map();
+  local lmapCtrl = map();
   -- General LSO Parms:
-  lmap.ItemCount = 0;         -- A count of all items in the stack
-  lmap.Version = 1 ;          -- Current version of the code
-  lmap.LdtType = "LMAP";      -- identify ldt variant
-  lmap.Magic = MAGIC;         -- we will use this to verify we have a valid map
-  lmap.BinName = lmapBinName; -- Defines the LSO Bin
-  lmap.NameSpace = "test";    -- Default NS Name -- to be overridden by user
-  lmap.Set = "set";           -- Default Set Name -- to be overridden by user
-  lmap.StoreMode = SM_LIST;   -- SM_LIST or SM_BINARY:
-  lmap.ExistSubRecDig = 0;    -- Pt to the LDT "Exists" subrecord (digest)
+  lmapCtrl.ItemCount = 0;         -- A count of all items in the stack
+  lmapCtrl.Version = 1 ;          -- Current version of the code
+  lmapCtrl.LdtType = "LMAP";      -- identify ldt variant
+  lmapCtrl.Magic = MAGIC;         -- we will use this to verify we have a valid map
+  lmapCtrl.BinName = lmapBinName; -- Defines the LSO Bin
+  lmapCtrl.NameSpace = "test";    -- Default NS Name -- to be overridden by user
+  lmapCtrl.Set = "set";           -- Default Set Name -- to be overridden by user
+  lmapCtrl.StoreMode = SM_LIST;   -- SM_LIST or SM_BINARY:
+  lmapCtrl.ExistSubRecDig = 0;    -- Pt to the LDT "Exists" subrecord (digest)
 
   -- LDR Chunk Settings (of type LMAP): Passed into "Chunk Create"
-  lmap.LdrEntryCountMax = 100;  -- Max # of items in a Data Chunk (List Mode)
-  lmap.LdrByteEntrySize =  0;   -- Byte size of a fixed size Byte Entry
-  lmap.LdrByteCountMax =   0;   -- Max # of BYTES in a Data Chunk (binary mode)
+  lmapCtrl.LdrEntryCountMax = 100;  -- Max # of items in a Data Chunk (List Mode)
+  lmapCtrl.LdrByteEntrySize =  0;   -- Byte size of a fixed size Byte Entry
+  lmapCtrl.LdrByteCountMax =   0;   -- Max # of BYTES in a Data Chunk (binary mode)
 
   -- Digest List Settings: List of Digests of Large Data Records
-  lmap.DigestList = list(); -- the list of digests for LDRs
-  lmap.TopFull = false; -- true when top chunk is full (for next write)
-  lmap.ListDigestCount = 0; -- Number of  Data Record Chunks
-  lmap.ListMax = 100; -- Number of  Data Record Chunks
-  lmap.TopChunkEntryCount = 0; -- Count of entries in top-most LDR chunk
-  lmap.TopChunkByteCount = 0; -- Count of bytes used in top-most LDR Chunk
+  lmapCtrl.DigestList = list(); -- the list of digests for LDRs
+  lmapCtrl.TopFull = false; -- true when top chunk is full (for next write)
+  lmapCtrl.ListDigestCount = 0; -- Number of  Data Record Chunks
+  lmapCtrl.ListMax = 100; -- Number of  Data Record Chunks
+  lmapCtrl.TopChunkEntryCount = 0; -- Count of entries in top-most LDR chunk
+  lmapCtrl.TopChunkByteCount = 0; -- Count of bytes used in top-most LDR Chunk
 
   GP=F and trace("[DEBUG]: <%s:%s> : CTRL Map after Init(%s)",
-      MOD, meth , tostring(lmap));
+      MOD, meth , tostring(lmapCtrl));
 
   -- Put our new map in the record, then store the record.
-  topRec[lmapBinName] = lmap;
+  topRec[lmapBinName] = lmapCtrl;
 
   GP=F and trace("[EXIT]:<%s:%s>:", MOD, meth );
-  return lmap
+  return lmapCtrl
 end -- initializeLsoMap
+
+-- ======================================================================
+-- initializeLdrMap( ldrMap )
+-- ======================================================================
+-- Set the values in a LMAP Data Record (LDR) Control Bin map. LDR Records
+-- hold the actual data for the digest-list.
+-- This function represents the "type" LDR MAP -- all fields are
+-- defined here.
+-- There are potentially three bins in an LDR Record:
+-- (1) ldrRec[LDR_CTRL_BIN]: The control Map (defined here)
+-- (2) ldrRec[LDR_LIST_BIN]: The Data Entry List (when in list mode)
+-- (3) ldrRec[LDR_BNRY_BIN]: The Packed Data Bytes (when in Binary mode)
+-- ======================================================================
+local function initializeLdrMap( topRec, ldrRec, ldrMap, lmapCtrl )
+  local meth = "initializeLdrMap()";
+  GP=F and trace("[ENTER]: <%s:%s>", MOD, meth );
+
+  ldrMap.ParentDigest = record.digest( topRec );
+  ldrMap.StoreMode = lmapCtrl.StoreMode;
+  ldrMap.Digest = record.digest( ldrRec );
+  ldrMap.ListEntryMax = lmapCtrl.LdrEntryCountMax; -- Max entries in value list
+  ldrMap.ByteEntrySize = lmapCtrl.LdrByteEntrySize; -- ByteSize of Fixed Entries
+  ldrMap.ByteEntryCount = 0;  -- A count of Byte Entries
+  ldrMap.ByteCountMax = lmapCtrl.LdrByteCountMax; -- Max # of bytes in ByteArray
+  ldrMap.Version = lmapCtrl.Version;
+  ldrMap.LogInfo = 0;
+end -- initializeLdrMap()
+
 
 -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> --

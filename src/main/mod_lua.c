@@ -54,7 +54,10 @@
 
 #include "internal.h"
 
-
+pthread_rwlock_t g_cache_lock = PTHREAD_RWLOCK_INITIALIZER;
+#define RDLOCK pthread_rwlock_rdlock(&g_cache_lock)
+#define WRLOCK pthread_rwlock_wrlock(&g_cache_lock)
+#define UNLOCK pthread_rwlock_unlock(&g_cache_lock)
 /******************************************************************************
  * MACROS
  ******************************************************************************/
@@ -197,9 +200,12 @@ static inline int cache_entry_init(context * ctx, cache_entry * centry, const ch
 int cache_rm(context * ctx, const char *key) {
     if ( !key || ( strlen(key) == 0 )) return 0;
     cache_entry     * centry = NULL;
+	RDLOCK;
     if (CF_RCHASH_OK != cf_rchash_get(centry_hash, (void *)key, strlen(key), (void *)&centry)) {
+		UNLOCK;
         return 0;
     }
+	UNLOCK;
     cache_entry_cleanup(centry);
     cf_queue_destroy(centry->lua_state_q);
     cf_rc_releaseandfree(centry);
@@ -212,14 +218,18 @@ int cache_rm(context * ctx, const char *key) {
 int cache_init(context * ctx, const char *key, const char * gen) {
     if (strlen(key) == 0) return 0;
     cache_entry     * centry = NULL;
+	RDLOCK;
     if (CF_RCHASH_OK != cf_rchash_get(centry_hash, (void *)key, strlen(key), (void *)&centry)) {
+		UNLOCK;
         centry = cf_rc_alloc(sizeof(cache_entry)); 
         cf_atomic32_set(&centry->total, 0);
         cf_atomic32_set(&centry->cache_miss, 0);
         centry->max_cache_size = CACHE_ENTRY_STATE_MAX;
         centry->lua_state_q = cf_queue_create(sizeof(lua_State *), true);
         cache_entry_init(ctx, centry, key, gen);
+		WRLOCK;
         int retval = cf_rchash_put(centry_hash, (void *)key, strlen(key), (void *)centry);
+		UNLOCK;
         if (retval != CF_RCHASH_OK) {
             // weird should not happen
             cf_queue_destroy(centry->lua_state_q);
@@ -229,6 +239,7 @@ int cache_init(context * ctx, const char *key, const char * gen) {
             as_logger_trace(mod_lua.logger, "[CACHE] Added [%s:%p]", key, centry);
         }
     } else { 
+		UNLOCK;
         cache_entry_init(ctx, centry, key, gen);
         cf_rc_releaseandfree(centry);
         centry = 0;
@@ -326,7 +337,8 @@ static int update(as_module * m, as_module_event * e) {
             ctx->config.cache_enabled   = config->cache_enabled;
 
             if ( centry_hash == NULL && ctx->config.cache_enabled ) {
-                int rc = cf_rchash_create(&centry_hash, filename_hash_fn, NULL, 0, 64, CF_RCHASH_CR_MT_LOCKPOOL);
+				// No Internal Lock
+                int rc = cf_rchash_create(&centry_hash, filename_hash_fn, NULL, 0, 64, 0);
                 if ( CF_RCHASH_OK != rc ) {
                     return 1;
                 }
@@ -498,7 +510,9 @@ static int poll_state(context * ctx, cache_item * citem) {
     uint32_t total = 1;
     if ( ctx->config.cache_enabled == true ) {
         cache_entry     * centry = NULL;
+		RDLOCK;
         int retval = cf_rchash_get(centry_hash, (void *)citem->key, strlen(citem->key), (void *)&centry);
+		UNLOCK;
         if (CF_RCHASH_OK == retval ) {
             if (cf_queue_pop(centry->lua_state_q, &citem->state, CF_QUEUE_NOWAIT) != CF_QUEUE_EMPTY) {
                 strncpy(citem->key, centry->key, CACHE_ENTRY_KEY_MAX);
@@ -553,7 +567,9 @@ static int offer_state(context * ctx, cache_item * citem) {
         // random number. Experiment to get better number.
         lua_gc(citem->state, LUA_GCSTEP, 2);
         cache_entry *centry = NULL;
+		RDLOCK;
         if (CF_RCHASH_OK == cf_rchash_get(centry_hash, (void *)citem->key, strlen(citem->key), (void *)&centry) ) {
+			UNLOCK;
             as_logger_trace(mod_lua.logger, "[CACHE] found entry: %s (%d)", citem->key, centry->max_cache_size);
             if (( CF_Q_SZ(centry->lua_state_q) < centry->max_cache_size ) 
                 && ( !strncmp(centry->gen, citem->gen, CACHE_ENTRY_GEN_MAX) )) {
@@ -565,6 +581,7 @@ static int offer_state(context * ctx, cache_item * citem) {
             centry = 0;
         }
         else {
+			UNLOCK;
             as_logger_trace(mod_lua.logger, "[CACHE] entry not found: %s", citem->key);
         }
     }

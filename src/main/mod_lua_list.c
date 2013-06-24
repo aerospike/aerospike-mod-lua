@@ -142,7 +142,7 @@ static int mod_lua_list_size(lua_State * l) {
 }
 
 static int mod_lua_list_new(lua_State * l) {
-    as_list * ll = as_arraylist_new(5,10);
+    as_list * ll = (as_list *) as_arraylist_new(5,10);
     int n = lua_gettop(l);
     if ( n == 2 && lua_type(l, 2) == LUA_TTABLE) {
         lua_pushnil(l);
