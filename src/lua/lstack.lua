@@ -1,8 +1,8 @@
 -- Large Stack Object (LSO or LSTACK) Operations
--- lstack.lua:  June 09, 2013
+-- lstack.lua:  June 21, 2013
 --
 -- Module Marker: Keep this in sync with the stated version
-local MOD="lstack_2013_06_09.3"; -- the module name used for tracing
+local MOD="lstack_2013_06_21.1"; -- the module name used for tracing
 
 -- ======================================================================
 -- || GLOBAL PRINT ||
@@ -14,17 +14,21 @@ local GP=true; -- Leave this ALWAYS true (but value seems not to matter)
 local F=true; -- Set F (flag) to true to turn ON global print
 
 -- ======================================================================
--- Please refer to lstack_design.lua for architecture and design notes.
+-- Additional lstack documentation may be found in: lstack_design.lua.
 -- ======================================================================
 -- LSTACK Design and Type Comments (aka Large Stack Object, or LSO).
+-- The lstack type is a member of the new Aerospike Large Type family,
+-- Large Data Types (LDTs).  LDTs exist only on the server, and thus must
+-- undergo some form of translation when passing between client and server.
 --
--- The LSO value is a new "particle type" that exists ONLY on the server.
--- It is a complex type (it includes infrastructure that is used by
--- server storage), so it can only be viewed or manipulated by Lua and C
--- functions on the server.  It is represented by a Lua MAP object that
--- comprises control information, a directory of records (for "warm data")
--- and a "Cold List Head" ptr to a linked list of directory structures
--- that each point to the records that hold the actual data values.
+-- LSTACK is a server side type that can be manipulated ONLY by this file,
+-- lstack.lua.  We prevent any other direct manipulation -- any other program
+-- or process must use the lstack api provided by this program in order to
+--
+-- An LSTACK value -- stored in a record bin -- is represented by a Lua MAP
+-- object that comprises control information, a directory of records
+-- (for "warm data") and a "Cold List Head" ptr to a linked list of directory
+-- structures that each point to the records that hold the actual data values.
 --
 -- LSTACK Functions Supported (Note switch to lower case)
 -- (*) lstack_create: Create the LSO structure in the chosen topRec bin
@@ -87,51 +91,59 @@ local F=true; -- Set F (flag) to true to turn ON global print
 --   ================================================================
 --     LSO Map                                              
 --     +-------------------+                                 
---     | LSO Control Info  |  About 20 different values kept in Ctrl Info
---     +----------------++++++++++
---     | Hot Entry Cache|||||||||| Entries are stored directly in the Record
---     +----------------++++++++++
---     | LSO Warm Dir List |-+                                     
---     +-------------------+ |                                   
---   +-| LSO Cold Dir Head | |                                   
---   | +-------------------+ |                                   
---   |          +------------+
---   |          |                                                
---   |          V (Warm Directory)              Warm Data(WD)
---   |      +---------+                          Chunk Rec 1
---   |      |Digest 1 |+----------------------->+--------+
---   |      |---------|              WD Chunk 2 |Entry 1 |
---   |      |Digest 2 |+------------>+--------+ |Entry 2 |
---   |      +---------+              |Entry 1 | |   o    |
---   |      | o o o   |              |Entry 2 | |   o    |
---   |      |---------|  WD Chunk N  |   o    | |   o    |
---   |      |Digest N |+->+--------+ |   o    | |Entry n |
---   |      +---------+   |Entry 1 | |   o    | +--------+
---   |                    |Entry 2 | |Entry n |
---   |                    |   o    | +--------+
---   |                    |   o    |
---   |                    |   o    |
---   |                    |Entry n |
---   |                    +--------+
---   |                          +-----+->+-----+->+-----+ ->+-----+
---   +----------------------->  |Rec  |  |Rec  |  |Rec  | o |Rec  |
+--     | LSO Control Info  | About 20 different values kept in Ctrl Info
+--     |...................|
+--     |...................|< Oldest ................... Newest>            
+--     +-------------------+========+========+=======+=========+
+--     |<Hot Entry Cache>  | Entry 1| Entry 2| o o o | Entry n |
+--     +-------------------+========+========+=======+=========+
+--     |...................|HotCache entries are stored directly in the record
+--     |...................| 
+--     |...................|WarmCache Digests are stored directly in the record
+--     |...................|< Oldest ................... Newest>            
+--     +-------------------+========+========+=======+=========+
+--     |<Warm Digest List> |Digest 1|Digest 2| o o o | Digest n|
+--     +-------------------+===v====+===v====+=======+====v====+
+--  +-[@]Cold Dir List Head|   |        |                 |    
+--  |  +-------------------+   |        |                 |    
+--  |                    +-----+    +---+      +----------+   
+--  |                    |          |          |     Warm Data(WD)
+--  |                    |          |          |      WD Rec N
+--  |                    |          |          +---=>+--------+
+--  |                    |          |     WD Rec 2   |Entry 1 |
+--  |                    |          +---=>+--------+ |Entry 2 |
+--  |                    |      WD Rec 1  |Entry 1 | |   o    |
+--  |                    +---=>+--------+ |Entry 2 | |   o    |
+--  |                          |Entry 1 | |   o    | |   o    |
+--  |                          |Entry 2 | |   o    | |Entry n |
+--  |                          |   o    | |   o    | +--------+
+--  |                          |   o    | |Entry n |
+--  |                          |   o    | +--------+
+--  |                          |Entry n | "LDR" (LSO Data Record) Pages
+--  |                          +--------+
+--  |                                            
+--  |                           <Newest Dir............Oldest Dir>
+--  +-------------------------->+-----+->+-----+->+-----+ ->+-----+
+--                              |Rec  |  |Rec  |  |Rec  | o |Rec  |
 --    The cold dir is a linked  |Chunk|  |Chunk|  |Chunk| o |Chunk|
 --    list of dir pages that    |Dir  |  |Dir  |  |Rec  | o |Dir  |
 --    point to LSO Data Records +-----+  +-----+  +-----+   +-----+
---    that hold the actual cold  ||...|   ||...|   ||...|    ||...|
---    data (cold chunks).        ||   V   ||   V   ||   V    ||   V
---                               ||   +--+||   +--+||   +--+ ||   +--+
---    As "Warm Data" ages out    ||   |Cn|||   |Cn|||   |Cn| ||   |Cn|
---    of the Warm Dir List, the  |V   +--+|V   +--+|V   +--+ |V   +--+
---    LDRs transfer out of the   |+--+    |+--+    |+--+     |+--+
---    Warm Directory and into    ||C2|    ||C2|    ||C2|     ||C2|
---    the cold directory.         V+--+    V+--+    V+--+     V+--+
+--    that hold the actual cold [][]:[]  [][]:[]  [][]:[]   [][]:[]
+--    data (cold chunks).       +-----+  +-----+  +-----+   +-----+
+--                               | |  |   | |  |   | |  |    | |  |
+--    LDRS (per dir) have age:   | |  V   | |  V   | |  V    | |  V
+--    <Oldest LDR .. Newest LDR> | |  +--+| |  +--+| |  +--+ | |  +--+
+--    As "Warm Data" ages out    | |  |Cn|| |  |Cn|| |  |Cn| | |  |Cn|
+--    of the Warm Dir List, the  | V  +--+| V  +--+| V  +--+ | V  +--+
+--    LDRs transfer out of the   | +--+   | +--+   | +--+   | +--+
+--    Warm Directory and into    | |C2|   | |C2|   | |C2|   | |C2|
+--    the cold directory.        V +--+   V +--+   V +--+   V +--+
 --                               +--+     +--+     +--+      +--+
 --    The Warm and Cold LDRs     |C1|     |C1|     |C1|      |C1|
 --    have identical structure.  +--+     +--+     +--+      +--+
 --                                A        A        A         A    
 --                                |        |        |         |
---           [Cold Data Chunks]---+--------+--------+---------+
+--     [Cold Data (LDR) Chunks]---+--------+--------+---------+
 --
 --
 -- The "Hot Entry Cache" is the true "Top of Stack", holding roughly the
@@ -145,18 +157,22 @@ local F=true; -- Set F (flag) to true to turn ON global print
 --
 -- We don't "age" the individual entries out one at a time as the Hot Cache
 -- overflows -- we instead take a group at a time (specified by the
--- HotCacheTransferAmount), which opens up a block empty spots. Notice that
+-- HotCacheTransferAmount), which opens up a block of empty spots. Notice that
 -- the transfer amount is a tuneable parameter -- for heavy reads, we would
 -- want MORE data in the cache, and for heavy writes we would want less.
 --
--- If we generally pick half (100 entries total, and then transfer 50 at
--- a time when the cache fills up), then half the time the insers will affect
+-- If we generally pick half (e.g. 100 entries total, and then transfer 50 at
+-- a time when the cache fills up), then half the time the inserts will affect
 -- ONLY the Top (LSO) record -- so we'll have only one Read, One Write 
 -- operation for a stack push.  1 out of 50 will have the double read,
--- double write, and 1 out of a thousand (or so) will have additional
+-- double write, and 1 out of 10,000 (or so) will have additional
 -- IO's depending on the state of the Warm/Cold lists.
+-- Notice ALSO that when we use a coupled Namespace for LDTs (main memory
+-- for the top records and SSD for the subrecords), then 49 out of 50
+-- writes and small reads will have ZERO I/O cost -- since it will be
+-- contained in the main memory record.
 --
--- NOTE: Design, V3.  For really cold data -- things out beyond 50,000
+-- NOTE: Design, V3.x.  For really cold data -- things out beyond 50,000
 -- elements, it might make sense to just push those out to a real disk
 -- based file (to which we could just append -- and read in reverse order).
 -- If we ever need to read the whole stack, we can afford
@@ -199,6 +215,7 @@ local F=true; -- Set F (flag) to true to turn ON global print
 -- ======================================================================
 -- TO DO List: for Future (once delete_subrec() is available)
 -- TODO: Implement stack_trim(): Must release storage before record delete.
+-- TODO: Implement stack_delete(): Release all storage for this LDT
 -- TODO: Implement LStackSubRecordDestructor():
 -- TODO: Add Exists Subrec Digest in LsoMap.
 -- ======================================================================
@@ -209,6 +226,8 @@ local F=true; -- Set F (flag) to true to turn ON global print
 -- status = aerospike:close_subrec( topRec, childRec )
 -- status = aerospike:delete_subrec( topRec, childRec ) (not yet ready)
 -- digest = record.digest( childRec )
+-- status = record.set_type( topRec, recType )
+-- status = record.set_flags( topRec, binName, binFlags )
 -- ======================================================================
 -- For additional Documentation, please see lstack_design.lua, which should
 -- be co-located in the main Development tree with lstack.lua
@@ -230,15 +249,17 @@ local functionTable = require('UdfFunctionTable');
 local SM_BINARY ='B'; -- Using a Transform function to compact values
 local SM_LIST   ='L'; -- Using regular "list" mode for storing values.
 
--- Record Types
-local RT_REG = 'R'; -- Regular Record
-local RT_ESR = 'E'; -- Existence Sub Record
-local RT_SUB = 'S'; -- Regular Sub Record (LDR, CDIR, etc)
-local RT_TOP = 'T'; -- Top Record (contains an LDT)
+-- Record Types -- Must be numbers, even though we are eventually passing
+-- in just a "char" (and int8_t).
+local RT_REG = 0; -- 0x0: Regular Record (Here only for completeneness)
+local RT_TOP = 1; -- 0x1: Top Record (contains an LDT)
+local RT_SUB = 2; -- 0x2: Regular Sub Record (LDR, CDIR, etc)
+local RT_ESR = 4; -- 0x4: Existence Sub Record
 
 -- Bin Flag Types
-local BF_LDT_BIN    = 'L';  -- Main LDT Bin
-local BF_LDT_HIDDEN = 'H';  -- Set the Hidden Flag on this bin
+local BF_LDT_BIN     = 1; -- Main LDT Bin
+local BF_LDT_HIDDEN  = 2; -- LDT Bin::Set the Hidden Flag on this bin
+local BF_LDT_CONTROL = 4; -- Main LDT Control Bin (one per record)
 
 -- LDT TYPES 
 local LDT_TYPE_LSTACK = "LSTACK";
@@ -248,12 +269,13 @@ local LDT_TYPE_LSTACK = "LSTACK";
 -- ++====================++
 -- Note the 14 character limit on Aerospike Bin Names.
 --                         123456789ABCDE
+local REC_LDT_CTRL_BIN  = "LDTCONTROLBIN"; -- Single bin for all LDT in rec
 local COLD_DIR_LIST_BIN = "ColdDirListBin"; 
 local COLD_DIR_CTRL_BIN = "ColdDirCtrlBin";
 
-local LDR_CTRL_BIN = "LdrControlBin";  
-local LDR_LIST_BIN = "LdrListBin";  
-local LDR_BNRY_BIN = "LdrBinaryBin";
+local LDR_CTRL_BIN      = "LdrControlBin";  
+local LDR_LIST_BIN      = "LdrListBin";  
+local LDR_BNRY_BIN      = "LdrBinaryBin";
 
 -- All LDT subrecords have a properties bin that holds a map that defines
 -- the specifics of the record and the LDT.
@@ -275,22 +297,110 @@ local PackageDebugModeBinary="DebugModeBinary";
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- <><><><> <Initialize Control Maps> <Initialize Control Maps> <><><><>
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
--- There are three main Record Types used in the LSO Package, and their
+-- There are four main Record Types used in the LSO Package, and their
 -- initialization functions follow.  The initialization functions
 -- define the "type" of the control structure:
 --
 -- (*) TopRec: the top level user record that contains the LSO bin
--- (*) LdrRec: the LSO Data Record that holds user Data
--- (*) ColdDirRec: The Record that holds a list of AS Record Digests
+-- (*) EsrRec: The Existence SubRecord (ESR) that coordinates all child
+--             subrecs for a given LDT.
+-- (*) LdrRec: the LSO Data Record (LDR) that holds user Data.
+-- (*) ColdDirRec: The Record that holds a list of Sub Record Digests
 --     (i.e. record pointers) to the LDR Data Records.  The Cold list is
---     a linked list of Directory pages, each of contains a list of
+--     a linked list of Directory pages;  each dir contains a list of
 --     digests (record pointers) to the LDR data pages.
 -- <+> Naming Conventions:
---   + All Field names (e.g. lsoMap.StoreMode) begin with Upper Case
---   + All variable names (e.g. lsoMap.StoreMode) begin with lower Case
+--   + All Field names (e.g. lsoMap[StoreMode]) begin with Upper Case
+--   + All variable names (e.g. lsoMap[StoreMode]) begin with lower Case
 --   + All Record Field access is done using brackets, with either a
 --     variable or a constant (in single quotes).
 --     (e.g. topRec[binName] or ldrRec[LDR_CTRL_BIN]);
+--
+-- <+> Recent Change in LdtMap Use: (6/21/2013 tjl)
+--   + Since Lua wraps up the LDT Control map as a self-contained object,
+--     we are paying for storage in EACH LDR for the map field names. 
+--     Thus, even though we like long map field names for readability:
+--     e.g.  lsoMap.HotEntryListItemCount, we don't want to spend the
+--     space to store the large names in each and every LDT control map.
+--     So -- we do another Lua Trick.  Rather than name the key of the
+--     map value with a large name, we instead use a single character to
+--     be the key value, but define a descriptive variable name to that
+--     single character.  So, instead of using this in the code:
+--     lsoMap.HotEntryListItemCount = 50;
+--            123456789012345678901
+--     (which would require 21 bytes of storage); We instead do this:
+--     local HotEntryListItemCount='H';
+--     lsoMap[HotEntryListItemCount] = 50;
+--     Now, we're paying the storage cost for 'H' (1 byte) and the value.
+--
+--     So -- we'll be converting all of our LDT lua code to follow this
+--     convention (fields become variables the reference a single char)
+--     and the mapping of long name to single char will be done in the code.
+--
+-- Note:  All variables that are field names will be upper case.
+-- It is EXTREMELY IMPORTANT that these field names ALL have unique char
+-- values. (There's no secret message hidden in these values).
+-- Note that we've tried to make the mapping somewhat cannonical where
+-- possible.
+local ItemCount              = 'I'; 
+local Version                = 'V';
+local LdtType                = 'T';
+local Magic                  = 'Z';
+local BinName                = 'B';
+local NameSpace              = 'N';
+local Set                    = 'S';
+local StoreMode              = 'M';
+local ExistSubRecDigest      = 'E';
+local LdrEntryCountMax       = 'e';
+local LdrByteEntrySize       = 's';
+local LdrByteCountMax        = 'b';
+local HotEntryList           = 'H';
+local HotEntryListItemCount  = 'L';
+local HotListMax             = 'h';
+local HotListTransfer        = 'X';
+local WarmDigestList         = 'W';
+local WarmTopFull            = 'F';
+local WarmListDigestCount    = 'l';
+local WarmListMax            = 'w';
+local WarmListTransfer       = 'x';
+local WarmTopChunkEntryCount = 'A';
+local WarmTopChunkByteCount  = 'a';
+local ColdDirListHead        = 'C';
+local ColdTopFull            = 'f';
+local ColdDataRecCount       = 'R';
+local ColdDirRecCount        = 'r';
+local ColdListMax            = 'c';
+-- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+-- Maintain the Mapping here -- so that we never have a name collision:
+-- Obviously -- only one name can be associated with a character.
+--
+-- A:WarmTopChunkEntryCount a:WarmTopChunkByteCount 0:
+-- B:BinName                b:LdrByteCountMax       1:
+-- C:ColdDirListHead        c:ColdListMax           2:
+-- D:                       d:                      3:
+-- E:ExistSubRecDigest      e:LdrEntryCountMax      4:
+-- F:WarmTopFull            f:ColdTopFull           5:
+-- G:                       g:                      6:
+-- H:HotEntryList           h:HotListMax            7:
+-- I:ItemCount              i:                      8:
+-- J:                       j:                      9:
+-- K:                       k:                  
+-- L:HotEntryListItemCount  l:WarmListDigestCount
+-- M:StoreMode              m:
+-- N:NameSpace              n:
+-- O:                       o:
+-- P:                       p:
+-- Q:                       q:
+-- R:ColdDataRecCount       r:ColdDirRecCount
+-- S:Set                    s:LdrByteEntrySize
+-- T:LdtType                t:
+-- U:                       u:
+-- V:Version                v:
+-- W:WarmDigestList         w:WarmListMax
+-- X:HotListTransfer        x:WarmListTransfer
+-- Y:                       y:
+-- Z:Magic                  z:
+-- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 --
 -- <><><><> <Initialize Control Maps> <Initialize Control Maps> <><><><>
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
@@ -396,11 +506,20 @@ local function initPropMap( propMap, subDigest, topDigest, rtFlag, lsoMap )
 end -- initPropMap()
 
 -- ======================================================================
+-- ======================================================================
+local function setLdtRecordType( topRec, lsoMap )
+  local meth = "setLdtRecordType()";
+    warn("[WARNING]:<%s:%s> FUNCTION NOT IMPLEMENTED", MOD, meth );
+
+end -- setLdtRecordType()
+
+-- ======================================================================
 -- Create and Init ESR
 -- ======================================================================
 -- The Existence SubRecord is the synchronization point for the lDTs that
--- have multiple records (top rec and many children).  It's a little like
--- the baby sitter for the children -- it helps keeps track of them.
+-- have multiple records (one top rec and many children).  It's a little
+-- like the baby sitter for the children -- it helps keeps track of them.
+-- And, when the ESR is gone, we kill the children. (BRUA-HAHAHAH!!!)
 --
 -- All LDT subrecs have a properties bin that describes the subrec.  This
 -- bin contains a map that is "un-msg-packed" by the C code on the server
@@ -417,15 +536,21 @@ local function createAndInitESR( topRec, lsoMap )
   local topDigest = record.digest( topRec );
   initPropMap( propMap, esrDigest, topDigest, RT_ESR, lsoMap );
 
+  -- If this record already has an LDT CONTROL BIN (with a valid map in it),
+  -- then we know that the main LDT record type has already been set.
+  -- Otherwise, we should set it. This function will check, and if necessary,
+  -- set the control bin.
+  setLdtRecordType( topRec, lsoMap );
+
   GP=F and trace("[DEBUG]:<%s:%s>About to call record.set_flags(Bin(%s)F(%s))",
-    MOD, meth, lsoMap.BinName, tostring(BF_LDT_HIDDEN) );
-  record.set_flags( topRec, lsoMap.BinName, 64 );
+    MOD, meth, lsoMap.BinName, tostring(BF_LDT_BIN) );
+  record.set_flags( topRec, lsoMap.BinName, BF_LDT_BIN );
   GP=F and trace("[DEBUG]: <%s:%s> Back from calling record.set_flags()",
     MOD, meth );
 
   -- Set the record type as "ESR"
   trace("[TRACE]<%s:%s> SETTING RECORD TYPE(%s)", MOD, meth, tostring(RT_ESR));
-  record.set_type( esr, 100 );
+  record.set_type( esr, RT_ESR );
   trace("[TRACE]<%s:%s> DONE SETTING RECORD TYPE", MOD, meth );
 
   GP=F and trace("[EXIT]: <%s:%s> Leaving with ESR Digest(%s)",
@@ -529,7 +654,7 @@ local function packageStandardList( lsoMap )
   lsoMap.StoreMode        = SM_LIST;
   lsoMap.Transform        = nil;
   lsoMap.UnTransform      = nil;
-  -- LSO Data Record Chunk Settings: Passed into "Chunk Create"
+  -- LSO Data Record (LDR) Chunk Settings: Passed into "Chunk Create"
   lsoMap.LdrEntryCountMax = 100;  -- Max # of items in a Data Chunk (List Mode)
   lsoMap.LdrByteEntrySize = 0;  -- Byte size of a fixed size Byte Entry
   lsoMap.LdrByteCountMax  = 2000; -- Max # of BYTES in a Data Chunk (binary mode)
