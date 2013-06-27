@@ -1,5 +1,5 @@
 -- Large Map (LMAP) Design
--- (May 28, 2013) (Last Updated)
+-- (June 26, 2013) Version 3 (Last Updated)
 -- 
 --=============================================================================
 -- LMAP Design and Type Comments:
@@ -28,6 +28,48 @@
 -- 3. Users can add as many lmap-type bins to a record and customize the names
 --    of the records. In the case of LSET, there can be only one lset-type bin
 --    in a record and their names are fixed.
+--
+-- Enhancements to LMAP :
+-- 
+-- 1. New: 
+--    Each top-record containing an lmap-bin will have a property-map that is 
+--    common to the entire record. 
+-- 2. New: 
+--    Each lmap bin will also have a LDT bin-specific property map.   
+-- 3. New: 
+--    There will be a separate existence sub-record (ESR) that indicates 
+--    whether a list of LDT child-records are valid or not. 
+-- 4. Modification: 
+--    The LMAP control-bin which was a simple map earlier has now been changed
+--    into a list. 
+--    The first entry of the list contains the ldt-bin specific 
+--    property map referred in item 2. 
+--    The second entry of the list contains the original lsomap which has been
+--    a map of many lmap attributes and their values 
+-- 5. Modification: 
+--    Abbreviated names for the lmap record attributes to save storage space
+--
+--    ******************  Description copied-over from lstack.lua *********
+--
+----   + Since Lua wraps up the LDT Control map as a self-contained object,
+--     we are paying for storage in EACH LDT Bin for the map field names. 
+--     Thus, even though we like long map field names for readability:
+--     e.g.  lsoMap.HotEntryListItemCount, we don't want to spend the
+--     space to store the large names in each and every LDT control map.
+--     So -- we do another Lua Trick.  Rather than name the key of the
+--     map value with a large name, we instead use a single character to
+--     be the key value, but define a descriptive variable name to that
+--     single character.  So, instead of using this in the code:
+--     lsoMap.ListItemCount = 50;
+--            123456789012345678901
+--     (which would require 21 bytes of storage); We instead do this:
+--     local ListItemCount='C';
+--     lsoMap[ListItemCount] = 50;
+--     Now, we're paying the storage cost for 'C' (1 byte) and the value.
+--
+--     So -- we have converted all of our LDT lua code to follow this
+--     convention (fields become variables the reference a single char)
+--     and the mapping of long name to single char will be done in the code.
 --      
 -- |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- Visual Depiction
