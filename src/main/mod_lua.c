@@ -469,8 +469,6 @@ static lua_State * create_state(context * ctx, const char * filename) {
 
     luaL_openlibs(l);
 
-    panic_setjmp();
-    lua_atpanic(l, handle_panic);
 
     package_path_set(l, ctx->config.system_path, ctx->config.user_path);
     package_cpath_set(l, ctx->config.system_path, ctx->config.user_path);
@@ -485,12 +483,11 @@ static lua_State * create_state(context * ctx, const char * filename) {
 
     lua_getglobal(l, "require");
     lua_pushstring(l, "aerospike");
-    lua_call(l, 1, 1);
+    lua_pcall(l, 1, 1, 0);
 
     lua_getglobal(l, "require");
     lua_pushstring(l, filename);
-    lua_call(l, 1, 1);
-
+    lua_pcall(l, 1, 1, 0);
     return l;
 }
 
