@@ -1,8 +1,8 @@
 -- Large Stack Object (LSO or LSTACK) Operations
--- lstack.lua:  June 26, 2013
+-- lstack.lua:  June 28, 2013
 --
 -- Module Marker: Keep this in sync with the stated version
-local MOD="lstack_2013_06_26.9"; -- the module name used for tracing
+local MOD="lstack_2013_06_28.0"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -137,12 +137,12 @@ local F=true; -- Set F (flag) to true to turn ON global print
 --    data (cold chunks).       +-----+  +-----+  +-----+   +-----+
 --                               | |  |   | |  |   | |  |    | |  |
 --    LDRS (per dir) have age:   | |  V   | |  V   | |  V    | |  V
---    <Oldest LDR .. Newest LDR> | | :+--+| | :+--+| | :+--+ | | :+--+
---    As "Warm Data" ages out    | | :|Cn|| | :|Cn|| | :|Cn| | | :|Cn|
---    of the Warm Dir List, the  | V :+--+| V :+--+| V :+--+ | V :+--+
---    LDRs transfer out of the   | +--+   | +--+   | +--+   | +--+
---    Warm Directory and into    | |C2|   | |C2|   | |C2|   | |C2|
---    the cold directory.        V +--+   V +--+   V +--+   V +--+
+--    <Oldest LDR .. Newest LDR> | |::+--+| |::+--+| |::+--+ | |::+--+
+--    As "Warm Data" ages out    | |::|Cn|| |::|Cn|| |::|Cn| | |::|Cn|
+--    of the Warm Dir List, the  | V::+--+| V::+--+| V::+--+ | V::+--+
+--    LDRs transfer out of the   | +--+   | +--+   | +--+    | +--+
+--    Warm Directory and into    | |C2|   | |C2|   | |C2|    | |C2|
+--    the cold directory.        V +--+   V +--+   V +--+    V +--+
 --                               +--+     +--+     +--+      +--+
 --    The Warm and Cold LDRs     |C1|     |C1|     |C1|      |C1|
 --    have identical structure.  +--+     +--+     +--+      +--+
@@ -284,7 +284,7 @@ local LDT_TYPE_LSTACK = "LSTACK";
 -- In the main record, there is one special hardcoded bin -- that holds
 -- some shared information for all LDTs.
 -- Note the 14 character limit on Aerospike Bin Names.
---                         123456789ABCDE
+-- >> (14 char name limit) 12345678901234 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 local REC_LDT_CTRL_BIN  = "LDTCONTROLBIN"; -- Single bin for all LDT in rec
 
 -- There are THREE different types of (Child) subrecords that are associated
@@ -298,16 +298,19 @@ local REC_LDT_CTRL_BIN  = "LDTCONTROLBIN"; -- Single bin for all LDT in rec
 -- the specifics of the record and the LDT.
 -- NOTE: Even the TopRec has a property map -- but it's stashed in the
 -- user-named LDT Bin
+-- >> (14 char name limit) 12345678901234 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 local SUBREC_PROP_BIN   = "SR_PROP_BIN";
 --
 -- The Lso Data Records (LDRs) use the following bins:
 -- The SUBREC_PROP_BIN mentioned above, plus
+-- >> (14 char name limit) 12345678901234 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 local LDR_CTRL_BIN      = "LdrControlBin";  
 local LDR_LIST_BIN      = "LdrListBin";  
 local LDR_BNRY_BIN      = "LdrBinaryBin";
 
 -- The Cold Dir Records use the following bins:
 -- The SUBREC_PROP_BIN mentioned above, plus
+-- >> (14 char name limit) 12345678901234 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 local COLD_DIR_LIST_BIN = "ColdDirListBin"; 
 local COLD_DIR_CTRL_BIN = "ColdDirCtrlBin";
 
@@ -484,7 +487,6 @@ local M_ColdListMax            = 'c';
 -- inspection to make sure that nothing overlaps.  And, note that these
 -- Variable/Char mappings need to be unique ONLY per map -- not globally.
 -- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-  
 
 -- ======================================================================
 -- local function lsoSummary( lsoList ) (DEBUG/Trace Function)
@@ -776,7 +778,10 @@ local function createAndInitESR( topRec, lsoList )
   GP=F and trace("[EXIT]: <%s:%s> Leaving with ESR Digest(%s)",
     MOD, meth, tostring(esrDigest));
 
-  aerospike:update_subrec( esr );
+  rc = aerospike:update_subrec( esr );
+  if( rc ~= 0 ) then
+    warn("[ERROR]<%s:%s>Problems Updating ESR rc(%s)",MOD,meth,tostring(rc));
+  end
 
   return esrDigest;
 
@@ -2000,9 +2005,12 @@ local function   warmListChunkCreate( topRec, lsoList )
   aerospike:update_subrec( newLdrChunkRecord );
 
   -- Add our new chunk (the digest) to the WarmDigestList
+  -- TODO: @TOBY: Remove these trace calls when fully debugged.
   GP=F and trace("[DEBUG]: <%s:%s> Appending NewChunk(%s) to WarmList(%s)",
     MOD, meth, tostring(newChunkDigest), tostring(lsoMap[M_WarmDigestList]));
+
   list.append( lsoMap[M_WarmDigestList], newChunkDigest );
+
   GP=F and trace("[DEBUG]<%s:%s>Post CHunkAppend:NewChunk(%s) LsoMap(%s)CH(%s)",
     MOD, meth, tostring(newChunkDigest), tostring(lsoMap),
     tostring( lsoMap[M_ColdDirListHead] ));
@@ -2089,7 +2097,6 @@ local function warmListHasRoom( lsoMap )
   return decision;
 end -- warmListHasRoom()
 
-
 -- ======================================================================
 -- warmListRead(topRec, resultList, lsoList, Count, func, fargs, all);
 -- ======================================================================
@@ -2113,8 +2120,7 @@ local function warmListRead(topRec, resultList, lsoList, count, func,
 
   return digestListRead(topRec, resultList, lsoList,
                           digestList, count, func, fargs, all);
-end
-
+end -- warmListRead()
 
 -- ======================================================================
 -- warmListGetTop( topRec, lsoMap )
@@ -2138,8 +2144,6 @@ local function warmListGetTop( topRec, lsoMap )
     MOD, meth, ldrChunkSummary( topWarmChunk ) );
   return topWarmChunk;
 end -- warmListGetTop()
--- ======================================================================
-
 
 -- ======================================================================
 -- warmListInsert()
@@ -2198,7 +2202,6 @@ local function warmListInsert( topRec, lsoList, entryList )
   if itemsLeft > 0 then
     aerospike:update_subrec( topWarmChunk );
 
-    -- aerospike:close_subrec( topRec, topWarmChunk );
     aerospike:close_subrec( topWarmChunk );
 
     GP=F and trace("[DEBUG]:<%s:%s>Calling Chunk Create: AGAIN!!", MOD, meth );
