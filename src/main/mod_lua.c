@@ -177,7 +177,7 @@ static inline int cache_entry_populate(context *ctx, cache_entry *centry, const 
     lua_State *l = NULL;
     for ( int i = 0; i < CACHE_ENTRY_STATE_MIN; i++ ) {
         l = create_state(ctx, key);
-        cf_queue_push(centry->lua_state_q, &l);
+        if (l) cf_queue_push(centry->lua_state_q, &l);
     }
     return 0;
 }
@@ -483,11 +483,21 @@ static lua_State * create_state(context * ctx, const char * filename) {
 
     lua_getglobal(l, "require");
     lua_pushstring(l, "aerospike");
-    lua_pcall(l, 1, 1, 0);
+    int rc = lua_pcall(l, 1, 1, 0);
+	if (rc) {
+        as_logger_error(mod_lua.logger, "Lua Create Error: %s", lua_tostring(l, -1));
+        lua_close(l);
+        return NULL;
+    }
 
     lua_getglobal(l, "require");
     lua_pushstring(l, filename);
-    lua_pcall(l, 1, 1, 0);
+    rc = lua_pcall(l, 1, 1, 0);
+    if (rc) {
+        as_logger_error(mod_lua.logger, "Lua Create Error: %s", lua_tostring(l, -1));
+        lua_close(l);
+        return NULL;
+    }
     return l;
 }
 
@@ -497,7 +507,8 @@ static lua_State * create_state(context * ctx, const char * filename) {
  *
  * @param m the module from which the context will be leased from.
  * @param filename name of the udf file
- * @return a lua_State to be used as the context.
+ * @return populate citem with lua_State to be used as the context.
+ * @return 0 on success, otherwise 1
  */
 static int poll_state(context * ctx, cache_item * citem) {
     uint32_t miss = 0;
@@ -537,8 +548,12 @@ static int poll_state(context * ctx, cache_item * citem) {
     if ( citem->state == NULL ) {
         citem->gen[0] = '\0';
         citem->state = create_state(ctx, citem->key);
-
-        as_logger_trace(mod_lua.logger, "[CACHE] state created: %s", citem->key);
+        if (!citem->state) {
+            as_logger_trace(mod_lua.logger, "[CACHE] state create failed: %s", citem->key);
+            return 1;
+        } else { 
+            as_logger_trace(mod_lua.logger, "[CACHE] state created: %s", citem->key);
+        }
     }
 
     return 0;
