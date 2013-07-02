@@ -2,7 +2,7 @@
 -- Last Update June 28,  2013: tjl
 --
 -- Keep this MOD value in sync with version above
-local MOD = "llist::06.28.C"; -- module name used for tracing.  
+local MOD = "llist::07.01.1"; -- module name used for tracing.  
 
 -- ======================================================================
 -- || GLOBAL PRINT ||
@@ -1481,7 +1481,7 @@ local function treeSearch( topRec, searchPath, ldtList, searchValue )
       nodeMap = nodeRec[NSR_CTRL_BIN];
       propMap = nodeRec[SUBREC_PROP_BIN];
       print("[DEBUG]<%s:%s> INNER NODE: Type(%s)",
-          MOD, meth, propMap[PM_);
+          MOD, meth, propMap[PM_LdtType]);
       keyList = nodeRec[NSR_KEY_LIST_BIN];
       keyCount = list.size( keyList );
       digestList = nodeRec[NSR_DIGEST_BIN]; 
