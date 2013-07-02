@@ -1594,7 +1594,9 @@ local function ldrInsertBytes( ldrChunkRec, lsoMap, listIndex, insertList )
     trace("[DEBUG]:<%s:%s>Before: Extending BYTES: New Size(%d) ByteArray(%s)",
       MOD, meth, totalSpaceNeeded, tostring(ldrChunkRec[LDR_BNRY_BIN]));
 
-    bytes.set_len(ldrChunkRec[LDR_BNRY_BIN], totalSpaceNeeded );
+    -- The API for this call changed (July 2, 2013).  Now use "ensure"
+    -- bytes.set_len(ldrChunkRec[LDR_BNRY_BIN], totalSpaceNeeded );
+    bytes.ensure(ldrChunkRec[LDR_BNRY_BIN], totalSpaceNeeded, 1);
 
     GP=F and
     trace("[DEBUG]:<%s:%s>AFTER: Extending BYTES: New Size(%d) ByteArray(%s)",
