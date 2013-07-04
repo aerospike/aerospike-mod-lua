@@ -1,8 +1,8 @@
 -- Large Stack Object (LSO or LSTACK) Operations
--- lstack.lua:  June 28, 2013
+-- lstack.lua:  July 03, 2013
 --
 -- Module Marker: Keep this in sync with the stated version
-local MOD="lstack_2013_06_28.0"; -- the module name used for tracing
+local MOD="lstack_2013_07_03.A"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -18,6 +18,19 @@ local G_LDT_VERSION = 1.2;
 local GP=true; -- Leave this ALWAYS true (but value seems not to matter)
 local F=true; -- Set F (flag) to true to turn ON global print
 
+-- TODO:
+-- (*) initPropMap() method
+-- (1) Init the record Prop Bin on first LDT Create
+-- (2) Create the ESR on first SubRec Create
+-- (3) Switch to lsoList (PropMap, lsoMap)
+-- (4) Implement Trim (release LDR pages from Warm/Cold List)
+-- (5) Add a LIMIT value to the control map -- and when we are a page over
+--     then release the page (ideally -- do not slow down transaction to
+--     do this.  Can we add a task to a cleanup thread for this?)
+-- (6) Implement Destroy (use the "get all subrec digests method) to create
+--     a list of digests that we then destroy.  Could this also be done
+--     in a background task?
+--
 -- ======================================================================
 -- Additional lstack documentation may be found in: lstack_design.lua.
 -- ======================================================================
@@ -177,13 +190,26 @@ local F=true; -- Set F (flag) to true to turn ON global print
 -- writes and small reads will have ZERO I/O cost -- since it will be
 -- contained in the main memory record.
 --
--- NOTE: Design, V3.x.  For really cold data -- things out beyond 50,000
+-- NOTES:
+-- Design, V3.x.  For really cold data -- things out beyond 50,000
 -- elements, it might make sense to just push those out to a real disk
 -- based file (to which we could just append -- and read in reverse order).
 -- If we ever need to read the whole stack, we can afford
 -- the time and effort to read the file (it is an unlikely event).  The
 -- issue here is that we probably have to teach Aerospike how to transfer
 -- (and replicate) files as well as records.
+--
+-- Design, V3.x. We will need to limit the amount of data that is held
+-- in a stack. We've added "StoreLimit" to the lsoMap, as a way to limit
+-- the number of items.  Note that this can be used to limit both the
+-- storage and the read amounts.
+-- One way this could be used is to REUSE a cold LDR page when an LDR
+-- page is about to fall off the end of the cold list.  However, that
+-- must be considered carefully -- as the time and I/O spent messing
+-- with the cold directory and the cold LDR could be a performance hit.
+-- We'll have to consider how we might age these pages out gracefully
+-- if we can't cleverly reuse them (patent opportunity here).
+-- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- REMEMBER THAT ALL INSERTS ARE INTO HOT LIST -- and transforms are done
 -- there.  All UNTRANSFORMS are done reading from the List (Hot List or
@@ -275,6 +301,11 @@ local BF_LDT_CONTROL = 4; -- Main LDT Control Bin (one per record)
 -- LDT TYPES (only lstack is defined here)
 local LDT_TYPE_LSTACK = "LSTACK";
 
+-- Errors used in LDT Land
+local ERR_OK            =  0; -- HEY HEY!!  Success
+local ERR_GENERAL       = -1; -- General Error
+local ERR_NOT_FOUND     = -2; -- Search Error
+--
 -- ++====================++
 -- || INTERNAL BIN NAMES || -- Local, but global to this module
 -- ++====================++
@@ -428,6 +459,7 @@ local CDM_DigestCount          = 'C';-- Current Digest Count
 -- Main LSO Map Field Name Mapping
 -- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 local M_StoreMode              = 'M';
+local M_StoreLimit             = 'S';
 local M_Transform              = 't';
 local M_UnTransform            = 'u';
 local M_LdrEntryCountMax       = 'e';
@@ -473,7 +505,7 @@ local M_ColdListMax            = 'c';
 -- P:                         p:
 -- Q:                         q:
 -- R:M_ColdDataRecCount       r:M_ColdDirRecCount
--- S:                         s:M_LdrByteEntrySize
+-- S:M_StoreLimit             s:M_LdrByteEntrySize
 -- T:                         t:M_Transform
 -- U:                         u:M_UnTransform
 -- V:                         v:
@@ -522,6 +554,7 @@ local function lsoSummary( lsoList )
   
   -- General LSO Parms:
   resultMap.StoreMode            = lsoMap[M_StoreMode];
+  resultMap.StoreLimit           = lsoMap[M_StoreLimit];
   resultMap.Transform            = lsoMap[M_Transform];
   resultMap.UnTransform          = lsoMap[M_UnTransform];
 
@@ -613,7 +646,8 @@ local function initializeLso( topRec, lsoBinName )
   propMap[PM_EsrDigest]    = nil; -- not set yet.
 
   -- Specific LSO Parms: Held in LsoMap
-  lsoMap[M_StoreMode]  = SM_LIST; -- SM_LIST or SM_BINARY:
+  lsoMap[M_StoreMode]   = SM_LIST; -- SM_LIST or SM_BINARY:
+  lsoMap[M_StoreLimit]  = 0; -- No storage Limit
 
   -- LSO Data Record Chunk Settings: Passed into "Chunk Create"
   lsoMap[M_LdrEntryCountMax]= 100;  -- Max # of Data Chunk items (List Mode)
@@ -661,17 +695,22 @@ end -- initializeLso()
 -- Set up the LDR Property Map (one PM per LDT)
 -- Parms:
 -- (*) propMap: 
+-- (*) esrDigest:
 -- (*) subDigest:
 -- (*) topDigest:
 -- (*) rtFlag:
 -- (*) lsoMap:
 -- ======================================================================
-local function initPropMap( propMap, subDigest, topDigest, rtFlag, lsoMap )
+local function
+initPropMap( propMap, esrDigest, subDigest, topDigest, rtFlag, lsoMap )
   local meth = "initPropMap()";
   GP=F and trace("[ENTER]: <%s:%s>", MOD, meth );
 
-
-  GP=F and trace("[HEY!!!]: <%s:%s> NOT YET FINISHED!!!  ", MOD, meth );
+  propMap[PM_EsrDigest]    = esrDigest;
+  propMap[PM_RecType  ]    = rtFlag;
+  propMap[PM_Magic]        = MAGIC;
+  propMap[PM_ParentDigest] = topDigest;
+  propMap[PM_SelfDigest]   = subDigest;
 
 end -- initPropMap()
 
@@ -740,13 +779,13 @@ local function createAndInitESR( topRec, lsoList )
   local propMap = lsoList[1];
   local lsoMap  = lsoList[2];
 
-  print("THIS METHOD PROBABLY HAS TO CHANGE -- ESR COMES LATER\n");
-
   propMap[PM_RecType]   = RT_ESR;
   propMap[PM_ParentDigest] = topDigest; -- Parent
   propMap[PM_EsrDigest] = esrDigest; -- Self
 
-  initPropMap( propMap, esrDigest, topDigest, RT_ESR, lsoList );
+  -- Init the properties map for this ESR. Note that esrDigest is in here
+  -- twice -- once for "self" and once for "esr".
+  initPropMap( propMap, esrDigest, esrDigest, topDigest, RT_ESR, lsoList );
 
   -- If the topRec already has an LDT CONTROL BIN (with a valid map in it),
   -- then we know that the main LDT record type has already been set.
@@ -821,6 +860,8 @@ local function initializeLdrMap( topRec, ldrRec, ldrPropMap, ldrMap, lsoList)
   ldrMap[LDR_ByteEntrySize]   = lsoMap[M_LdrByteEntrySize];
   ldrMap[LDR_ByteEntryCount]  = 0;  -- A count of Byte Entries
 
+  -- If this is the first LDR, then it's time to create an ESR for this
+  -- LDT.
   if( lsoPropMap[PM_EsrDigest] == nil or lsoPropMap[PM_EsrDigest] == 0 ) then
     lsoPropMap[PM_EsrDigest] = createAndInitESR( topRec, lsoList );
   end
@@ -912,6 +953,7 @@ local function packageTestModeList( lsoMap )
   lsoMap[M_StoreMode]        = SM_LIST;
   lsoMap[M_Transform]        = nil;
   lsoMap[M_UnTransform]      = nil;
+  lsoMap[M_StoreLimit]       = 20000; -- 20k entries
   -- LSO Data Record (LDR) Chunk Settings: Passed into "Chunk Create"
   lsoMap[M_LdrEntryCountMax] = 100; -- Max # of items in an LDR (List Mode)
   lsoMap[M_LdrByteEntrySize] = 0;  -- Byte size of a fixed size Byte Entry
@@ -934,6 +976,7 @@ local function packageTestModeBinary( lsoMap )
   lsoMap[M_StoreMode]        = SM_BINARY;
   lsoMap[M_Transform]        = "compressTest4";
   lsoMap[M_UnTransform]      = "unCompressTest4";
+  lsoMap[M_StoreLimit]       = 20000; -- 20k entries
   -- LSO Data Record (LDR) Chunk Settings: Passed into "Chunk Create"
   lsoMap[M_LdrEntryCountMax] = 100; -- Max # of items in an LDR (List Mode)
   lsoMap[M_LdrByteEntrySize] = 0;  -- Byte size of a fixed size Byte Entry
@@ -960,6 +1003,7 @@ local function packageProdListValBinStore( lsoMap )
   lsoMap[M_StoreMode]        = SM_BINARY;
   lsoMap[M_Transform]        = "listCompress_5_18";
   lsoMap[M_UnTransform]      = "listUnCompress_5_18";
+  lsoMap[M_StoreLimit]       = 20000; -- 20k entries
   -- LSO Data Record (LDR) Chunk Settings: Passed into "Chunk Create"
   lsoMap[M_LdrEntryCountMax] = 200; -- Max # of items in an LDR (List Mode)
   lsoMap[M_LdrByteEntrySize] = 18;  -- Byte size of a fixed size Byte Entry
@@ -985,6 +1029,7 @@ local function packageDebugModeList( lsoMap )
   lsoMap[M_StoreMode]        = SM_LIST;
   lsoMap[M_Transform]        = nil;
   lsoMap[M_UnTransform]      = nil;
+  lsoMap[M_StoreLimit]       = 200; -- 200 entries
   -- LSO Data Record (LDR) Chunk Settings: Passed into "Chunk Create"
   lsoMap[M_LdrEntryCountMax] = 4; -- Max # of items in an LDR (List Mode)
   lsoMap[M_LdrByteEntrySize] = 0;  -- Byte size of a fixed size Byte Entry
@@ -1010,6 +1055,7 @@ local function packageDebugModeBinary( lsoMap )
   lsoMap[M_StoreMode]        = SM_BINARY;
   lsoMap[M_Transform]        = "compressTest4";
   lsoMap[M_UnTransform]      = "unCompressTest4";
+  lsoMap[M_StoreLimit]       = 200; -- 200 entries
   -- LSO Data Record (LDR) Chunk Settings: Passed into "Chunk Create"
   lsoMap[M_LdrEntryCountMax] = 4; -- Max # of items in an LDR (List Mode)
   lsoMap[M_LdrByteEntrySize] = 16;  -- Byte size of a fixed size Byte Entry
