@@ -2,7 +2,7 @@
 -- Last Update July 08,  2013: tjl
 --
 -- Keep this MOD value in sync with version above
-local MOD = "llist::07.08.I"; -- module name used for tracing.  
+local MOD = "llist::07.08.P"; -- module name used for tracing.  
 
 -- ======================================================================
 -- || GLOBAL PRINT ||
@@ -963,13 +963,11 @@ end -- initializeNode()
 -- ======================================================================
 -- initializeLeaf()
 -- Set the values in an Inner Tree Node Control Map and Key/Digest Lists.
--- There are potentially SIX bins in an Interior Tree Node Record:
--- (0) nodeRec["SR_PROP_BIN"]: The Property Map
--- (1) nodeRec['NodeCtrlBin']: The control Map (defined here)
--- (2) nodeRec['KeyListBin']: The Data Entry List (when in list mode)
--- (3) nodeRec['KeyBnryBin']: The Packed Data Bytes (when in Binary mode)
--- (4) nodeRec['DgstListBin']: The Data Entry List (when in list mode)
--- (5) nodeRec['DgstBnryBin']: The Packed Data Bytes (when in Binary mode)
+-- There are potentially FOUR bins in an Interior Tree Node Record:
+-- (0) nodeRec[SUBREC_PROP_BIN]: The Property Map
+-- (1) nodeRec[LSR_CTRL_BIN]:   The control Map (defined here)
+-- (2) nodeRec[LSR_LIST_BIN]:   The Data Entry List (when in list mode)
+-- (3) nodeRec[LSR_BINARY_BIN]: The Packed Data Bytes (when in Binary mode)
 -- Pages are either in "List" mode or "Binary" mode (the whole tree is in
 -- one mode or the other), so the record will employ only four fields.
 -- Either Bins 0,1,2,4 or Bins 0,1,3,5.
@@ -1010,14 +1008,17 @@ local function initializeLeaf(topRec, ldtList, leafRec, firstValue )
     if( firstValue ~= nil ) then
       list.append( objectList, firstValue );
       leafMap[LF_ListEntryCount] = 1;
+      leafRec[LF_TotalEntryCount] = 1;
     else
       leafMap[LF_ListEntryCount] = 0;
+      leafRec[LF_TotalEntryCount] = 0;
     end
     leafRec[LSR_LIST_BIN] = objectList;
   else
     -- Binary Mode
     GP=F and trace("[DEBUG]: <%s:%s> Initialize in BINARY mode", MOD, meth );
     info("WARNING!!!::<%s:%s>Not ready for BINARY MODE YET!!!!", MOD, meth );
+    leafRec[LF_TotalEntryCount] = 0;
     leafMap[LF_ListEntryCount] = 0;
     leafMap[LF_ByteEntryCount] = startCount;
   end
@@ -1205,7 +1206,7 @@ end -- printRoot()
 -- Dump the Node contents for Debugging/Tracing purposes
 -- ======================================================================
 local function printNode( nodeRec )
-  local pMap        = nodeRec[SR_PROP_BIN];
+  local pMap        = nodeRec[SUBREC_PROP_BIN];
   local cMap        = nodeRec[NSR_CTRL_BIN];
   local keyList     = nodeRec[NSR_KEY_LIST_BIN];
   local digestList  = nodeRec[NSR_DIGEST_BIN];
@@ -1221,7 +1222,7 @@ end -- printNode()
 -- Dump the Leaf contents for Debugging/Tracing purposes
 -- ======================================================================
 local function printLeaf( leafRec )
-  local pMap     = leafRec[SR_PROP_BIN];
+  local pMap     = leafRec[SUBREC_PROP_BIN];
   local cMap     = leafRec[LSR_CTRL_BIN];
   local objList  = leafRec[LSR_LIST_BIN];
   print("LEAF::PMAP", tostring( pMap ) );
@@ -1268,6 +1269,37 @@ local function leafNodeSummary( leafRec )
 
   return tostring( resultMap );
 end -- leafNodeSummary()
+
+-- ======================================================================
+-- The value is either simple (atomic) or an object (complex).  Complex
+-- objects either have a key function defined, or they have a field called
+-- "key" that will give us a key value.
+-- If none of these are true -- then return -1 to show our displeasure.
+-- ======================================================================
+local function getKeyValue( ldtMap, value )
+  local meth = "getKeyValue()";
+  GP=F and trace("[ENTER]<%s:%s> value(%s) KeyType(%s)",
+    MOD, meth, tostring(value), tostring(ldtMap[R_KeyType]) );
+
+  local keyValue;
+  if( ldtMap[R_KeyType] == KT_ATOMIC ) then
+    keyValue = value;
+  else
+    -- for the moment, we assume complex objects (maps) have a field
+    -- called 'key'.  If not, then, well ... tough.
+    local keyFunction = ldtMap[R_KeyFunction];
+    if( keyFunction ~= nil ) and functionTable[keyFunction] ~= nil then
+      keyValue = functionTable[keyFunction]( value );
+    elseif value["key"] ~= nil then
+      keyValue = value["key"];
+    else
+      keyValue = -1;
+    end
+  end
+
+  GP=F and trace("[EXIT]<%s:%s> Result(%s)", MOD, meth, tostring(keyValue) );
+  return keyValue;
+end -- getKeyValue();
 
 -- ======================================================================
 -- keyCompare: (Compare ONLY Key values, not Object values)
@@ -1429,6 +1461,7 @@ local function searchKeyList( ldtMap, keyList, searchKey )
     -- otherwise, keep looking.  We haven't passed the spot yet.
   end -- for each list item
 
+  -- Remember: Can't use "i" outside of Loop.   
   GP=F and trace("[FOUND GREATER THAN]: <%s:%s> :Key(%s) Value(%s) Index(%d)",
     MOD, meth, tostring(searchKey), tostring(listValue), listSize + 1 );
 
@@ -1476,7 +1509,7 @@ local function searchObjectList( ldtMap, objectList, searchKey )
   local compareResult = 0;
   local objectKey;
   -- Do the List page mode search here
-  local listSize = list.size( keyList );
+  local listSize = list.size( objectList );
   for i = 1, listSize, 1 do
     compareResult = objectCompare( ldtMap, searchKey, objectList[i] );
     if compareResult == CR_ERROR then
@@ -1500,8 +1533,9 @@ local function searchObjectList( ldtMap, objectList, searchKey )
     -- otherwise, keep looking.  We haven't passed the spot yet.
   end -- for each list item
 
-  GP=F and trace("[NOT FOUND: EOL]: <%s:%s> :Key(%s) Value(%s) Index(%d)",
-    MOD, meth, tostring(searchKey), tostring(objectList[i]), i );
+  -- Remember: Can't use "i" outside of Loop.   
+  GP=F and trace("[NOT FOUND: EOL]: <%s:%s> :Key(%s) Final Index(%d)",
+    MOD, meth, tostring(searchKey), listSize );
 
   resultMap.Position = listSize + 1;
   resultMap.Found = false;
@@ -1638,7 +1672,7 @@ local function updateSearchPath(searchPath, ldtMap, nodeRec, position, keyCount)
   list.append( searchPath.RecList, nodeRec );
   list.append( searchPath.DigestList, nodeRecordDigest );
   list.append( searchPath.PositionList, position );
-  GP=F and info("[COMPARE]<%s:%s>KeyCount(%d) NodeListMax(%d)",
+  GP=F and info("[HasRoom COMPARE]<%s:%s>KeyCount(%d) NodeListMax(%d)",
     MOD, meth, keyCount, ldtMap[R_NodeListMax]);
   if( keyCount >= ldtMap[R_NodeListMax] ) then
     list.append( searchPath.HasRoom, false );
@@ -1901,7 +1935,8 @@ end -- populateLeaf()
 local function listInsert( myList, newValue, position )
   local meth = "listInsert()";
   rc = 0;
-  GP=F and trace("[ENTER]<%s:%s> ", MOD, meth );
+  GP=F and trace("[ENTER]<%s:%s>List(%s) Value(%s) Position(%d)",
+    MOD, meth, tostring(myList), tostring(newValue), position );
   
   local listSize = list.size( myList );
   if( position > listSize ) then
@@ -1937,7 +1972,7 @@ local function leafInsert( leafRec, searchPath, ldtMap, newValue )
   GP=F and trace("[ENTER]<%s:%s> value(%s) KeyType(%s)",
     MOD, meth, tostring(newValue), tostring(ldtMap[R_KeyType]) );
 
-  printf("[WARNING]<%s:%s>Using LIST MODE ONLY - No Binary Support (yet)",
+  info("[WARNING]<%s:%s>Using LIST MODE ONLY - No Binary Support (yet)",
     MOD, meth );
 
   -- Get the control and list info from the leaf record
@@ -2119,37 +2154,6 @@ local function splitLeafInsert( topRec, searchPath, ldtMap, newKey, newValue )
 end -- splitLeafInsert()
 
 -- ======================================================================
--- The value is either simple (atomic) or an object (complex).  Complex
--- objects either have a key function defined, or they have a field called
--- "key" that will give us a key value.
--- If none of these are true -- then return -1 to show our displeasure.
--- ======================================================================
-local function getKeyValue( ldtMap, value )
-  local meth = "getKeyValue()";
-  GP=F and trace("[ENTER]<%s:%s> value(%s) KeyType(%s)",
-    MOD, meth, tostring(value), tostring(ldtMap[R_KeyType]) );
-
-  local keyValue;
-  if( ldtMap[R_KeyType] == KT_ATOMIC ) then
-    keyValue = value;
-  else
-    -- for the moment, we assume complex objects (maps) have a field
-    -- called 'key'.  If not, then, well ... tough.
-    local keyFunction = ldtMap[R_KeyFunction];
-    if( keyFunction ~= nil ) and functionTable[keyFunction] ~= nil then
-      keyValue = functionTable[keyFunction]( value );
-    elseif value["key"] ~= nil then
-      keyValue = value["key"];
-    else
-      keyValue = -1;
-    end
-  end
-
-  GP=F and trace("[EXIT]<%s:%s> Result(%s)", MOD, meth, tostring(keyValue) );
-  return keyValue;
-end -- getKeyValue();
-
--- ======================================================================
 -- firstTreeInsert( topRec, ldtList, newValue, stats )
 -- ======================================================================
 -- For the VERY FIRST INSERT, we don't need to search.  We just put the
@@ -2170,6 +2174,7 @@ local function firstTreeInsert( topRec, ldtList, newValue, stats )
   -- Extract the property map and control map from the ldt bin list.
   local propMap = ldtList[1];
   local ldtMap  = ldtList[2];
+  local binName = propMap[PM_BinName];
 
   local rootKeyList = ldtMap[R_RootKeyList];
   local rootDigestList = ldtMap[R_RootDigestList];
@@ -2182,6 +2187,9 @@ local function firstTreeInsert( topRec, ldtList, newValue, stats )
 
   local rightLeafRec = createLeafRec( topRec, ldtList, newValue);
   local rightLeafDigest = record.digest( rightLeafRec );
+
+  GP=F and trace("[DEBUG]<%s:%s>Created Left(%s) and Right(%s) Records",
+    MOD, meth, tostring(leftLeafDigest), tostring(rightLeafDigest) );
 
   -- Insert our very first key into the root directory (no search needed),
   -- along with the two new child digests
@@ -2197,8 +2205,14 @@ local function firstTreeInsert( topRec, ldtList, newValue, stats )
   end
 
   ldtMap[R_TreeLevel] = 2; -- We can do this blind, since it's special.
+
+  -- Still experimenting -- not sure how much we have to "reset", but some
+  -- things are not currently being updated correctly.
+  -- TODO: @TOBY: Double check this and fix.
   ldtMap[R_RootKeyList] = rootKeyList;
   ldtMap[R_RootDigestList] = rootDigestList;
+  ldtList[2] = ldtMap;
+  topRec[binName] = ldtList;
 
   -- Note: The caller will update the top record, but we need to update
   -- and close the subrecs here.
@@ -2264,7 +2278,7 @@ local function treeInsert( topRec, ldtList, newValue, stats )
       MOD, meth, leafLevel, tostring(searchPath.HasRoom[leafLevel] ));
 
     if( searchPath.HasRoom[leafLevel] == true ) then
-      local leafSubRec = searchPath.subRec[leafLevel];
+      local leafSubRec = searchPath.RecList[leafLevel];
       -- Regular Leaf Insert
       rc = leafInsert( topRec, searchPath, ldtMap, newValue );
     else
@@ -2769,7 +2783,7 @@ treeScan(resultList, topRec, searchPath, ldtList, searchKey, func, fargs )
   local done = false;
   local startPosition = searchPath.PositionList[leafLevel];
   while not done do
-    GP=F and info("[LOOP DEBUG]<%s:%s> Top of Loop: Count(%d)", MOD, meth, count );
+    GP=F and info("[LOOP DEBUG]<%s:%s>Loop Top: Count(%d)", MOD, meth, count );
     rc = scanLeaf(topRec, leafRec, startPosition, ldtMap, resultList,
                           searchKey, func, fargs, flag)
 
