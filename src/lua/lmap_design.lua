@@ -42,12 +42,12 @@
 -- 4. Modification: 
 --    The LMAP control-bin which was a simple map earlier has now been changed
 --    into a list. 
---    The first entry of the list contains the ldt-bin specific 
---    property map referred in item 2. 
---    The second entry of the list contains the original lsomap which has been
---    a map of many lmap attributes and their values 
+--    a. The first entry of the list contains the ldt-bin specific 
+--       property map referred in item 2. 
+--    b. The second entry of the list contains the original lsomap which has been
+--       a map of the standard lmap attributes and their values 
 -- 5. Modification: 
---    Abbreviated names for the lmap record attributes to save storage space
+--    Abbreviated names for the lmap record attributes to save storage space: 
 --
 --    ******************  Description copied-over from lstack.lua *********
 --
