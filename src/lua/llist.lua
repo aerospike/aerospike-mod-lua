@@ -2,7 +2,7 @@
 -- Last Update July 08,  2013: tjl
 --
 -- Keep this MOD value in sync with version above
-local MOD = "llist::07.08.P"; -- module name used for tracing.  
+local MOD = "llist::07.08.S"; -- module name used for tracing.  
 
 -- ======================================================================
 -- || GLOBAL PRINT ||
@@ -1661,7 +1661,8 @@ end -- createSearchPath()
 local function updateSearchPath(searchPath, ldtMap, nodeRec, position, keyCount)
   local meth = "updateSearchPath()";
   local rc = 0;
-  GP=F and trace("[ENTER]<%s:%s> ", MOD, meth );
+  GP=F and trace("[ENTER]<%s:%s> SP(%s) ldtMap(%s) Pos(%d) KeyCnt(%d)",
+    MOD, meth, tostring(searchPath), tostring(ldtMap), position, keyCount);
 
   info("REMEMBER!! :: Must use different counts for Root, Nodes and Leaves");
   -- RootListMax, NodeListMax, LeafListMax
@@ -1874,14 +1875,14 @@ local function treeSearch( topRec, searchPath, ldtList, searchKey )
         -- Next Node is a Leaf
         GP=F and info("[Opening Leaf]<%s:%s> Digest(%s) Pos(%d) TreeLevel(%d)",
           MOD, meth, digestString, position, i);
-        leafRec = aerospike:open_subrec( topRec, digestString );
-        GP=F and info("[Open Leaf Results]<%s:%s>leafRec(%s)",
-          MOD,meth,tostring(leafRec));
-        propMap = leafRec[SUBREC_PROP_BIN];
-        leafMap = leafRec[LSR_CTRL_BIN];
+        nodeRec = aerospike:open_subrec( topRec, digestString );
+        GP=F and info("[Open Leaf Results]<%s:%s>nodeRec(%s)",
+          MOD,meth,tostring(nodeRec));
+        propMap = nodeRec[SUBREC_PROP_BIN];
+        leafMap = nodeRec[LSR_CTRL_BIN];
         GP=F and info("[DEBUG]<%s:%s> NEXT NODE: LEAF NODE: Type(%s)",
             MOD, meth, tostring( propMap[PM_LdtType]));
-        objectList = leafRec[LSR_LIST_BIN];
+        objectList = nodeRec[LSR_LIST_BIN];
         objectCount = list.size( objectList );
       end
     else
@@ -1961,21 +1962,23 @@ end -- listInsert()
 -- room for the new value.
 -- If we're at the end, we just append to the list.
 -- Parms:
--- (*) leafRec: Ptr to the leaf page
+-- (*) topRec: Primary Record
 -- (*) searchPath: Search Structure -- shows us position of leaf insert
 -- (*) ldtMap: LDT Control: needed for key type and storage mode
 -- (*) newValue: Object to be inserted.
 -- ======================================================================
-local function leafInsert( leafRec, searchPath, ldtMap, newValue )
+local function leafInsert( topRec, searchPath, ldtMap, newValue )
   local meth = "leafInsert()";
   local rc = 0;
-  GP=F and trace("[ENTER]<%s:%s> value(%s) KeyType(%s)",
-    MOD, meth, tostring(newValue), tostring(ldtMap[R_KeyType]) );
+  GP=F and trace("[ENTER]<%s:%s> SP(%s) value(%s) ldtMap(%s)",
+    MOD, meth, tostring(searchPath), tostring(newValue), tostring(ldtMap));
 
   info("[WARNING]<%s:%s>Using LIST MODE ONLY - No Binary Support (yet)",
     MOD, meth );
 
   -- Get the control and list info from the leaf record
+  local leafLevel = searchPath.LevelCount;
+  local leafRec = searchPath.RecList[leafLevel];
   local leafList = leafRec[LSR_LIST_BIN];
   local leafmap =  leafRec[LSR_CTRL_BIN];
 
@@ -2110,7 +2113,7 @@ local function splitLeafInsert( topRec, searchPath, ldtMap, newKey, newValue )
   warn("[WARNING]<%s:%s> Function Not Complete", MOD, meth );
   warn("[WARNING]<%s:%s> Function Not Complete", MOD, meth );
 
-  local leafLevel = searchPath.TreeLevel;
+  local leafLevel = searchPath.LevelCount;
   local leafPosition = searchPath.Position[leafLevel];
   local leafSubRecDigest = searchPath.DigestList[leafLevel];
   -- Open the Leaf and look inside.
