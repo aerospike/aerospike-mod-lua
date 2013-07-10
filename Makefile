@@ -45,17 +45,17 @@ INC_PATH += $(COMMON)/$(TARGET_INCL)
 ##  OBJECTS                                                                  ##
 ###############################################################################
 
-MOD_LUA =
-MOD_LUA += mod_lua.o
-MOD_LUA += mod_lua_reg.o
-MOD_LUA += mod_lua_aerospike.o
-MOD_LUA += mod_lua_record.o
-MOD_LUA += mod_lua_iterator.o
-MOD_LUA += mod_lua_list.o
-MOD_LUA += mod_lua_map.o
-MOD_LUA += mod_lua_bytes.o
-MOD_LUA += mod_lua_stream.o
-MOD_LUA += mod_lua_val.o
+OBJECTS =
+OBJECTS += mod_lua.o
+OBJECTS += mod_lua_reg.o
+OBJECTS += mod_lua_aerospike.o
+OBJECTS += mod_lua_record.o
+OBJECTS += mod_lua_iterator.o
+OBJECTS += mod_lua_list.o
+OBJECTS += mod_lua_map.o
+OBJECTS += mod_lua_bytes.o
+OBJECTS += mod_lua_stream.o
+OBJECTS += mod_lua_val.o
 
 ###############################################################################
 ##  MAIN TARGETS                                                             ##
@@ -73,6 +73,7 @@ build: libmod_lua
 build-clean:
 	@rm -rf $(TARGET_BIN)
 	@rm -rf $(TARGET_LIB)
+	@rm -rf $(TARGET_OBJ)
 
 .PHONY: libmod_lua libmod_lua.a libmod_lua.so
 libmod_lua: libmod_lua.a libmod_lua.so
@@ -83,10 +84,14 @@ libmod_lua.so: $(TARGET_LIB)/libmod_lua.so
 ##  BUILD TARGETS                                                            ##
 ###############################################################################
 
-$(TARGET_OBJ)/%.o: COMMON-prepare $(SOURCE_MAIN)/%.c | modules-prepare
+$(TARGET_OBJ)/%.o: $(SOURCE_MAIN)/%.c | COMMON-prepare modules-prepare $(TARGET_OBJ)
 	$(object)
 
-$(TARGET_LIB)/libmod_lua.a $(TARGET_LIB)/libmod_lua.so: $(MOD_LUA:%=$(TARGET_OBJ)/%) | $(COMMON)/$(TARGET_INCL)/aerospike/*.h
+$(TARGET_LIB)/libmod_lua.a: $(OBJECTS:%=$(TARGET_OBJ)/%) | $(COMMON)/$(TARGET_INCL)/aerospike/*.h $(TARGET_LIB)
+	$(archive)
+
+$(TARGET_LIB)/libmod_lua.so: $(OBJECTS:%=$(TARGET_OBJ)/%) | $(COMMON)/$(TARGET_INCL)/aerospike/*.h $(TARGET_LIB)
+	$(library)
 
 $(TARGET_INCL)/aerospike: | $(TARGET_INCL)
 	mkdir $@

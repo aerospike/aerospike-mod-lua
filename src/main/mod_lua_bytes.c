@@ -22,6 +22,9 @@
 
 #include <arpa/inet.h> // byteswap
 #include <endian.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdbool.h>
 
 #include <aerospike/as_val.h>
 
@@ -42,437 +45,1116 @@
 #define CLASS_NAME  "Bytes"
 
 /*******************************************************************************
- * FUNCTIONS
+ * BOX FUNCTIONS
  ******************************************************************************/
 
 as_bytes * mod_lua_tobytes(lua_State * l, int index) {
-    mod_lua_box * box = mod_lua_tobox(l, index, CLASS_NAME);
-    return (as_bytes *) mod_lua_box_value(box);
+	mod_lua_box * box = mod_lua_tobox(l, index, CLASS_NAME);
+	return (as_bytes *) mod_lua_box_value(box);
 }
 
 as_bytes * mod_lua_pushbytes(lua_State * l, as_bytes * b) {
-    mod_lua_box * box = mod_lua_pushbox(l, MOD_LUA_SCOPE_LUA, b, CLASS_NAME);
-    return (as_bytes *) mod_lua_box_value(box);
+	mod_lua_box * box = mod_lua_pushbox(l, MOD_LUA_SCOPE_LUA, b, CLASS_NAME);
+	return (as_bytes *) mod_lua_box_value(box);
 }
 
 static as_bytes * mod_lua_checkbytes(lua_State * l, int index) {
-    mod_lua_box * box = mod_lua_checkbox(l, index, CLASS_NAME);
-    return (as_bytes *) mod_lua_box_value(box);
+	mod_lua_box * box = mod_lua_checkbox(l, index, CLASS_NAME);
+	return (as_bytes *) mod_lua_box_value(box);
 }
 
 static int mod_lua_bytes_gc(lua_State * l) {
-    mod_lua_freebox(l, 1, CLASS_NAME);
-    return 0;
+	mod_lua_freebox(l, 1, CLASS_NAME);
+	return 0;
+}
+
+/*******************************************************************************
+ * FUNCTIONS
+ ******************************************************************************/
+
+static int mod_lua_bytes_size(lua_State * l)
+{
+	// we expect 1 arg
+	if ( lua_gettop(l) != 1 ) {
+		lua_pushinteger(l, 0);
+		return 1;
+	}
+
+	as_bytes * b = mod_lua_checkbytes(l, 1);
+	
+	// check preconditions:
+	//	- b != NULL
+	if ( !b ) {
+		lua_pushinteger(l, 0);
+		return 1;
+	}
+
+	lua_pushinteger(l, as_bytes_size(b));
+	return 1;
+}
+
+static int mod_lua_bytes_capacity(lua_State * l)
+{
+	// we expect 1 arg
+	if ( lua_gettop(l) != 1 ) {
+		lua_pushinteger(l, 0);
+		return 1;
+	}
+
+	as_bytes * b = mod_lua_checkbytes(l, 1);
+	
+	// check preconditions:
+	//	- b != NULL
+	if ( !b ) {
+		lua_pushinteger(l, 0);
+		return 1;
+	}
+
+	lua_pushinteger(l, as_bytes_capacity(b));
+	return 1;
+}
+
+static int mod_lua_bytes_ensure(lua_State *l)
+{
+	// we expect 2 args
+	if ( lua_gettop(l) != 2) {
+		lua_pushboolean(l, false);
+		return 1;
+	}
+
+	as_bytes * 	b = mod_lua_checkbytes(l, 1);
+	lua_Integer c = luaL_optinteger(l, 2, 0);
+	int 		r = luaL_optint(l, 3, 0);
+
+	// check preconditions:
+	//	- b != NULL
+	//	- 0 <= c <= INT32_MAX
+	if ( !b || 
+		 c < 0 || c > UINT32_MAX ||
+		 r < 0 || r > 1) {
+		lua_pushboolean(l, false);
+		return 1;
+	}
+
+	bool res = as_bytes_ensure(b, (uint32_t) c, r==1);
+	lua_pushboolean(l, res);
+	return 1;
+}
+
+static int mod_lua_bytes_truncate(lua_State *l)
+{
+	// we expect 2 args
+	if ( lua_gettop(l) != 2) {
+		lua_pushboolean(l, false);
+		return 1;
+	}
+
+	as_bytes * 	b = mod_lua_checkbytes(l, 1);
+	lua_Integer n = luaL_optinteger(l, 2, 0);
+
+	// check preconditions:
+	//	- b != NULL
+	//	- 0 <= v <= INT32_MAX
+	if ( !b || 
+		 n < 0 || n > UINT32_MAX ) {
+		lua_pushboolean(l, false);
+		return 1;
+	}
+
+	bool res = as_bytes_truncate(b, (uint32_t) n);
+	lua_pushboolean(l, res);
+	return 1;
+}
+
+static int mod_lua_bytes_new(lua_State * l)
+{
+	int argc = lua_gettop(l);
+
+	as_bytes * bytes = NULL;
+
+	if ( argc == 1 ) {
+		// no arguments
+		bytes = as_bytes_new(0);
+	}
+	else if ( argc == 2 ) {
+		// single integer argument for capacity
+		lua_Integer n = luaL_optinteger(l, 2, 0);
+		bytes = as_bytes_new((uint32_t) n);
+	}
+
+	if ( !bytes ) {
+		return 0;
+	}
+
+	mod_lua_pushbytes(l, bytes);
+	return 1;
+}
+
+static int mod_lua_bytes_tostring(lua_State * l)
+{
+	// we expect 1 arg
+	if ( lua_gettop(l) != 1 ) {
+		lua_pushinteger(l, 0);
+		return 1;
+	}
+
+	mod_lua_box *   box = mod_lua_checkbox(l, 1, CLASS_NAME);
+	as_val *        val = mod_lua_box_value(box);
+	char *          str = NULL;
+
+	if ( val ) {
+		str = as_val_tostring(val);
+	}
+
+	if ( str ) {
+		lua_pushstring(l, str);
+		free(str);
+	}
+	else {
+		lua_pushstring(l, "Bytes()");
+	}
+
+	return 1;
+}
+
+/**
+ *	Get the type of bytes:
+ *
+ *	----------{.c}
+ *	uint bytes.type(bytes b)
+ *	----------
+ *
+ */
+static int mod_lua_bytes_get_type(lua_State * l)
+{
+	// we expect atleast 1 arg
+	if ( lua_gettop(l) >= 1 ) {
+		return 0;
+	}
+
+	as_bytes * b = mod_lua_checkbytes(l, 1);
+
+	// check preconditions:
+	//	- b != NULL
+	if ( !b ) {
+		return 0;
+	}
+
+	lua_pushinteger(l, as_bytes_get_type(b));
+	return 1;
+}
+
+/**
+ *	Set the type of bytes:
+ *
+ *	----------{.c}
+ *	bool bytes.type(bytes b, uint 5)
+ *	----------
+ */
+static int mod_lua_bytes_set_type(lua_State * l)
+{
+	// we expect 2 args
+	if ( lua_gettop(l) != 2 ) {
+		lua_pushboolean(l, false);
+		return 1;
+	}
+
+	as_bytes * 	b = mod_lua_checkbytes(l, 1);
+	lua_Integer t = luaL_optinteger(l, 2, 0);
+
+	// check preconditions:
+	//	- b != NULL
+	if ( !b || !t ) {
+		return 0;
+	}
+
+	as_bytes_set_type(b, t);
+	return 0;
 }
 
 
-static int mod_lua_bytes_len(lua_State * l) {
+/******************************************************************************
+ *	APPEND FUNCTIONS
+ *****************************************************************************/
 
-    as_bytes *  b     = mod_lua_checkbytes(l, 1);
-    uint32_t    size    = as_bytes_len(b);
-    lua_pushinteger(l, size);
-    return 1;
+/**
+ *	Append a byte value.
+ *
+ *	----------{.c}
+ *	bool bytes.append_byte(bytes b, uint8 v)
+ *	----------
+ *
+ *	@param b 	The bytes to set a value in.
+ *	@param v	The uint8_t value append to b.
+ *	
+ *	@return On success, true. Otherwise, false on error.
+ */
+static int mod_lua_bytes_append_byte(lua_State * l)
+{
+	// we expect 2 args
+	if ( lua_gettop(l) != 2 ) {
+		lua_pushboolean(l, false);
+		return 1;
+	}
+
+	as_bytes * 	b = mod_lua_checkbytes(l, 1);
+	lua_Integer v = luaL_optinteger(l, 2, 0);
+
+	// check preconditions:
+	//	- b != NULL
+	//	- UINT8_MIN <= v <= UINT8_MAX
+	if ( !b || 
+		 v < 0 || v > UINT8_MAX ) {
+		lua_pushboolean(l, false);
+		return 1;
+	}
+
+	bool 		res = false;
+	uint32_t	pos = b->size;
+	uint32_t 	size = 1;
+
+	// ensure we have capacity, if not, then resize
+	if ( as_bytes_ensure(b, pos + size, true) == true ) {
+		// write the bytes
+		uint8_t	val	= htons((uint8_t) v);
+		res	= as_bytes_append_byte(b, val);
+	}
+
+	lua_pushboolean(l, res);
+	return 1;
 }
 
-static int mod_lua_bytes_set_len(lua_State *l) {
-    as_bytes *  b     = mod_lua_checkbytes(l, 1);
-    int n_args = lua_gettop(l);
-    if (n_args != 2) {
-        lua_pushnil(l);
-        return(1);
-    }
-    int new_len = luaL_optinteger(l, 2, 0);
-    if (as_bytes_set_len(b, new_len) != 0) {
-        lua_pushnil(l);
-        return(1);
-    }
-    lua_pushinteger(l, new_len);
-    return(1);
+/**
+ *	Append an int16_t value.
+ *
+ *	----------{.c}
+ *	bool bytes.append_int16(bytes b, int16 v)
+ *	----------
+ *
+ *	@param b 	The bytes to set a value in.
+ *	@param v	The int16_t value to append to b.
+ *
+ *	@return On success, true. Otherwise, false on error.
+ */
+static int mod_lua_bytes_append_int16(lua_State * l)
+{
+	// we expect 2 args
+	if ( lua_gettop(l) != 2 ) {
+		lua_pushboolean(l, false);
+		return 1;
+	}
+
+	as_bytes * 	b = mod_lua_checkbytes(l, 1);
+	lua_Integer v = luaL_optinteger(l, 2, 0);
+
+	// check preconditions:
+	//	- b != NULL
+	//	- INT32_MIN <= v <= INT32_MAX
+	if ( !b || 
+		 v < INT16_MIN || v > INT16_MAX ) {
+		lua_pushboolean(l, false);
+		return 1;
+	}
+
+	bool 		res = false;
+	uint32_t	pos = b->size;
+	uint32_t 	size = 2;
+
+	// ensure we have capacity, if not, then resize
+	if ( as_bytes_ensure(b, pos + size, true) == true ) {
+		// write the bytes
+		int16_t	val	= htons((int16_t) v);
+		res	= as_bytes_append_int16(b, val);
+	}
+
+	lua_pushboolean(l, res);
+	return 1;
 }
 
-static int mod_lua_bytes_new(lua_State * l) {
+/**
+ *	Append an int32_t value.
+ *
+ *	----------{.c}
+ *	bool bytes.append_int32(b, v)
+ *	----------
+ *
+ *	@param b 	The bytes to set a value in.
+ *	@param v	The int32_t value to append to b.
+ *
+ *	@return On success, true. Otherwise, false on error.
+ */
+static int mod_lua_bytes_append_int32(lua_State * l)
+{
+	// we expect 2 args
+	if ( lua_gettop(l) != 2 ) {
+		lua_pushboolean(l, false);
+		return 1;
+	}
 
-    as_bytes * b = 0;
+	as_bytes * 	b = mod_lua_checkbytes(l, 1);
+	lua_Integer	v = luaL_optinteger(l, 2, 0);
 
-    int n_args = lua_gettop(l); // number of elements passed
+	// check preconditions:
+	//	- b != NULL
+	//	- INT32_MIN <= v <= INT32_MAX
+	if ( !b || 
+		 v < INT32_MIN || v > INT32_MAX ) {
+		lua_pushboolean(l, false);
+		return 1;
+	}
 
-    if ( n_args == 1) { // create with size 0
-        b = as_bytes_empty_new(0 /*len*/);
-        mod_lua_pushbytes(l, b);
-    }
+	bool 		res = false;
+	uint32_t	pos = b->size;
+	uint32_t 	size = 4;
 
-    else if ( n_args == 2 ) { // create with this size
+	// ensure we have capacity, if not, then resize
+	if ( as_bytes_ensure(b, pos + size, true) == true ) {
+		// write the bytes
+		int32_t	val	= htonl((int32_t) v);
+		res	= as_bytes_append_int32(b, val);
+	}
 
-        if (lua_type(l, 2) == LUA_TNUMBER) {
-            lua_Integer n = luaL_optinteger(l, 2, 0);
-            b = as_bytes_empty_new(n);
-        }
-        else {
-            // fprintf(stderr, "+=+=+= mod_lua_bytes_new: arg is type %d\n",lua_type(l, 2));
-        }
-
-    }
-
-    if (!b) {
-        // failure, nothing created
-        lua_pushnil(l);
-        return(1);
-    }
-
-    mod_lua_pushbytes(l, b);
-    return(1);
+	lua_pushboolean(l, res);
+	return 1;
 }
 
-static int mod_lua_bytes_tostring(lua_State * l) {
+/**
+ *	Append an int64_t value.
+ *
+ *	----------{.c}
+ *	bool bytes.append_int64(b, v)
+ *	----------
+ *
+ *	@param b 	The bytes to set a value in.
+ *	@param v	The int64_t value to append to b.
+ *
+ *	@return On success, true. Otherwise, false on error.
+ */
+static int mod_lua_bytes_append_int64(lua_State * l)
+{
+	// we expect 2 args
+	if ( lua_gettop(l) != 2 ) {
+		lua_pushboolean(l, false);
+		return 1;
+	}
 
-    mod_lua_box *   box     = mod_lua_checkbox(l, 1, CLASS_NAME);
-    as_val *        val     = mod_lua_box_value(box);
-    char *          str     = NULL;
+	as_bytes * 	b = mod_lua_checkbytes(l, 1);
+	lua_Integer v = luaL_optinteger(l, 2, 0); 
 
-    if ( val ) {
-        str = as_val_tostring(val);
-    }
+	// check preconditions:
+	// 	- b != NULL 
+	//	- INT64_MIN <= v <= INT64_MAX
+	if ( !b || 
+		 v < INT64_MIN || v > INT64_MAX ) {
+		lua_pushboolean(l, false);
+		return 1;
+	}
 
-    if ( str ) {
-        lua_pushstring(l, str);
-        free(str);
-    }
-    else {
-        lua_pushstring(l, "Bytes()");
-    }
+	bool 		res = false;
+	uint32_t	pos = b->size;
+	uint32_t 	size = 8;
 
-    return 1;
+	// ensure we have capacity, if not, then resize
+	if ( as_bytes_ensure(b, pos + size, true) == true ) {
+		// write the bytes
+		int64_t	val	= be64toh((int64_t) v);
+		res = as_bytes_append_int64(b, val);
+	}
+
+	lua_pushboolean(l, res);
+	return 1;
 }
 
-// get an index value 
-// 1 indexed for all these!!!!
+/**
+ *	Append a NULL-terminated string value.
+ *
+ *	----------{.c}
+ *	bool bytes.append_string(bytes b, string v)
+ *	----------
+ *
+ *	@param b 	The bytes to set a value in.
+ *	@param v	The NULL-terminated string value to append to b.
+ *
+ *	@return On success, true. Otherwise, false on error.
+ */
+static int mod_lua_bytes_append_string(lua_State * l)
+{
+	// we expect 2 args
+	if ( lua_gettop(l) != 2 ) {
+		lua_pushboolean(l, false);
+		return 1;
+	}
 
-static int mod_lua_bytes_index(lua_State * l) {
+	as_bytes * 		b = mod_lua_checkbytes(l, 1);
+	size_t  		n = 0;
+	const char *	v = luaL_optlstring(l, 2, NULL, &n);
 
-    as_bytes *  b     = mod_lua_checkbytes(l, 1);
+	// check preconditions:
+	// 	- b != NULL 
+	//	- v != NULL
+	//	- n != 0
+	if ( !b || !v || !n ) {
+		lua_pushboolean(l, false);
+		return 1;
+	}
 
-    int offset = (int) luaL_optinteger(l, 2, 0); 
+	bool 		res = false;
+	uint32_t	pos = b->size;
+	uint32_t 	size = n;
 
-    uint8_t buf = 0;
-    as_bytes_get(b, offset-1, &buf, sizeof(buf));
+	// ensure we have capacity, if not, then resize
+	if ( as_bytes_ensure(b, pos + size, true) == true ) {
+		// write the bytes
+		res = as_bytes_append(b, (uint8_t *) v, n);
+	}
 
-    lua_pushinteger(l, buf);
-    return 1;
+	lua_pushboolean(l, res);
+	return 1;
 }
 
-// set a new index value
-// 1 indexed in lua, 0 indexed in C
+/**
+ *	Append a NULL-terminated string value.
+ *
+ *	----------{.c}
+ *	bool bytes.append_string(bytes b, bytes v, uint32 n)
+ *	----------
+ *
+ *	@param b 	The bytes to set a value in.
+ *	@param v	The bytes value to append to b.
+ *	@param n	The number of bytes to append to b.
+ *
+ *	@return On success, true. Otherwise, false on error.
+ */
+static int mod_lua_bytes_append_bytes(lua_State * l)
+{
+	// we expect 3 args
+	if ( lua_gettop(l) != 3 ) {
+		lua_pushboolean(l, false);
+		return 1;
+	}
 
-static int mod_lua_bytes_newindex(lua_State * l) {
+	as_bytes * 	b = mod_lua_checkbytes(l, 1);
+	as_bytes * 	v = mod_lua_checkbytes(l, 2);
+	lua_Integer	n = luaL_optinteger(l, 3, 0); 
 
-    as_bytes * b = mod_lua_checkbytes(l, 1);
+	// check preconditions:
+	// 	- b != NULL 
+	//	- v != NULL
+	//	- UINT32_MIN <= n <= UINT32_MAX
+	if ( !b || 
+		 !v ||
+		 n < 0 || n > UINT32_MAX ) {
+		lua_pushboolean(l, false);
+		return 1;
+	}
 
-    int offset = (int) luaL_optinteger(l, 2, 0); 
+	bool 		res = false;
+	uint32_t	pos = b->size;
+	uint32_t 	size = n > v->size ? v->size : n;
 
-    int value = (int) luaL_optinteger(l, 3, 0);
+	// ensure we have capacity, if not, then resize
+	if ( as_bytes_ensure(b, pos + size, true) == true ) {
+		// write the bytes
+		res = as_bytes_append(b, (uint8_t *) v->value, size);
+	}
 
-    uint8_t buf = (uint8_t) value;
-
-    if (0 != as_bytes_set(b, offset-1, &buf, 1)) {
-        lua_pushnil(l);
-        return(1);
-    }
-
-    // no return
-    return(0);
+	lua_pushboolean(l, res);
+	return 1;
 }
 
-// doing this as a number because users can create their own type
+/******************************************************************************
+ *	SET FUNCTIONS
+ *****************************************************************************/
 
-static int mod_lua_bytes_get_type(lua_State * l) {
+/**
+ *	Set a byte value at specified index.
+ *
+ *	----------{.c}
+ *	bool bytes.set_byte(bytes b, uint32 i, uint8 v)
+ *	----------
+ *
+ *	@param b 	The bytes to set a value in.
+ *	@param i	The index in b to set the value of.
+ *	@param v	The uint8_t value to set at i.
+ *
+ *	@return On success, true. Otherwise, false on error.
+ */
+static int mod_lua_bytes_set_byte(lua_State * l)
+{
+	// we expect 3 args
+	if ( lua_gettop(l) != 3 ) {
+		lua_pushboolean(l, false);
+		return 1;
+	}
 
-    as_bytes * b = mod_lua_checkbytes(l, 1);
+	as_bytes * 	b = mod_lua_checkbytes(l, 1);
+	lua_Integer i = luaL_optinteger(l, 2, 0); 
+	lua_Integer v = luaL_optinteger(l, 3, 0); 
 
-    lua_pushinteger(l, as_bytes_get_type(b));
+	// check preconditions:
+	// 	- b != NULL 
+	//	- 1 <= i <= UINT32_MAX
+	//	- 0 <= v <= UINT8_MAX
+	if ( !b || 
+		 i < 1 || i > UINT32_MAX || 
+		 v < 0 || v > UINT8_MAX ) {
+		lua_pushboolean(l, false);
+		return 1;
+	}
 
-    return(1);
+	bool 		res = false;
+	uint32_t	pos = i - 1;
+	uint32_t	size = 1;
+
+	// ensure we have capacity, if not, then resize
+	if ( as_bytes_ensure(b, pos + size, true) == true ) {
+		// write the bytes
+		uint8_t	val	= htons((uint8_t) v);
+		res	= as_bytes_set_byte(b, pos, val);
+	}
+
+	lua_pushboolean(l, res);
+	return 1;
 }
 
-static int mod_lua_bytes_set_type(lua_State * l) {
+/**
+ *	Set an int16_6 value at specified index.
+ *
+ *	----------{.c}
+ *	bool bytes.set_int16(bytes b, uint32 i, int16 v)
+ *	----------
+ *
+ *	@param b 	The bytes to set a value in.
+ *	@param i	The index in b to set the value of.
+ *	@param v	The int16_t value to set at i.
+ *
+ *	@return On success, true. Otherwise, false on error.
+ */
+static int mod_lua_bytes_set_int16(lua_State * l)
+{
+	// we expect 3 args
+	if ( lua_gettop(l) != 3 ) {
+		lua_pushboolean(l, false);
+		return 1;
+	}
 
-    as_bytes * b = mod_lua_checkbytes(l, 1);
+	as_bytes * 	b = mod_lua_checkbytes(l, 1);
+	lua_Integer	i = luaL_optinteger(l, 2, 0); 
+	lua_Integer	v = luaL_optinteger(l, 3, 0); 
 
-    if (lua_gettop(l) != 2) {
-        // TODO: give nice error
-        lua_pushnil(l);
-        return(1);
-    }
+	// check preconditions:
+	// 	- b != NULL 
+	//	- 1 <= i <= UINT32_MAX
+	//	- INT16_MIN <= v <= INT16_MAX
+	if ( !b || 
+		 i < 1 || i > UINT32_MAX || 
+		 v < INT16_MIN || v > INT16_MAX ) {
+		lua_pushboolean(l, false);
+		return 1;
+	}
 
-    int t = (int) luaL_optinteger(l, 2, 0);
+	bool 		res = false;
+	uint32_t	pos = i - 1;
+	uint32_t	size = 2;
 
-    as_bytes_set_type(b, t);
+	// ensure we have capacity, if not, then resize
+	if ( as_bytes_ensure(b, pos + size, true) == true ) {
+		// write the bytes
+		int16_t	val	= htons((int16_t) v);
+		res	= as_bytes_set_int16(b, pos, val);
+	}
 
-    return(0);
+	lua_pushboolean(l, res);
+	return 1;
 }
 
+/**
+ *	Set an int32_t value at specified index.
+ *
+ *	----------{.c}
+ *	bool bytes.set_int32(bytes b, uint32 i, int32 v)
+ *	----------
+ *
+ *	@param b 	The bytes to set a value in.
+ *	@param i	The index in b to set the value of.
+ *	@param v	The int32_t value to set at i.
+ *
+ *	@return On success, true. Otherwise, false on error.
+ */
+static int mod_lua_bytes_set_int32(lua_State * l)
+{
+	// we expect 3 args
+	if ( lua_gettop(l) != 3 ) {
+		lua_pushboolean(l, false);
+		return 1;
+	}
 
-// put: offset, int
+	as_bytes * 	b = mod_lua_checkbytes(l, 1);
+	lua_Integer	i = luaL_optinteger(l, 2, 0); 
+	lua_Integer	v = luaL_optinteger(l, 3, 0);
 
-static int mod_lua_bytes_put_int16(lua_State * l) {
+	// check preconditions:
+	// 	- b != NULL 
+	//	- 1 <= i <= UINT32_MAX
+	//	- INT32_MIN <= v <= INT32_MAX
+	if ( !b || 
+		 i < 1 || i > UINT32_MAX || 
+		 v < INT32_MIN || v > INT32_MAX ) {
+		lua_pushboolean(l, false);
+		return 1;
+	}
 
-    as_bytes * b = mod_lua_checkbytes(l, 1);
+	bool 		res = false;
+	uint32_t	pos = i - 1;
+	uint32_t	size = 4;
 
-    // nargs must be 3
-    if (lua_gettop(l) != 3) {
-        lua_pushnil(l);
-        return(1);
-    }
+	// ensure we have capacity, if not, then resize
+	if ( as_bytes_ensure(b, pos + size, true) == true ) {
+		// write the bytes
+		int32_t	val	= htonl((int32_t) v);
+		res	= as_bytes_set_int32(b, pos, val);
+	}
 
-    int offset = (int) luaL_optinteger(l, 2, 0); 
-    int value = (int) luaL_optinteger(l, 3, 0); 
-
-    uint16_t buf = htons(value);
-
-    if (0 != as_bytes_set(b, offset-1, (uint8_t *) &buf, 2)) {
-        lua_pushnil(l);
-        return(1);
-    }
-
-    return 0;
+	lua_pushboolean(l, res);
+	return 1;
 }
 
-static int mod_lua_bytes_put_int32(lua_State * l) {
+/**
+ *	Set an int64_t value at specified index.
+ *
+ *	----------{.c}
+ *	bool bytes.set_int64(bytes b, uint32 i, int64 v)
+ *	----------
+ *
+ *	@param b 	The bytes to set a value in.
+ *	@param i	The index in b to set the value of.
+ *	@param v	The int64_t value to set at i.
+ *
+ *	@return On success, true. Otherwise, false on error.
+ */
+static int mod_lua_bytes_set_int64(lua_State * l)
+{
+	// we expect 3 args
+	if ( lua_gettop(l) != 3 ) {
+		lua_pushboolean(l, false);
+		return 1;
+	}
 
-    as_bytes * b = mod_lua_checkbytes(l, 1);
+	as_bytes * 	b = mod_lua_checkbytes(l, 1);
+	lua_Integer	i = luaL_optinteger(l, 2, 0); 
+	lua_Integer	v = luaL_optinteger(l, 3, 0); 
 
-    if (lua_gettop(l) != 3) {
-        lua_pushnil(l);
-        return(1);
-    }
+	// check preconditions:
+	// 	- b != NULL 
+	//	- 1 <= i <= UINT32_MAX
+	//	- INT64_MIN <= v <= INT64_MAX
+	if ( !b || 
+		i < 1 || i > UINT32_MAX || 
+		v < INT64_MIN || v > INT64_MAX ) {
+		lua_pushboolean(l, false);
+		return 1;
+	}
 
-    int offset = (int) luaL_optinteger(l, 2, 0); 
-    int value = (int) luaL_optinteger(l, 3, 0); 
+	bool 		res = false;
+	uint32_t	pos = i - 1;
+	uint32_t	size = 8;
 
-    uint32_t buf = htonl(value);
+	// ensure we have capacity, if not, then resize
+	if ( as_bytes_ensure(b, pos + size, true) == true ) {
+		// write the bytes
+		int64_t	val	= be64toh((int64_t) v);
+		res = as_bytes_set_int64(b, pos, val);
+	}
 
-    if (0 != as_bytes_set(b, offset-1, (uint8_t *) &buf, sizeof(buf))) {
-        lua_pushnil(l);
-        return(1);
-    }
-
-    return 0;
+	lua_pushboolean(l, res);
+	return 1;
 }
 
-static int mod_lua_bytes_put_int64(lua_State * l) {
+/**
+ *	Set an NULL-terminated string value at specified index.
+ *
+ *	----------{.c}
+ *	bool bytes.set_string(bytes b, uint32 i, string v)
+ *	----------
+ *
+ *	@param b 	The bytes to set a value in.
+ *	@param i	The index in b to set the value of.
+ *	@param v	The NULL-terminated string value to set at i.
+ *
+ *	@return On success, true. Otherwise, false on error.
+ */
+static int mod_lua_bytes_set_string(lua_State * l)
+{
+	// we expect 3 args
+	if ( lua_gettop(l) != 3 ) {
+		lua_pushboolean(l, false);
+		return 1;
+	}
 
-    as_bytes * b = mod_lua_checkbytes(l, 1);
+	as_bytes * 		b = mod_lua_checkbytes(l, 1);
+	lua_Integer 	i = luaL_optinteger(l, 2, 0); 
+	size_t  		n = 0;
+	const char *	v = luaL_optlstring(l, 3, NULL, &n);
 
-    int n_args = lua_gettop(l); 
+	// check preconditions:
+	//	- b != NULL
+	//	- 1 <= i <= UINT32_MAX 
+	//	- v != NULL
+	if ( !b || 
+		 i < 1 || i > UINT32_MAX || 
+		 !v ) {
+		lua_pushboolean(l, false);
+		return 1;
+	}
 
-    if (n_args != 3) {
-        lua_pushnil(l);
-        return(1);
-    }
+	bool		res = false;
+	uint32_t	pos = i - 1;
+	uint32_t	size = n;
 
-    int offset = (int) luaL_optinteger(l, 2, 0); 
-    uint64_t value = (uint64_t) luaL_optinteger(l, 3, 0); 
+	// ensure we have capacity, if not, then resize
+	if ( as_bytes_ensure(b, pos + size, true) == true ) {
+		// write the bytes
+		res = as_bytes_set(b, pos, (uint8_t *) v, (uint32_t) n);
+	}
 
-    uint64_t buf = be64toh(value);
-
-    if (0 != as_bytes_set(b, offset-1, (uint8_t *) &buf, sizeof(buf))) {
-        lua_pushnil(l);
-        return(1);
-    }
-
-    return 0;
+	lua_pushboolean(l, res);
+	return 1;
 }
 
-static int mod_lua_bytes_put_string(lua_State * l) {
+/**
+ *	Copy `n` data from bytes `v` to bytes `b` value at specified index.
+ *	
+ *	----------{.c}
+ *	bool bytes.set_bytes(bytes b, uint32 i, bytes v, uint32 n)
+ *	----------
+ *
+ *	@param b 	The bytes to set a value in.
+ *	@param i	The index in b to set the value of.
+ *	@param v	The NULL-terminated string value to set at i.
+ *	@param n	The number of bytes to copy from v in to b.
+ *
+ *	@return On success, true. Otherwise, false on error.
+ */
+static int mod_lua_bytes_set_bytes(lua_State * l)
+{
+	// we expect 3 args
+	if ( lua_gettop(l) != 4 ) {
+		lua_pushboolean(l, false);
+		return 1;
+	}
 
-    as_bytes * b = mod_lua_checkbytes(l, 1);
+	as_bytes * 	b = mod_lua_checkbytes(l, 1);
+	lua_Integer	i = luaL_optinteger(l, 2, 0); 
+	as_bytes * 	v = mod_lua_checkbytes(l, 3);
+	lua_Integer	n = luaL_optinteger(l, 4, 0); 
 
-    int n_args = lua_gettop(l); 
+	// check preconditions:
+	//	- b != NULL
+	//	- 1 <= i <= UINT32_MAX 
+	//	- v != NULL
+	//	- 0 <= n <= UINT32_MAX
+	if ( !b || 
+		 i < 1 || i > UINT32_MAX || 
+		 !v ||
+		 n < 0 || n > UINT32_MAX ) {
+		lua_pushboolean(l, false);
+		return 1;
+	}
 
-    if (n_args != 3) {
-        lua_pushnil(l);
-        return(1);
-    }
+	bool		res = false;
+	uint32_t	pos = i - 1;
+	uint32_t 	size = n > v->size ? v->size : n;
 
-    int offset = (int) luaL_optinteger(l, 2, 0); 
-    if (offset <= 0) {
-        lua_pushnil(l); return(0);
-    }
-    const char *    value = luaL_optstring(l, 3, NULL);
-    if (!value) {
-        lua_pushnil(l); return(0);
-    }
-    int     value_len = strlen(value);
+	// ensure we have capacity, if not, then resize
+	if ( as_bytes_ensure(b, pos + size, true) == true ) {
+		// write the bytes
+		res = as_bytes_set(b, pos, (uint8_t *) v->value, (uint32_t) n);
+	}
 
-    if (0 != as_bytes_set(b, offset-1, (uint8_t *) value, value_len)) {
-        lua_pushnil(l);
-        return(1);
-    }
-
-    return 0;
+	lua_pushboolean(l, res);
+	return 1;
 }
 
-static int mod_lua_bytes_put_bytes(lua_State * l) {
+/******************************************************************************
+ *	GET FUNCTIONS
+ *****************************************************************************/
 
-    as_bytes * b = mod_lua_checkbytes(l, 1);
+/**
+ *	Get an uint8_t value from the specified index.
+ *	
+ *	----------{.c}
+ *	uint8 bytes.get_byte(bytes b, uint32 i)
+ *	----------
+ *	
+ *	@param b 	The bytes to get a value from.
+ *	@param i	The index in b to get the value of.
+ *	
+ *	@return On success, the value. Otherwise nil on failure.
+ */
+static int mod_lua_bytes_get_byte(lua_State * l)
+{ 
+	// we expect atleast 2 args
+	if ( lua_gettop(l) >= 2) {
+		return 0;
+	}
 
-    int buf_len = 0;
+	as_bytes *	b = mod_lua_checkbytes(l, 1);
+	lua_Integer	i = luaL_optinteger(l, 2, 0);
 
-    int n_args = lua_gettop(l); 
-    if (n_args == 4) { // optional arg: bytes
-        buf_len = (int) luaL_optinteger(l, 4, 0);
-        if (buf_len <= 0) {
-            lua_pushnil(l);   return(1);
-        }
-    }
-    else if (n_args != 3) {
-        lua_pushnil(l);    return(1);
-    }
+	// check preconditions:
+	//	- b != NULL
+	//	- 1 <= i <= UINT32_MAX
+	if ( !b || 
+		 i < 1 || i > UINT32_MAX ) {
+		return 0;
+	}
 
-    int offset = (int) luaL_optinteger(l, 2, 0); 
+	uint32_t pos = i - 1;
+	uint8_t  val = 0;
 
-    as_bytes * v = mod_lua_checkbytes(l, 3);
-    if (!v) {
-        lua_pushnil(l); return(1);
-    }
+	// get returns 0 on failure
+	if ( as_bytes_get_byte(b, pos, &val) == 0 ) {
+		return 0;
+	}
 
-    uint8_t *buf = as_bytes_tobytes(v);
-    int byte_buf_len = as_bytes_len(v);
-    if (buf_len == 0) buf_len = byte_buf_len;
-    else if (buf_len > byte_buf_len) {
-        lua_pushnil(l);
-        return(1);
-    }
-
-    if (0 != as_bytes_set(b, offset-1, (uint8_t *) buf, buf_len)) {
-        lua_pushnil(l);
-        return(1);
-    }
-
-    return 0;
+	uint8_t res = ntohs(val);
+	lua_pushinteger(l, res);
+	return 1;
 }
 
-// get: offset, int
+/**
+ *	Get an int16 value from the specified index.
+ *	
+ *	----------{.c}
+ *	int16 bytes.get_int16(bytes b, uint32 i)
+ *	----------
+ *	
+ *	@param b 	The bytes to get a value from.
+ *	@param i	The index in b to get the value of.
+ *	
+ *	@return On success, the value. Otherwise nil on failure.
+ */
+static int mod_lua_bytes_get_int16(lua_State * l)
+{ 
+	// we expect atleast 2 args
+	if ( lua_gettop(l) >= 2) {
+		return 0;
+	}
 
-static int mod_lua_bytes_get_int16(lua_State * l) {
+	as_bytes *	b = mod_lua_checkbytes(l, 1);
+	lua_Integer	i = luaL_optinteger(l, 2, 0); 
 
-    as_bytes * b = mod_lua_checkbytes(l, 1);
+	// check preconditions:
+	//	- b != NULL
+	//	- 1 <= i <= UINT32_MAX
+	if ( !b || 
+		 i < 1 || i > UINT32_MAX ) {
+		return 0;
+	}
 
-    int n_args = lua_gettop(l); 
-    if (n_args != 2) {
-        lua_pushnil(l);
-        return(1);
-    }
+	uint32_t pos = i - 1;
+	int16_t  val = 0;
 
-    int offset = (int) luaL_optinteger(l, 2, 0); 
+	// get returns 0 on failure
+	if ( as_bytes_get_int16(b, pos, &val) == 0 ) {
+		return 0;
+	}
 
-    uint16_t buf;
-
-    if (0 != as_bytes_get(b, offset-1, (uint8_t *) &buf, sizeof(buf))) {
-        lua_pushnil(l);
-        return(1);
-    }
-
-    int result = ntohs(buf);
-    lua_pushinteger(l, result);
-    return 1;
+	int16_t res = ntohs(val);
+	lua_pushinteger(l, res);
+	return 1;
 }
 
-static int mod_lua_bytes_get_int32(lua_State * l) {
+/**
+ *	Get an int32 value from the specified index.
+ *	
+ *	----------{.c}
+ *	int32 bytes.get_int32(bytes b, uint32 i)
+ *	----------
+ *	
+ *	@param b 	The bytes to get a value from.
+ *	@param i	The index in b to get the value of.
+ *	
+ *	@return On success, the value. Otherwise nil on failure.
+ */
+static int mod_lua_bytes_get_int32(lua_State * l)
+{ 
+	// we expect atleast 2 args
+	if ( lua_gettop(l) >= 2) {
+		return 0;
+	}
 
-    as_bytes * b = mod_lua_checkbytes(l, 1);
+	as_bytes *	b = mod_lua_checkbytes(l, 1);
+	lua_Integer	i = luaL_optinteger(l, 2, 0);
 
-    int n_args = lua_gettop(l); 
-    if (n_args != 2) {
-        lua_pushnil(l);
-        return(1);
-    }
+	// check preconditions:
+	//	- b != NULL
+	//	- 1 <= i <= UINT32_MAX
+	if ( !b || 
+		 i < 1 || i > UINT32_MAX ) {
+		return 0;
+	}
 
-    int offset = (int) luaL_optinteger(l, 2, 0); 
+	uint32_t pos = i - 1;
+	int32_t  val = 0;
 
-    uint32_t buf;
+	// get returns 0 on failure
+	if ( as_bytes_get_int32(b, pos, &val) == 0 ) {
+		return 0;
+	}
 
-    if (0 != as_bytes_get(b, offset-1, (uint8_t *) &buf, sizeof(buf))) {
-        lua_pushnil(l);
-        return(1);
-    }
-
-    int result = ntohl(buf);
-    lua_pushinteger(l, result);
-    return 1;
+	int32_t res = ntohl(val);
+	lua_pushinteger(l, res);
+	return 1;
 }
 
-static int mod_lua_bytes_get_int64(lua_State * l) {
+/**
+ *	Get an int64 value from the specified index.
+ *	
+ *	----------{.c}
+ *	int64 bytes.get_int64(bytes b, uint32 i)
+ *	----------
+ *	
+ *	@param b 	The bytes to get a value from.
+ *	@param i	The index in b to get the value of.
+ *	
+ *	@return On success, the value. Otherwise nil on failure.
+ */
+static int mod_lua_bytes_get_int64(lua_State * l)
+{ 
+	// we expect atleast 2 args
+	if ( lua_gettop(l) >= 2) {
+		return 0;
+	}
 
-    as_bytes * b = mod_lua_checkbytes(l, 1);
+	as_bytes *	b = mod_lua_checkbytes(l, 1);
+	lua_Integer	i = luaL_optinteger(l, 2, 0);
 
-    int n_args = lua_gettop(l); 
-    if (n_args != 2) {
-        lua_pushnil(l);
-        return(1);
-    }
+	// check preconditions:
+	//	- b != NULL
+	//	- 1 <= i <= UINT32_MAX
+	if ( !b || 
+		 i < 1 || i > UINT32_MAX ) {
+		return 0;
+	}
 
-    int offset = (int) luaL_optinteger(l, 2, 0); 
+	uint32_t pos = i - 1;
+	int64_t  val = 0;
 
-    uint64_t buf;
+	// get returns 0 on failure
+	if ( as_bytes_get_int64(b, pos, &val) == 0 ) {
+		return 0;
+	}
 
-    if (0 != as_bytes_get(b, offset-1, (uint8_t *) &buf, sizeof(buf))) {
-        lua_pushnil(l);
-        return(1);
-    }
-
-    int result = (int) be64toh(buf);
-    lua_pushinteger(l, result);
-    return 1;
+	int64_t res = be64toh(val);
+	lua_pushinteger(l, res);
+	return 1;
 }
 
-static int mod_lua_bytes_get_string(lua_State * l) {
+/**
+ *	Get an bytes value from the specified index.
+ *	
+ *	----------{.c}
+ *	bytes bytes.get_bytes(bytes b, uint32 i, uint32 n)
+ *	----------
+ *	
+ *	@param b 	The bytes to get a value from.
+ *	@param i	The index in b to get the value from.
+ *	@param n	The the length of the bytes to copy.
+ *	
+ *	@return On success, the value. Otherwise nil on failure.
+ */
+static int mod_lua_bytes_get_string(lua_State * l)
+{
+	// we expect atleast 3 args
+	if ( lua_gettop(l) >= 3 ) {
+		return 0;
+	}
 
-    as_bytes * b = mod_lua_checkbytes(l, 1);
+	as_bytes *	b = mod_lua_checkbytes(l, 1);
+	lua_Integer	i = luaL_optinteger(l, 2, 0);
+	lua_Integer	n = luaL_optinteger(l, 3, 0);
 
-    int n_args = lua_gettop(l); 
-    if (n_args != 3) {
-        lua_pushnil(l);
-        return(1);
-    }
+	// check preconditions:
+	//	- b != NULL
+	//	- 1 <= i <= UINT32_MAX
+	//	- 0 <= n <= UINT32_MAX
+	if ( !b || 
+		 i < 1 || i > UINT32_MAX ||
+		 n < 0 || n > UINT32_MAX ) {
+		return 0;
+	}
 
-    int offset = (int) luaL_optinteger(l, 2, 0); 
-    int len = (int) luaL_optinteger(l, 3, 0); 
+	uint32_t pos = i - 1;
+	uint32_t len = (uint32_t) n;
+	char *   val = (char *) calloc(len + 1, sizeof(char));
 
-    uint8_t * buf = (uint8_t *) malloc(len+1);
+	if ( !val ) {
+		return 0;
+	}
 
-    if (0 != as_bytes_get(b, offset-1, (uint8_t *) buf, len)) {
-        lua_pushnil(l);
-        return(1);
-    }
-    buf[len] = 0;
-
-    lua_pushlstring(l, (char *)buf, len);
-    return 1;
+	// copy into the the string
+	memcpy(val, b->value + pos, len);
+	val[len] = '\0';
+	
+	lua_pushlstring(l, val, len);
+	return 1;
 }
 
-static int mod_lua_bytes_get_bytes(lua_State * l) {
+/**
+ *	Get an bytes value from the specified index.
+ *	
+ *	----------{.c}
+ *	bytes bytes.get_bytes(bytes b, uint32 i, uint32 n)
+ *	----------
+ *	
+ *	@param b 	The bytes to get a value from.
+ *	@param i	The index in b to get the value from.
+ *	@param n	The the length of the bytes to copy.
+ *	
+ *	@return On success, the value. Otherwise nil on failure.
+ */
+static int mod_lua_bytes_get_bytes(lua_State * l)
+{
+	// we expect atleast 3 args
+	if ( lua_gettop(l) >= 3 ) {
+		return 0;
+	}
 
-    as_bytes * b = mod_lua_checkbytes(l, 1);
+	as_bytes *	b = mod_lua_checkbytes(l, 1);
+	lua_Integer	i = luaL_optinteger(l, 2, 0);
+	lua_Integer	n = luaL_optinteger(l, 3, 0);
 
-    int n_args = lua_gettop(l); 
-    if (n_args != 3) {
-        lua_pushnil(l);
-        return(1);
-    }
+	// check preconditions:
+	//	- b != NULL
+	//	- 1 <= i <= UINT32_MAX
+	//	- 0 <= n <= UINT32_MAX
+	if ( !b || 
+		 i < 1 || i > UINT32_MAX ||
+		 n < 0 || n > UINT32_MAX ) {
+		return 0;
+	}
 
-    int offset = (int) luaL_optinteger(l, 2, 0); 
-    int len = (int) luaL_optinteger(l, 3, 0); 
+	uint32_t pos = i - 1;
+	uint32_t len = (uint32_t) n;
+	uint8_t * raw = (uint8_t *) calloc(len, sizeof(uint8_t));
 
-    // slice is in offset / offset
-    as_bytes *slice = as_bytes_slice_new( b , offset-1, (offset-1)+len);
+	if ( !raw ) {
+		return 0;
+	}
 
-    if (!slice) {
-        lua_pushnil(l);
-        return(1);
-    }
+	// copy into the the buffer
+	memcpy(raw, b->value + pos, len);
+	
+	// create a new bytes
+	as_bytes * val = as_bytes_new_wrap(raw, len, true);
 
-    mod_lua_pushbytes(l, slice);
-    return 1;
+	if ( !val ) {
+		return 0;
+	}
+
+	mod_lua_pushbytes(l, val);
+	return 1;
 }
 
 /******************************************************************************
@@ -480,41 +1162,51 @@ static int mod_lua_bytes_get_bytes(lua_State * l) {
  *****************************************************************************/
 
 static const luaL_reg bytes_object_table[] = {
-    {"size",            mod_lua_bytes_len},
-    {"tostring",        mod_lua_bytes_tostring},
 
-    {"put_int16",       mod_lua_bytes_put_int16},
-    {"put_int32",       mod_lua_bytes_put_int32},
-    {"put_int64",       mod_lua_bytes_put_int64},
-    {"put_string",      mod_lua_bytes_put_string},
-    {"put_bytes",       mod_lua_bytes_put_bytes},
+	{"size",			mod_lua_bytes_size},
+	{"capacity",		mod_lua_bytes_capacity},
 
-    {"set_int16",       mod_lua_bytes_put_int16},
-    {"set_int32",       mod_lua_bytes_put_int32},
-    {"set_int64",       mod_lua_bytes_put_int64},
-    {"set_string",      mod_lua_bytes_put_string},
-    {"set_bytes",       mod_lua_bytes_put_bytes},
+	{"set_type",		mod_lua_bytes_set_type},
+	{"get_type",		mod_lua_bytes_get_type},
 
-    {"get_int16",       mod_lua_bytes_get_int16},
-    {"get_int32",       mod_lua_bytes_get_int32},
-    {"get_int64",       mod_lua_bytes_get_int64},
-    {"get_string",      mod_lua_bytes_get_string},
-    {"get_bytes",       mod_lua_bytes_get_bytes},
+	{"tostring",		mod_lua_bytes_tostring},
+	
+	{"append_string",	mod_lua_bytes_append_string},
+	{"append_bytes",	mod_lua_bytes_append_bytes},
+	{"append_byte",		mod_lua_bytes_append_byte},
+	{"append_int16",	mod_lua_bytes_append_int16},
+	{"append_int32",	mod_lua_bytes_append_int32},
+	{"append_int64",	mod_lua_bytes_append_int64},
+	
+	{"set_string",		mod_lua_bytes_set_string},
+	{"set_bytes",		mod_lua_bytes_set_bytes},
+	{"set_byte",		mod_lua_bytes_set_byte},
+	{"set_int16",		mod_lua_bytes_set_int16},
+	{"set_int32",		mod_lua_bytes_set_int32},
+	{"set_int64",		mod_lua_bytes_set_int64},
+	
+	{"put_string",		mod_lua_bytes_set_string},
+	{"put_bytes",		mod_lua_bytes_set_bytes},
+	{"put_byte",		mod_lua_bytes_set_byte},
+	{"put_int16",		mod_lua_bytes_set_int16},
+	{"put_int32",		mod_lua_bytes_set_int32},
+	{"put_int64",		mod_lua_bytes_set_int64},
+	
+	{"get_bytes",		mod_lua_bytes_get_bytes},
+	{"get_byte",		mod_lua_bytes_get_byte},
+	{"get_int16",		mod_lua_bytes_get_int16},
+	{"get_int32",		mod_lua_bytes_get_int32},
+	{"get_int64",		mod_lua_bytes_get_int64},
 
-//    {"type",            mod_lua_bytes_get_type},
-//    {"set_type",        mod_lua_bytes_set_type},
-//    {"get_type",        mod_lua_bytes_set_type},
-
-    {"set_len",         mod_lua_bytes_set_len},
-//    {"append",          mod_lua_bytes_append},
-//    {"delete",          mod_lua_bytes_delete}
-
-    {0, 0}
+	{"ensure",			mod_lua_bytes_ensure},
+	{"truncate",		mod_lua_bytes_ensure},
+	
+	{0, 0}
 };
 
 static const luaL_reg bytes_object_metatable[] = {
-    {"__call",          mod_lua_bytes_new},
-    {0, 0}
+	{"__call",          mod_lua_bytes_new},
+	{0, 0}
 };
 
 /******************************************************************************
@@ -522,17 +1214,17 @@ static const luaL_reg bytes_object_metatable[] = {
  *****************************************************************************/
 
 static const luaL_reg bytes_class_table[] = {
-    {"putX",            mod_lua_bytes_tostring},
-    {0, 0}
+	{"putX",            mod_lua_bytes_tostring},
+	{0, 0}
 };
 
 static const luaL_reg bytes_class_metatable[] = {
-    {"__index",         mod_lua_bytes_index},
-    {"__newindex",      mod_lua_bytes_newindex},
-    {"__len",           mod_lua_bytes_len},
-    {"__tostring",      mod_lua_bytes_tostring},
-    {"__gc",            mod_lua_bytes_gc},
-    {0, 0}
+	{"__index",         mod_lua_bytes_get_byte},
+	{"__newindex",      mod_lua_bytes_set_byte},
+	{"__len",           mod_lua_bytes_size},
+	{"__tostring",      mod_lua_bytes_tostring},
+	{"__gc",            mod_lua_bytes_gc},
+	{0, 0}
 };
 
 /******************************************************************************
@@ -540,7 +1232,7 @@ static const luaL_reg bytes_class_metatable[] = {
  *****************************************************************************/
 
 int mod_lua_bytes_register(lua_State * l) {
-    mod_lua_reg_object(l, OBJECT_NAME, bytes_object_table, bytes_object_metatable);
-    mod_lua_reg_class(l, CLASS_NAME, NULL, bytes_class_metatable);
-    return 1;
+	mod_lua_reg_object(l, OBJECT_NAME, bytes_object_table, bytes_object_metatable);
+	mod_lua_reg_class(l, CLASS_NAME, NULL, bytes_class_metatable);
+	return 1;
 }
