@@ -2,7 +2,7 @@
 -- Last Update July 09,  2013: tjl
 --
 -- Keep this MOD value in sync with version above
-local MOD = "llist::07.09.a"; -- module name used for tracing.  
+local MOD = "llist::07.09.m"; -- module name used for tracing.  
 
 -- ======================================================================
 -- || GLOBAL PRINT ||
@@ -708,9 +708,18 @@ local function packageDebugModeList( ldtMap )
   ldtMap[R_StoreMode] = SM_LIST; -- Use List Mode
   ldtMap[R_BinaryStoreSize] = nil; -- Don't waste room if we're not using it
   ldtMap[R_KeyType] = KT_ATOMIC; -- Atomic Keys
-  -- ldtMap[R_BinName] = ldtBinName;
   ldtMap[R_Threshold] = 4; -- Rehash after this many have been inserted
   ldtMap[R_KeyFunction] = nil; -- Special Attention Required.
+
+  -- Top Node Tree Root Directory
+  ldtMap[R_RootListMax] = 4; -- Length of Key List (page list is KL + 1)
+  
+  -- LLIST Inner Node Settings
+  ldtMap[R_NodeListMax] = 4;  -- Max # of items (key+digest)
+
+  -- LLIST Tree Leaves (Data Pages)
+  ldtMap[R_LeafListMax] = 4;  -- Max # of items
+
   return 0;
 
 end -- packageDebugModeList()
@@ -830,7 +839,109 @@ local function adjustLListMap( ldtMap, argListMap )
   return ldtMap
 end -- adjustLListMap
 
+-- ======================================================================
+-- SUB RECORD CONTEXT DESIGN NOTE:
+-- All "outer" functions, like insert(), search(), delete(),
+-- will employ the "subrecContext" object, which will hold all of the
+-- subrecords that were opened during processing.  Note that with
+-- B+ Trees, operations like insert() can potentially involve many subrec
+-- operations -- and can also potentially revisit pages.  In addition,
+-- we employ a "compact list", which gets converted into tree inserts when
+-- we cross a threshold value, so that will involve MANY subrec "re-opens"
+-- that would confuse the underlying infrastructure.
+--
+-- SubRecContext Design:
+-- The key will be the DigestString, and the value will be the subRec
+-- pointer.  At the end of an outer call, we will iterate thru the subrec
+-- context and close all open subrecords.  Note that we may also need
+-- to mark them dirty -- but for now we'll update them in place (as needed),
+-- but we won't close them until the end.
+-- ======================================================================
+local function createSubrecContext()
+  local meth = "createSubrecContext()";
+  GP=F and trace("[ENTER]: <%s:%s>", MOD, meth );
 
+  local src = map();
+  src.ItemCount = 0;
+
+  GP=F and trace("[EXIT]: <%s:%s> : SRC(%s)", MOD, meth, tostring(src));
+  return src;
+end -- createSubrecContext()
+
+-- ======================================================================
+-- ======================================================================
+local function addSubrecToContext( src, leafRec )
+  local meth = "addSubrecContext()";
+  GP=F and trace("[ENTER]: <%s:%s>", MOD, meth );
+  if( src == nil ) then
+    error("[BAD SUB REC CONTEXT] src is nil");
+  end
+
+  local digest = record.digest( leafRec );
+  local digestString = tostring( digest );
+  src[digestString] = leafRec;
+
+  info("\n[ADD SUBREC]<%s:%s> SRC(%s) leafRec(%s) Digest(%s)\n",
+  MOD, meth, tostring(src), tostring(leafRec), digestString );
+
+  GP=F and trace("[EXIT]: <%s:%s> : SRC(%s)", MOD, meth, tostring(src));
+  return 0;
+end -- addSubrecToContext()
+
+-- ======================================================================
+-- ======================================================================
+local function openSubrec( src, topRec, digestString )
+  local meth = "openSubrec()";
+  GP=F and trace("[ENTER]: <%s:%s> DigestStr(%s) SRC(%s)",
+    MOD, meth, digestString, tostring(src));
+
+  local rec = src[digestString];
+  if( rec == nil ) then
+    print("\n00000000000000000000000000000000000000000000000000000000000\n");
+    GP=F and trace("[OPENING]: <%s:%s> ", MOD, meth );
+    rec = aerospike:open_subrec( topRec, digestString );
+    GP=F and trace("[OPENING]: <%s:%s> ", MOD, meth );
+    local itemCount = src.ItemCount;
+    src.ItemCount = itemCount + 1;
+  else
+    GP=F and trace("[FOUND]: <%s:%s> : Rec(%s)", MOD, meth, tostring(rec));
+  end
+
+  GP=F and trace("[EXIT]<%s:%s>Rec(%s) Dig(%s)",
+    MOD, meth, tostring(rec), digestString );
+  return rec;
+end -- openSubrec()
+
+-- ======================================================================
+-- ======================================================================
+local function closeAllSubrecs( src )
+  local meth = "closeAllSubrecs()";
+  GP=F and trace("[ENTER]: <%s:%s> src(%s)", MOD, meth, tostring(src));
+
+  -- Iterate thru the SubRecContext and close all subrecords.
+  local digestString;
+  local rec;
+  local rc = 0;
+  for name, value in map.pairs( src ) do
+    GP=F and trace("[DEBUG]: <%s:%s>: Processing Pair: Name(%s) Val(%s)",
+      MOD, meth, tostring( name ), tostring( value ));
+    if( name == "ItemCount" ) then
+      GP=F and trace("[DEBUG]<%s:%s>: Processing(%d) Items", MOD, meth, value);
+    else
+      digestString = name;
+      rec = value;
+      GP=F and trace("[DEBUG]<%s:%s>: Closing SubRec: Digest(%s) Rec(%s)",
+        MOD, meth, digestString, tostring(rec) );
+      rc = aerospike:close_subrec( rec );
+      GP=F and trace("[DEBUG]<%s:%s>: Closing Results(%d)", MOD, meth, rc );
+    end
+  end -- for all fields in SRC
+
+  GP=F and trace("[EXIT]: <%s:%s> : RC(%d)", MOD, meth, rc );
+  return rc;
+end -- closeAllSubrecs()
+
+-- ======================================================================
 -- |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- || B+ Tree Data Page Record |||||||||||||||||||||||||||||||||||||||||||
 -- |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
@@ -1042,22 +1153,20 @@ end -- initializeLeaf()
 
 -- ======================================================================
 -- <><><><><> -- <><><><><> -- <><><><><> -- <><><><><> -- <><><><><> --
+--           Large Ordered List (LLIST) Utility Functions
 -- <><><><><> -- <><><><><> -- <><><><><> -- <><><><><> -- <><><><><> --
 -- ======================================================================
---
--- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
--- Large Ordered List (LLIST) Utility Functions
--- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- These are all local functions to this module and serve various
 -- utility and assistance functions.
+-- ======================================================================
 
 -- ======================================================================
 -- Convenience function to return the Control Map given a subrec
 -- ======================================================================
-local function getLeafMap( leafSubRec )
+local function getLeafMap( leafRec )
   -- local meth = "getLeafMap()";
   -- GP=F and trace("[ENTER]: <%s:%s> ", MOD, meth );
-  return leafSubRec[LSR_CTRL_BIN]; -- this should be a map.
+  return leafRec[LSR_CTRL_BIN]; -- this should be a map.
 end -- getLeafMap
 
 
@@ -1555,9 +1664,10 @@ end -- searchObjectList()
 -- ::::Root Grandchildren
 -- :::...::: Leaves
 -- ======================================================================
-local function printTree( topRec, ldtBinName )
+local function printTree( src, topRec, ldtBinName )
   local meth = "printTree()";
-  GP=F and trace("[ENTER]<%s:%s> BinName(%s)", MOD, meth, ldtBinName );
+  GP=F and trace("[ENTER]<%s:%s> BinName(%s) SRC(%s)",
+    MOD, meth, ldtBinName, tostring(src));
   -- Start with the top level structure and descend from there.
   -- At each level, create a new child list, which will become the parent
   -- list for the next level down (unless we're at the leaves).
@@ -1582,7 +1692,8 @@ local function printTree( topRec, ldtBinName )
     for n = 1, listSize, 1 do
       digestString = tostring( nodeList[n] );
       GP=F and trace("[SUBREC]<%s:%s> OpenSR(%s)", MOD, meth, digestString );
-      nodeRec = aerospike:open_subrec( topRec, digestString );
+      -- nodeRec = aerospike:open_subrec( topRec, digestString );
+      nodeRec = openSubrec( src, topRec, digestString );
       if( lvl < treeLevel ) then
         -- This is an inner node -- remember all children
         local digestList  = nodeRec[NSR_DIGEST_BIN];
@@ -1596,7 +1707,8 @@ local function printTree( topRec, ldtBinName )
         printLeaf( nodeRec );
       end
       GP=F and trace("[SUBREC]<%s:%s> CloseSR(%s)", MOD, meth, digestString );
-      aerospike:close_subrec( nodeRec );
+      -- No -- we don't close.  The SubRecContext handles everything.
+      -- aerospike:close_subrec( nodeRec );
     end -- for each node in the list
     -- If we're going around again, then the old childList is the new
     -- ParentList (as in, the nodeList for the next iteration)
@@ -1785,27 +1897,30 @@ end -- scanLeaf()
 -- ======================================================================
 -- Get the tree node (record) the corresponds to the stated position.
 -- ======================================================================
-local function  getTreeNodeRec( topRec, ldtMap, digestList, position )
-  local digestString = tostring( digestList[position] );
-  local rec = aerospike:open_subrec( topRec, digestString );
-  return rec;
-end -- getTreeNodeRec()
+-- local function  getTreeNodeRec( src, topRec, ldtMap, digestList, position )
+--   local digestString = tostring( digestList[position] );
+--   -- local rec = aerospike:open_subrec( topRec, digestString );
+--   local rec = openSubrec( src, topRec, digestString );
+--   return rec;
+-- end -- getTreeNodeRec()
 
 -- ======================================================================
--- treeSearch( topRec, searchPath, ldtList, searchKey )
+-- treeSearch( subrecContext, topRec, searchPath, ldtList, searchKey )
 -- ======================================================================
 -- Search the tree (start with the root and move down). 
 -- Remember the search path from root to leaf (and positions in each
 -- node) so that insert, Scan and Delete can use this to set their
 -- starting positions.
 -- Parms:
+-- (*) subrecContext: The pool of open subrecs
 -- (*) topRec: The top level Aerospike Record
 -- (*) searchPath: A list of maps that describe each level searched
 -- (*) ldtMap: 
 -- (*) searchKey:
 -- Return: ST_FOUND(0) or ST_NOTFOUND(-1)
 -- And, implicitly, the updated searchPath Object.
-local function treeSearch( topRec, searchPath, ldtList, searchKey )
+local function
+treeSearch( subrecContext, topRec, searchPath, ldtList, searchKey )
   local meth = "treeSearch()";
   local rc = 0;
   GP=F and trace("[ENTER]: <%s:%s> searchKey(%s) ldtSummary(%s)",
@@ -1862,7 +1977,9 @@ local function treeSearch( topRec, searchPath, ldtList, searchKey )
         -- Next Node is an Inner Node. 
         GB=F and info("[Opening Subrec]<%s:%s> Digest(%s) Pos(%d)",
             MOD, meth, digestString, position );
-        nodeRec = aerospike:open_subrec( topRec, digestString );
+        -- Switching to subrecContext Mode
+        -- nodeRec = aerospike:open_subrec( topRec, digestString );
+        nodeRec = openSubrec( subrecContext, topRec, digestString );
         GB=F and info("[Subrec Results]<%s:%s>nodeRec(%s)",
           MOD, meth, tostring(nodeRec));
         nodeMap = nodeRec[NSR_CTRL_BIN];
@@ -1878,7 +1995,9 @@ local function treeSearch( topRec, searchPath, ldtList, searchKey )
         -- Next Node is a Leaf
         GP=F and info("[Opening Leaf]<%s:%s> Digest(%s) Pos(%d) TreeLevel(%d)",
           MOD, meth, digestString, position, i);
-        nodeRec = aerospike:open_subrec( topRec, digestString );
+        -- Switching to subrecContext Mode
+        -- nodeRec = aerospike:open_subrec( topRec, digestString );
+        nodeRec = openSubrec( subrecContext, topRec, digestString );
         GP=F and info("[Open Leaf Results]<%s:%s>nodeRec(%s)",
           MOD,meth,tostring(nodeRec));
         propMap = nodeRec[SUBREC_PROP_BIN];
@@ -1966,11 +2085,13 @@ end -- listInsert()
 -- If we're at the end, we just append to the list.
 -- Parms:
 -- (*) topRec: Primary Record
--- (*) searchPath: Search Structure -- shows us position of leaf insert
+-- (*) leafRec: the leaf subrecord
 -- (*) ldtMap: LDT Control: needed for key type and storage mode
+-- (*) newKey: Search Key for newValue
 -- (*) newValue: Object to be inserted.
+-- (*) position: If non-zero, then it's where we insert. Otherwise, we search
 -- ======================================================================
-local function leafInsert( topRec, searchPath, ldtMap, newValue )
+local function leafInsert( topRec, leafRec, ldtMap, newKey, newValue, position)
   local meth = "leafInsert()";
   local rc = 0;
   GP=F and trace("[ENTER]<%s:%s> SP(%s) value(%s) ldtMap(%s)",
@@ -1979,16 +2100,14 @@ local function leafInsert( topRec, searchPath, ldtMap, newValue )
   info("[WARNING]<%s:%s>Using LIST MODE ONLY - No Binary Support (yet)",
     MOD, meth );
 
-  -- Get the control and list info from the leaf record
-  local leafLevel = searchPath.LevelCount;
-  local leafRec = searchPath.RecList[leafLevel];
   local leafList = leafRec[LSR_LIST_BIN];
   local leafmap =  leafRec[LSR_CTRL_BIN];
 
-  -- Determine the position in the leaf for the insert, from the searchPath
-  -- structure (that was filled out from the treeSearch() ).
-  local leafLevel = searchPath.LevelCount;
-  local position = searchPath.PositionList[leafLevel];
+  if( position == 0 ) then
+    info("[INFO]<%s:%s>Position is ZERO:must Search for position", MOD, meth );
+    local resultMap = searchObjectList( ldtMap, objectList, searchKey );
+    position = resultMap.Position;
+  end
 
   if( position <= 0 ) then
     error("[ERROR:LeafInsert] Search Path Position is wrong");
@@ -1997,25 +2116,36 @@ local function leafInsert( topRec, searchPath, ldtMap, newValue )
   -- Move values around, if necessary, to put newValue in a "position"
   rc = listInsert( leafList, newValue, position );
 
-  -- Update and close the leaf record
-  aerospike:update_subrec( leafRec );
-  aerospike:close_subrec( leafRec );
+  leafRec[LSR_LIST_BIN] = leafList;
+  -- Update the leaf record; Close waits until the end
+  -- aerospike:update_subrec( leafRec );
+  -- aerospike:close_subrec( leafRec ); -- No longer close here.
 
   GP=F and trace("[EXIT]<%s:%s> rc(%s)", MOD, meth, tostring(rc) );
   return rc;
 end -- leafInsert()
 
 -- ======================================================================
--- getSplitPosition()
+-- getLeafSplitPosition()
 -- Find the right place to split the B+ Tree Leaf
+-- TODO: @TOBY: Maybe find a more optimal split position
+-- Right now this is a simple arithmethic computation (split the leaf in
+-- half).  This could change to split at a more convenient location in the
+-- leaf, especially if duplicates are involved.  However, that presents
+-- other problems, so we're doing it the easy way at the moment.
+-- Parms:
+-- (*) ldtMap: main control map
+-- (*) objList: the object list in the leaf
+-- (*) leafPosition: the place in the obj list for the new insert
+-- (*) newValue: The new value to be inserted
 -- ======================================================================
-local function getLeafSplitPosition( ldtMap, leafPosition, newValue )
+local function getLeafSplitPosition( ldtMap, objList, leafPosition, newValue )
   local meth = "getLeafSplitPosition()";
   GP=F and trace("[ENTER]<%s:%s> ", MOD, meth );
   warn("[WARNING]<%s:%s> Using Rough Approximation", MOD, meth );
 
   -- This is only an approximization
-  local listSize = list.size( ldtMap[R_RootKeyList] );
+  local listSize = list.size( objList );
   local result = listSize / 2;
 
   GP=F and trace("[EXIT]<%s:%s> result(%d)", MOD, meth, result );
@@ -2026,9 +2156,16 @@ end -- getLeafSplitPosition
 -- After a leaf split or a node split, the parent node gets a new child
 -- value and digest.
 -- ======================================================================
-local function insertParentNode(topRec,searchPath,ldtMap, nVal, nDig, curLevel)
+local function insertParentNode(subrecContext, topRec, searchPath,
+  ldtList, nVal, nDig, curLevel)
   local meth = "insertParentNode()";
   local rc = 0;
+
+  -- Extract the property map and control map from the ldt bin list.
+  local propMap = ldtList[1];
+  local ldtMap  = ldtList[2];
+  local binName = propMap[PM_BinName];
+
   GP=F and trace("[ENTER]<%s:%s> ", MOD, meth );
   warn("[WARNING]<%s:%s> Function Not Complete", MOD, meth );
 
@@ -2042,24 +2179,12 @@ local function insertParentNode(topRec,searchPath,ldtMap, nVal, nDig, curLevel)
 end -- insertParentNode()
 
 -- ======================================================================
--- After splitting a leaf, reset the list so that we have just the first
--- half (the part BEFORE the split position).
--- ======================================================================
-local function resetLeafAfterSplit( topRec, leafSubRec, splitPosition )
-  local meth = "resetLeafAfterSplit()";
-  local rc = 0;
-  GP=F and trace("[ENTER]<%s:%s> ", MOD, meth );
-  warn("[WARNING]<%s:%s> Function Not Complete", MOD, meth );
-
-  GP=F and trace("[EXIT]<%s:%s> rc(%d)", MOD, meth, rc );
-  return rc;
-end -- resetLeafAfterSplit
-
--- ======================================================================
 -- Create a new Leaf Page and initialize it.
 -- Parms:
+-- (*) subrecContext: The pool of open subrecords
 -- (*) topRec: The main AS Record holding the LDT
 -- (*) ldtList: Main LDT Control Structure
+-- (*) firstValue: if present, insert this value
 -- NOTE: Remember that we must create an ESR when we create the first leaf
 -- but that is the caller's job
 -- Contents of a Leaf Record:
@@ -2068,7 +2193,7 @@ end -- resetLeafAfterSplit
 -- (3) LSR_LIST_BIN:    Object List goes here
 -- (4) LSR_BINARY_BIN:  Packed Binary Array (if used) goes here
 -- ======================================================================
-local function createLeafRec( topRec, ldtList, firstValue )
+local function createLeafRec( subrecContext, topRec, ldtList, firstValue )
   local meth = "createLeafRec()";
   GP=F and trace("[ENTER]<%s:%s> ", MOD, meth );
 
@@ -2081,6 +2206,7 @@ local function createLeafRec( topRec, ldtList, firstValue )
     warn("[ERROR]<%s:%s> Problems Createing Subrec", MOD, meth );
     error("Create_SubRec() Error: createLeafRec()");
   end
+  addSubrecToContext( subrecContext, leafRec );
 
   rc = initializeLeaf( topRec, ldtList, leafRec, firstValue  );
   if( rc >= 0 ) then
@@ -2106,54 +2232,85 @@ end -- createLeafRec()
 -- duplicates, we have to find the closest "key break" to the middle of
 -- the page.  More thinking needed on how to handle duplicates without
 -- making the page MUCH more complicated.
+-- For now, we'll make the split easier and just pick the middle item,
+-- but in doing that, it will make the scanning more complicated.
+-- Parms:
+-- (*) subrecContext
+-- (*) topRec
+-- (*) searchPath
+-- (*) ldtList
+-- (*) newKey
+-- (*) newValue
+-- Return:
 -- ======================================================================
-local function splitLeafInsert( topRec, searchPath, ldtMap, newKey, newValue )
+local function
+splitLeafInsert( subrecContext, topRec, searchPath, ldtList, newKey, newValue )
   local meth = "splitLeafInsert()";
   local rc = 0;
-  GP=F and trace("[ENTER]<%s:%s> ", MOD, meth );
+  GP=F and trace("[ENTER]<%s:%s> SP(%s) LDT(%s) Key(%s) Val(%s)",
+    MOD, meth, tostring(searchPath), ldtSummaryString(ldtList),
+    tostring(newKey), tostring(newValue));
 
-  warn("[WARNING]<%s:%s> Function Not Complete", MOD, meth );
-  warn("[WARNING]<%s:%s> Function Not Complete", MOD, meth );
-  warn("[WARNING]<%s:%s> Function Not Complete", MOD, meth );
+  warn("[WARNING]<%s:%s> This Function Under Construction", MOD, meth );
+
+  -- Extract the property map and control map from the ldt bin list.
+  local propMap = ldtList[1];
+  local ldtMap  = ldtList[2];
+  local binName = propMap[PM_BinName];
 
   local leafLevel = searchPath.LevelCount;
-  local leafPosition = searchPath.Position[leafLevel];
-  local leafSubRecDigest = searchPath.DigestList[leafLevel];
+  local leafPosition = searchPath.PositionList[leafLevel];
+  local leafRecDigest = searchPath.DigestList[leafLevel];
+  local leafRec = searchPath.RecList[leafLevel];
+
   -- Open the Leaf and look inside.
-  -- Remember that open_subrec() takes a STRING, not a digest.
-  local digestString = tostring( leafSubRecDigest );
-  local leafSubRec = aerospike:open_subrec( topRec, digestString );
-  local leafMap = getLeafMap( leafSubRec );
+  local leafMap    = leafRec[LSR_CTRL_BIN];
+  local objectList = leafRec[LSR_LIST_BIN];
 
-  local listSize = list.size( ldtMap[R_RootKeyList] );
+  -- Calculate the split position and the key to propagate up to parent.
   local splitPosition = getLeafSplitPosition( ldtMap, leafPosition, newValue );
-  local newLeafKey = getParentNodeKey( ldtMap, splitPosition );
+  local splitKey = getKeyValue( ldtMap, objectList[splitPosition] );
 
-  -- Move the section [split position, end] to the NEXT subrec and move
-  -- the value at splitPosition up to the parent node.
-  local newLeafSubRec = createLeaf( topRec );
-  local newLeafSubRecDigest = record.digest( newSubRec );
-  populateLeaf( newLeafSubRec, ldtMap[R_RootKeyList], splitPosition );
+  -- Our List operators:
+  -- (*) list.take (take the first N elements) 
+  -- (*) list.drop (drop the first N elements, and keep the rest) 
+  -- will let us split the current leaf list into two leaf lists.
+  -- We will always propagate up the new Key and the NEW left page (digest)
+  local leftList  = list.take( objectList, splitPosition - 1 );
+  local rightList = list.drop( objectList, splitPosition - 1 );
 
-  -- Propagate the split value up to the parent (recursively).
-  insertParentNode(topRec,searchPath,ldtMap,newValue,newLeafSubRec,leafLevel);
+  local rightLeafRec = leafRec; -- our new name for the existing leaf
+  local leftLeafRec = createLeafRec( subrecContext, topRec, ldtList, nil );
+  local leftLeafDigest = record.digest( leafLeafRec );
 
-  -- Fix up the original leaf (remove the stuff that moved)
-  resetLeafAfterSplit( topRec, leafSubRec, splitPosition );
+  -- Overwrite the leaves with their new object value lists
+  populateLeaf( leftLeafRec, leftList );
+  populateLeaf( rightLeafRec, rightList );
 
   -- Now figure out WHICH of the two leaves (original or new) we have to
   -- insert the new value.
-  -- Compare against the SplitValue -- if less, insert into the original leaf,
-  -- and otherwise insert into the new leaf.
-  local compareResult = keyCompare( newValue, newLeafKey );
-  if( compareResult == -1 ) then
-    -- We choose the LEFT Leaf
-    leafInsert( topRec, searchPath, ldtMap, newValue )
-  elseif( compareResult >= 0 ) then
-    -- We choose the RIGHT (new) Leaf
+  -- Compare against the SplitKey -- if less, insert into the left leaf,
+  -- and otherwise insert into the right leaf.
+  local compareResult = keyCompare( newKey, splitKey );
+  if( compareResult == CR_LESS_THAN ) then
+    -- We choose the LEFT Leaf -- but we must search for the location
+    leafInsert( topRec, leftLeafRec, ldtMap, newKey, newValue, 0);
+  elseif( compareResult >= CR_EQUAL  ) then -- this works for EQ or GT
+    -- We choose the RIGHT (new) Leaf -- but we must search for the location
+    leafInsert( topRec, rightLeafRec, ldtMap, newKey, newValue, 0);
   else
     -- We got some sort of goofy error.
+    warn("[ERROR]<%s:%s> Compare Error(%d)", MOD, meth, compareResult );
+    error('COMPARE ERROR in SplitLeaf');
   end
+
+  aerospike:update_subrec( leftLeafRec );
+  aerospike:update_subrec( rightLeafRec );
+
+  -- Update the parent node with the new leaf information.  It is the job
+  -- of this method to either split the parent or do a straight insert.
+  insertParentNode(subrecContext, topRec, searchPath, ldtMap, splitKey,
+    leftLeafDigest, leafLevel - 1 );
 
   GP=F and trace("[EXIT]<%s:%s> rc(%d)", MOD, meth, rc );
   return rc;
@@ -2167,11 +2324,12 @@ end -- splitLeafInsert()
 -- values LESS THAN the first value, and the right leaf for values
 -- GREATER THAN OR EQUAL to the first value.
 -- Parms:
+-- (*) src: SubRecContext
 -- (*) topRec
 -- (*) ldtList
 -- (*) newValue
 -- (*) stats: bool: When true, we update stats
-local function firstTreeInsert( topRec, ldtList, newValue, stats )
+local function firstTreeInsert( src, topRec, ldtList, newValue, stats )
   local meth = "firstTreeInsert()";
   local rc = 0;
   GP=F and trace("[ENTER]<%s:%s>LdtSummary(%s) newValue(%s)",
@@ -2188,10 +2346,10 @@ local function firstTreeInsert( topRec, ldtList, newValue, stats )
 
   -- Create two leaves -- Left and Right. Initialize them.  Then
   -- insert our new value into the RIGHT one.
-  local leftLeafRec = createLeafRec( topRec, ldtList, nil );
+  local leftLeafRec = createLeafRec( src, topRec, ldtList, nil );
   local leftLeafDigest = record.digest( leftLeafRec );
 
-  local rightLeafRec = createLeafRec( topRec, ldtList, newValue);
+  local rightLeafRec = createLeafRec( src, topRec, ldtList, newValue);
   local rightLeafDigest = record.digest( rightLeafRec );
 
   GP=F and trace("[DEBUG]<%s:%s>Created Left(%s) and Right(%s) Records",
@@ -2223,9 +2381,9 @@ local function firstTreeInsert( topRec, ldtList, newValue, stats )
   -- Note: The caller will update the top record, but we need to update
   -- and close the subrecs here.
   aerospike:update_subrec( leftLeafRec );
-  aerospike:close_subrec( leftLeafRec );
+  -- aerospike:close_subrec( leftLeafRec );
   aerospike:update_subrec( rightLeafRec );
-  aerospike:close_subrec( rightLeafRec );
+  -- aerospike:close_subrec( rightLeafRec );
 
   GP=F and trace("[EXIT]<%s:%s>LdtSummary(%s) newValue(%s) rc(%s)",
     MOD, meth, ldtSummaryString(ldtList), tostring(newValue), tostring(rc));
@@ -2233,18 +2391,19 @@ local function firstTreeInsert( topRec, ldtList, newValue, stats )
 end -- firstTreeInsert()
 
 -- ======================================================================
--- treeInsert( topRec, ldtList, newValue, stats )
+-- treeInsert( subrecContext, topRec, ldtList, newValue, stats )
 -- ======================================================================
 -- Search the tree (start with the root and move down).  Get the spot in
 -- the leaf where the insert goes.  Insert into the leaf.  Remember the
 -- path on the way down, because if a leaf splits, we have to move back
 -- up and potentially split the parents bottom up.
 -- Parms:
+-- (*) subrecContext: The pool of open subrecords
 -- (*) topRec
 -- (*) ldtList
 -- (*) newValue
 -- (*) stats: bool: When true, we update stats
-local function treeInsert( topRec, ldtList, newValue, stats )
+local function treeInsert( subrecContext, topRec, ldtList, newValue, stats )
   local meth = "treeInsert()";
   local rc = 0;
   
@@ -2265,7 +2424,7 @@ local function treeInsert( topRec, ldtList, newValue, stats )
   -- Note that later -- when we do a batch insert -- this will be smarter.
   if( ldtMap[R_TreeLevel] == 1 ) then
     GP=F and trace("[DEBUG]<%s:%s>::<FFFF> FIRST TREE INSERT!!!", MOD, meth );
-    firstTreeInsert( topRec, ldtList, newValue, stats );
+    firstTreeInsert( subrecContext, topRec, ldtList, newValue, stats );
   else
     GP=F and trace("[DEBUG]<%s:%s>::<RRRR> Regular TREE INSERT!!!", MOD, meth );
     -- It's a real insert -- so, Search first, then insert
@@ -2273,7 +2432,8 @@ local function treeInsert( topRec, ldtList, newValue, stats )
     -- The Search path is a map of values, including lists from root to leaf
     -- showing node/list states, counts, fill factors, etc.
     local searchPath = createSearchPath(ldtMap);
-    local status = treeSearch( topRec, searchPath, ldtList, searchKey );
+    local status =
+      treeSearch( subrecContext, topRec, searchPath, ldtList, searchKey );
 
     if( status == ST_FOUND and ldtMap[R_KeyUnique] == true ) then
       error('[Error]: Unique Key Violation');
@@ -2284,13 +2444,16 @@ local function treeInsert( topRec, ldtList, newValue, stats )
       MOD, meth, leafLevel, tostring(searchPath.HasRoom[leafLevel] ));
 
     if( searchPath.HasRoom[leafLevel] == true ) then
-      local leafSubRec = searchPath.RecList[leafLevel];
       -- Regular Leaf Insert
-      rc = leafInsert( topRec, searchPath, ldtMap, newValue );
+      local leafRec = searchPath.RecList[leafLevel];
+      local position = searchPath.PositionList[leafLevel];
+      rc = leafInsert( topRec, leafRec, ldtMap, searchKey, newValue, position);
+      aerospike:update_subrec( leafRec );
     else
       -- Split first, then insert.  This split can potentially propagate all
       -- the way up the tree to the root. This is potentially a big deal.
-      rc = splitLeafInsert( topRec, searchPath, ldtList, newValue );
+      rc = splitLeafInsert( subrecContext, topRec, searchPath, ldtList,
+                            searchKey, newValue );
     end
   end -- end else "real" insert
 
@@ -2307,7 +2470,7 @@ local function treeInsert( topRec, ldtList, newValue, stats )
   end
 
   GP=F and trace("[PRINT]<%s:%s>PRINT TREE AFTER TREE INSERT", MOD, meth );
-  printTree( topRec, binName );
+  printTree( subrecContext, topRec, binName );
 
   GP=F and trace("[EXIT]<%s:%s>LdtSummary(%s) newValue(%s) rc(%s)",
     MOD, meth, ldtSummaryString(ldtList), tostring(newValue), tostring(rc));
@@ -2673,12 +2836,13 @@ end -- compactListInsert()
 -- Perform the main work of insert (used by both convertList() and the
 -- regular insert().
 -- Parms:
+-- (*) subrecContext: The pool of open subrecords
 -- (*) topRec: The top DB Record:
 -- (*) ldtList: The LDT control Structure
 -- (*) newValue: Value to be inserted
 -- (*) stats: true=Please update Counts, false=Do NOT update counts (rehash)
 -- ======================================================================
-local function localInsert( topRec, ldtList, newValue, stats )
+local function localInsert(subrecContext, topRec, ldtList, newValue, stats )
   local meth = "localInsert()";
   GP=F and trace("[ENTER]:<%s:%s>Insert(%s)", MOD, meth, tostring(newValue));
   
@@ -2695,7 +2859,7 @@ local function localInsert( topRec, ldtList, newValue, stats )
     insertResult = compactListInsert( topRec, ldtList, newValue, stats );
   else
     GP=F and info("[NOTICE]<%s:%s> Using >>>  TREE INSERT  <<<", MOD, meth);
-    insertResult = treeInsert( topRec, ldtList, newValue, stats );
+    insertResult = treeInsert(subrecContext, topRec, ldtList, newValue, stats );
   end
 
   -- update stats if appropriate.
@@ -2713,6 +2877,18 @@ local function localInsert( topRec, ldtList, newValue, stats )
     -- No need to return anything
 end -- localInsert
 
+-- ======================================================================
+-- leafRec = getNextLeaf( src, topRrec, searchPath );
+-- ======================================================================
+local function getNextLeaf( src, topRec, searchPath )
+  local meth = "getNextLeaf()";
+  GP=F and trace("\n [ENTER]:<%s:%s> !!!!!!!!!!!!!!!!!!!!! \n", MOD, meth );
+
+  info("[WARNING]!!!!! Function not yet implemented", MOD, meth );
+
+  return nil; -- return nil until we get this working.
+
+end -- getNextLeaf()
 
 -- ======================================================================
 -- convertList( topRec, ldtBinName, ldtList )
@@ -2724,12 +2900,15 @@ end -- localInsert
 -- So -- copy out all of the items from the CompactList and
 -- then resinsert them using "regular" mode.
 -- Parms:
+-- (*) subrecContext
 -- (*) topRec
 -- (*) ldtBinName
 -- (*) ldtList
 -- ======================================================================
-local function convertList( topRec, ldtBinName, ldtList )
-  local meth = "rehashSet()";
+local function convertList(subrecContext, topRec, ldtBinName, ldtList )
+  local meth = "convertList()";
+
+  GP=F and trace("\n [ENTER]:<%s:%s> !!!!!!!!!!!!!!!!!!!!! \n", MOD, meth );
   GP=F and trace("[ENTER]:<%s:%s> !! CONVERT LIST !! ", MOD, meth );
   
   -- Extract the property map and control map from the ldt bin list.
@@ -2752,9 +2931,12 @@ local function convertList( topRec, ldtBinName, ldtList )
   -- The good way to do it is to sort the items and put them into a leaf
   -- in sorted order.  The simple way is to insert each one into the tree.
   -- Start with the SIMPLE way.
-  -- TODO: Change this to build the tree in one operation.
+  -- TODO: @TOBY: Change this to build the tree in one operation.
+  -- TODO: @TOBY: Use a SUBREC CONTEXT to accumulate open subrecs that
+  --              we will want to close when we're all done.
   for i = 1, list.size( compactList ), 1 do
-    treeInsert( topRec, ldtList, compactList[i], false ); --do NOT update counts
+    -- Do NOT update counts, as we're just RE-INSERTING existing values.
+    treeInsert( subrecContext, topRec, ldtList, compactList[i], false );
   end
 
   -- Now, release the compact list we were using.
@@ -2772,7 +2954,7 @@ end -- convertList()
 -- values that satisfy the searchPredicate and the filter.
 -- ======================================================================
 local function 
-treeScan(resultList, topRec, searchPath, ldtList, searchKey, func, fargs )
+treeScan(src, resultList, topRec, searchPath, ldtList, searchKey, func, fargs )
   local meth = "treeScan()";
   local rc = 0;
   GP=F and trace("[ENTER]: <%s:%s> searchPath(%s) searchKey(%s)",
@@ -2796,7 +2978,12 @@ treeScan(resultList, topRec, searchPath, ldtList, searchKey, func, fargs )
     -- Look and see if there's more scanning needed. If so, we'll read
     -- the next leaf in the tree and scan another leaf.
     if( rc == 0 ) then
-      leafRec = getNextLeaf( topRrec, searchPath );
+      leafRec = getNextLeaf( src, topRrec, searchPath );
+
+      if( leafRec == nil ) then
+        done = true;
+      end
+
     else
       done = true;
     end
@@ -2813,7 +3000,7 @@ end -- treeScan()
 -- ======================================================================
 -- Perform the delete of the delete value
 -- ======================================================================
-local function localDelete( topRec, ldtBinName, deleteValue )
+local function localDelete( src, topRec, ldtBinName, deleteValue )
   local meth = "localDelete()";
   GP=F and trace("[ENTER]<%s:%s> ", MOD, meth );
   local rc = 0;
@@ -2967,6 +3154,18 @@ local function localLListInsert( topRec, ldtBinName, newValue, createSpec )
   end
   -- Note: We'll do the aerospike:create() at the end of this function,
   -- if needed.
+  -- DESIGN NOTE: All "outer" functions, like this one, will create a
+  -- "subrecContext" object, which will hold all of the open subrecords.
+  -- The key will be the DigestString, and the value will be the subRec
+  -- pointer.  At the end of the call, we will iterate thru the subrec
+  -- context and close all open subrecords.  Note that we may also need
+  -- to mark them dirty -- but for now we'll update them in place (as needed),
+  -- but we won't close them until the end.
+  -- This is needed for both the "convertList()" call, which makes multiple
+  -- calls to the treeInsert() function (which opens and closes subrecs) and
+  -- the regular treeInsert() call, which, in the case of a split, may do
+  -- a lot of opens/closes of nodes and leaves.
+  local subrecContext = createSubrecContext();
 
   -- When we're in "Compact" mode, before each insert, look to see if 
   -- it's time to turn our single list into a tree.
@@ -2981,11 +3180,18 @@ local function localLListInsert( topRec, ldtBinName, newValue, createSpec )
   if(( ldtMap[R_StoreState] == SS_COMPACT ) and
      ( totalCount >= ldtMap[R_Threshold] )) 
   then
-    convertList( topRec, ldtBinName, ldtList ); -- Map, not list, used here
+    convertList(subrecContext, topRec, ldtBinName, ldtList );
   end
  
   -- Call our local multi-purpose insert() to do the job.(Update Stats)
-  localInsert( topRec, ldtList, newValue, true );
+  localInsert(subrecContext, topRec, ldtList, newValue, true );
+
+
+  -- Close ALL of the subrecs that might have been opened
+  rc = closeAllSubrecs( subrecContext );
+  if( rc < 0 ) then
+    error("SUB REC ERROR:: Problems closing subrecs in delete");
+  end
 
   -- All done, store the record (either CREATE or UPDATE)
   local rc = -99; -- Use Odd starting Num: so that we know it got changed
@@ -3046,12 +3252,15 @@ local function localLListSearch( topRec, ldtBinName, searchKey, func, fargs )
   local propMap = ldtList[1];
   local ldtMap  = ldtList[2];
 
+  -- Create our subrecContext, which tracks all open SubRecords during
+  -- the call.  Then, allows us to close them all at the end.
+  local src = createSubrecContext();
+
   -- Compute the key for this object (searchKey)
   local searchKey = getKeyValue( ldtMap, searchKey );
 
   -- If our state is "compact", do a simple list search, otherwise do a
   -- full tree search.
-  info("[ALERT!!] TESTING STORE STATE !!!!!!!!!!!!!!!!!!!!!!!!!!!!");
   if( ldtMap[R_StoreState] == SS_COMPACT ) then 
     GP=F and trace("[DEBUG]<%s:%s> Searching Compact List", MOD, meth );
     local objList = ldtMap[R_CompactList];
@@ -3059,12 +3268,18 @@ local function localLListSearch( topRec, ldtBinName, searchKey, func, fargs )
   else
     GP=F and trace("[DEBUG]<%s:%s> Searching Tree", MOD, meth );
     local searchPath = createSearchPath(ldtMap);
-    rc = treeSearch( topRec, searchPath, ldtList, searchKey );
+    rc = treeSearch( src, topRec, searchPath, ldtList, searchKey );
     if( rc == ST_FOUND ) then
-      rc = treeScan(resultList, topRec, searchPath, ldtList, searchKey,
+      rc = treeScan( src, esultList, topRec, searchPath, ldtList, searchKey,
                     func, fargs );
     end
   end -- tree search
+
+  -- Close ALL of the subrecs that might have been opened
+  rc = closeAllSubrecs( src );
+  if( rc < 0 ) then
+    error("SUB REC ERROR:: Problems closing subrecs in delete");
+  end
 
   GP=F and trace("[EXIT]: <%s:%s>: Search Key(%s) Returns (%s)",
   MOD, meth, tostring(searchKey), tostring(result));
@@ -3119,14 +3334,24 @@ function llist_delete( topRec, ldtBinName, deleteValue )
   -- this will kick out with a long jump error() call.
   validateRecBinAndMap( topRec, ldtBinName, true );
 
+  -- Create our subrecContext, which tracks all open SubRecords during
+  -- the call.  Then, allows us to close them all at the end.
+  local src = createSubrecContext();
+
   -- Call local delete to do the real work.
-  local rc  = localDelete( topRec, ldtBinName, deleteValue );
+  local rc  = localDelete( src, topRec, ldtBinName, deleteValue );
 
   -- Validate results -- if anything bad happened, then the record
   -- probably did not change -- we don't need to udpate.
   if( rc == 0 ) then
-    -- All done, store the record
     local rc = -99; -- Use Odd starting Num: so that we know it got changed
+    -- Close ALL of the subrecs that might have been opened
+    rc = closeAllSubrecs( src );
+    if( rc < 0 ) then
+      error("SUB REC ERROR:: Problems closing subrecs in delete");
+    end
+
+    -- All done, store the record
     GP=F and trace("[DEBUG]:<%s:%s>:Update Record()", MOD, meth );
     rc = aerospike:update( topRec );
   end
