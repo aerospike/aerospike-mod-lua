@@ -1,8 +1,8 @@
 -- Large Ordered List (llist.lua)
--- Last Update July 08,  2013: tjl
+-- Last Update July 09,  2013: tjl
 --
 -- Keep this MOD value in sync with version above
-local MOD = "llist::07.08.S"; -- module name used for tracing.  
+local MOD = "llist::07.09.a"; -- module name used for tracing.  
 
 -- ======================================================================
 -- || GLOBAL PRINT ||
@@ -515,7 +515,9 @@ end -- ldtSummaryString()
 -- behavior.  Thus this function represents the "type" LLIST MAP -- all
 -- LLIST control fields are defined here.
 -- The LListMap is obtained using the user's LLIST Bin Name:
--- ldtMap = topRec[ldtBinName]
+-- ldtList = topRec[ldtBinName]
+-- local propMap = ldtList[1];
+-- local ldtMap  = ldtList[2];
 -- ======================================================================
 local function
 initializeLList( topRec, ldtBinName, transFunc, untransFunc )
@@ -1136,7 +1138,6 @@ local function validateRecBinAndMap( topRec, ldtBinName, mustExist )
     end
 
     -- check that our bin is (mostly) there
-    local ldtMap = topRec[ldtBinName]; -- The main ldtMap map
     if ( propMap[PM_Magic] ~= MAGIC ) then
       GP=F and warn("[ERROR EXIT]:<%s:%s>LDT BIN(%s) Corrupted (no magic)",
             MOD, meth, tostring( ldtBinName ) );
@@ -1148,7 +1149,9 @@ local function validateRecBinAndMap( topRec, ldtBinName, mustExist )
     -- is REQUIRED to be there.  Basically, if a control bin DOES exist
     -- then it MUST have magic.
     if topRec ~= nil and topRec[ldtBinName] ~= nil then
-      local ldtMap = topRec[ldtBinName];
+      local ldtList = topRec[ldtBinName];
+      local propMap = ldtList[1];
+      local ldtMap  = ldtList[2];
       if ( propMap[PM_Magic] ~= MAGIC ) then
         GP=F and warn("[ERROR EXIT]:<%s:%s> LDT BIN(%s) Corrupted (no magic)",
               MOD, meth, tostring( ldtBinName ) );
@@ -2955,7 +2958,7 @@ local function localLListInsert( topRec, ldtBinName, newValue, createSpec )
     if createSpec ~= nil then 
       adjustLListMap( ldtMap, createSpec ); -- Map, not list, used here
     end
-    topRec[ldtBinName] = ldtMap;
+    topRec[ldtBinName] = ldtList;
   else
     -- all there, just use it
     ldtList = topRec[ ldtBinName ];
