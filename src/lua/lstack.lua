@@ -2735,7 +2735,7 @@ local function warmListTransfer( topRec, lsoList )
   -- Build the list of items (digests) that we'll be moving from the warm
   -- list to the cold list. Use coldListInsert() to insert them.
   local transferList = extractWarmListTransferList( lsoList );
-  rc = coldListInsert( topRec, lsoMap, transferList );
+  rc = coldListInsert( topRec, lsoList, transferList );
   GP=F and trace("[EXIT]: <%s:%s> lsoMap(%s) ", MOD, meth, tostring(lsoMap) );
   return rc;
 end -- warmListTransfer()
