@@ -2,7 +2,7 @@
 -- Last Update July 10,  2013: tjl
 --
 -- Keep this MOD value in sync with version above
-local MOD = "llist_2013_07_10.i"; -- module name used for tracing.  
+local MOD = "llist_2013_07_10.l"; -- module name used for tracing.  
 
 -- ======================================================================
 -- || GLOBAL PRINT ||
@@ -956,7 +956,8 @@ local function closeAllSubrecs( src )
   end -- for all fields in SRC
 
   GP=F and trace("[EXIT]: <%s:%s> : RC(%d)", MOD, meth, rc );
-  return rc;
+  -- return rc;
+  return 0; -- Mask the error for now:: TODO::@TOBY::Figure this out.
 end -- closeAllSubrecs()
 
 -- ======================================================================
@@ -1833,6 +1834,7 @@ local function printTree( src, topRec, ldtBinName )
   local nodeRec;
   local treeLevel = ldtMap[R_TreeLevel];
 
+  print("\n <PT> <PT> <PT> <PT> <PT> B E G I N <PT> <PT> <PT> <PT> <PT>\n");
   print("ROOT SUMMARY::", rootNodeSummary( topRec, ldtList ));
   printRoot( topRec, ldtList );
 
@@ -1866,6 +1868,8 @@ local function printTree( src, topRec, ldtBinName )
     -- ParentList (as in, the nodeList for the next iteration)
     nodeList = childList;
   end -- for each tree level
+
+  print("\n <PT> <PT> <PT> <PT> <PT>   E N D   <PT> <PT> <PT> <PT> <PT>\n");
 
   GP=F and trace("[EXIT]<%s:%s> ", MOD, meth );
 end -- printTree()
@@ -2231,10 +2235,13 @@ local function listInsert( myList, newValue, position )
   else
     -- Move elements in the list from "Position" to the end (end + 1)
     -- and then insert the new value at "Position"
+    info("[MYLIST]: Transfer");
     for i = listSize, position, -1  do
       myList[i+1] = myList[i];
+      info("[MYLIST MOVE]: mylist(%s)", tostring(mylist) );
     end -- for()
     myList[position] = newValue;
+    info("[MYLIST FINAL]: mylist(%s)", tostring(mylist) );
   end
 
   GP=F and trace("[EXIT]<%s:%s> rc(%d)", MOD, meth, rc );
@@ -3209,8 +3216,8 @@ local function convertList(subrecContext, topRec, ldtBinName, ldtList )
 
   -- Now, release the compact list we were using.
   -- TODO: Figure out exactly how Lua releases storage
-  compactList = nil;
-  ldtMap[R_CompactList] = nil; -- Release the list.  Does this work??
+  -- ldtMap[R_CompactList] = nil; -- Release the list.  Does this work??
+  ldtMap[R_CompactList] = list();  -- Replace with an empty list.
 
   GP=F and trace("[EXIT]: <%s:%s> ldtSummary(%s)",
     MOD, meth, tostring(ldtList));
@@ -3466,12 +3473,15 @@ local function localLListInsert( topRec, ldtBinName, newValue, createSpec )
   -- Call our local multi-purpose insert() to do the job.(Update Stats)
   localInsert(subrecContext, topRec, ldtList, newValue, true );
 
+  -- This is a debug "Tree Print" 
+  -- GP=F and printTree( subrecContext, topRec, ldtBinName );
 
   -- Close ALL of the subrecs that might have been opened
   rc = closeAllSubrecs( subrecContext );
+
   if( rc < 0 ) then
     warn("[ERROR]<%s:%s> Problems in closeAllSubrecs() SRC(%s)",
-      MOD, meth, tostring( subrecContext );
+      MOD, meth, tostring( subrecContext ));
     error("[SUB REC ERROR]:: Problems closing subrecs in localLListInsert");
   end
 

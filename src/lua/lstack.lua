@@ -1,8 +1,8 @@
 -- Large Stack Object (LSO or LSTACK) Operations
--- lstack.lua:  July 10, 2013
+-- lstack.lua:  July 11, 2013
 --
 -- Module Marker: Keep this in sync with the stated version
-local MOD="lstack_2013_07_10.b"; -- the module name used for tracing
+local MOD="lstack_2013_07_11.a"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -690,9 +690,11 @@ local function initializeLso( topRec, lsoBinName )
 
   -- Set the BIN Flag type to show that this is an LDT Bin, with all of
   -- the special priviledges and restrictions that go with it.
-  GP=F and trace("[DEBUG]:<%s:%s>About to call record.set_flags(Bin(%s)F(%s))",
-    MOD, meth, lsoBinName tostring(BF_LDT_BIN) );
+  GP=F and trace("[DEBUG]:<%s:%s>About to call record.set_flags(Bin(%s)F(%s)",
+    MOD, meth, lsoBinName, tostring(BF_LDT_BIN) );
+
   record.set_flags( topRec, lsoBinName, BF_LDT_BIN );
+
   GP=F and trace("[DEBUG]: <%s:%s> Back from calling record.set_flags()",
     MOD, meth );
 
@@ -822,7 +824,7 @@ local function createAndInitESR( topRec, lsoList )
     MOD, meth, tostring(esrDigest));
 
   rc = aerospike:update_subrec( esr );
-  if( rc == 0 ) then
+  if( rc == nil or rc == 0 ) then
       aerospike:close_subrec( esr );
   else
     warn("[ERROR]<%s:%s>Problems Updating ESR rc(%s)",MOD,meth,tostring(rc));
