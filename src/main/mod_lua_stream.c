@@ -54,10 +54,10 @@ as_stream * mod_lua_pushstream(lua_State * l, as_stream * stream) {
     return (as_stream *) mod_lua_box_value(box);
 }
 
-static as_stream * mod_lua_checkstream(lua_State * l, int index) {
-    mod_lua_box * box = mod_lua_checkbox(l, index, CLASS_NAME);
-    return (as_stream *) mod_lua_box_value(box);
-}
+// static as_stream * mod_lua_checkstream(lua_State * l, int index) {
+//     mod_lua_box * box = mod_lua_checkbox(l, index, CLASS_NAME);
+//     return (as_stream *) mod_lua_box_value(box);
+// }
 
 static int mod_lua_stream_gc(lua_State * l) {
     mod_lua_freebox(l, 1, CLASS_NAME);
