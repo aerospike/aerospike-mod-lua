@@ -109,11 +109,6 @@ local RT_SUB = 2; -- 0x2: Regular Sub Record (LDR, CDIR, etc)
 local RT_CDIR= 3; -- xxx: Cold Dir Subrec::Not used for set_type() 
 local RT_ESR = 4; -- 0x4: Existence Sub Record
 
--- Bin Flag Types
-local BF_LDT_BIN     = 1; -- Main LDT Bin
-local BF_LDT_HIDDEN  = 2; -- LDT Bin::Set the Hidden Flag on this bin
-local BF_LDT_CONTROL = 4; -- Main LDT Control Bin (one per record)
-
 -- LDT TYPES (only lstack is defined here)
 local LDT_TYPE_LSET = "LSET";
 
@@ -858,6 +853,8 @@ local function simpleScanList(resultList, lsetList, binList, value, flag )
   for i = 1, list.size( binList ), 1 do
     GP=F and trace("[DEBUG]: <%s:%s> It(%d) Comparing SV(%s) with BinV(%s)",
                    MOD, meth, i, tostring(value), tostring(binList[i]));
+    -- a value that does not exist, will have a nil binList 
+    -- so we'll skip this if-loop for it completely                  
     if binList[i] ~= nil and binList[i] ~= FV_EMPTY then
       resultValue = unTransformSimpleCompare(unTransform, binList[i], value);
       if resultValue ~= nil then
@@ -1422,7 +1419,7 @@ function lset_create( topRec, lsetBinName, createSpec )
   local lsetCtrlMap = lsetList[2]; 
   
   -- Set the type of this record to LDT (it might already be set)
-  record.set_type( topRec, RT_LDT ); -- LDT Type Rec
+  --record.set_type( topRec, RT_LDT ); -- LDT Type Rec
   
   -- If the user has passed in some settings that override our defaults
   -- (createSpec) then apply them now.
@@ -1625,13 +1622,19 @@ local function localLSetExists(topRec,lsetBinName,searchValue,filter,fargs )
   local binName = getBinName( binNumber );
   local binList = topRec[binName];
   local resultList = list();
+  -- In all other cases of calling scanList, we need to reset topRec
+  -- and lsetList except when checking for exists
   local result = scanList( resultList, lsetList, binList, searchValue,
                             FV_SCAN, filter, fargs);
-  if result == nil then
+                            
+  -- result is always 0, so we'll always go to else and return 1
+  -- instead we must check for resultList                         
+  if list.size(resultList) == 0 then
     return 0
   else
     return 1
   end
+  
 end -- function localLSetExists()
 
 -- ======================================================================
