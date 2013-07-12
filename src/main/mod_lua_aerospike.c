@@ -189,22 +189,38 @@ static int mod_lua_aerospike_log(lua_State * l) {
     
     as_aerospike_log(a, ++ar.source, ar.currentline, lvl, msg);
     return 0;
-}
+} // end mod_lua_aerospike_log()
+
+/**
+ * Compute the time and store it in Lua.  We will have to decide what type
+ * we want to use for that -- since Lua numbers are only 56 bits precision,
+ * and cf_clock is a 64 bit value.
+ * It is possible that we'll have to store this as BYTES (similar to how we
+ * deal with digests) -- or something.
+ */
+static int mod_lua_aerospike_get_current_time(lua_State * l) {
+    as_aerospike *  a   = mod_lua_checkaerospike(l, 1);
+    cf_clock      cur_time  = as_aerospike_get_current_time( a );
+    lua_pushinteger(l, cur_time ); // May have to push some other type @TOBY
+
+    return 1;
+} // end mod_lua_aerospike_get_current_time()
 
 /******************************************************************************
  * CLASS TABLE
  *****************************************************************************/
 
 static const luaL_reg class_table[] = {
-    {"create",      mod_lua_aerospike_rec_create},
-    {"update",      mod_lua_aerospike_rec_update},
-    {"exists",      mod_lua_aerospike_rec_exists},
-    {"remove",      mod_lua_aerospike_rec_remove},
-    {"log",         mod_lua_aerospike_log},
-    {"create_subrec", mod_lua_aerospike_crec_create},
-    {"close_subrec",  mod_lua_aerospike_crec_close},
-    {"open_subrec",   mod_lua_aerospike_crec_open},
-    {"update_subrec", mod_lua_aerospike_crec_update},
+    {"create",           mod_lua_aerospike_rec_create},
+    {"update",           mod_lua_aerospike_rec_update},
+    {"exists",           mod_lua_aerospike_rec_exists},
+    {"remove",           mod_lua_aerospike_rec_remove},
+    {"log",              mod_lua_aerospike_log},
+    {"get_current_time", mod_lua_aerospike_get_current_time},
+    {"create_subrec",    mod_lua_aerospike_crec_create},
+    {"close_subrec",     mod_lua_aerospike_crec_close},
+    {"open_subrec",      mod_lua_aerospike_crec_open},
+    {"update_subrec",    mod_lua_aerospike_crec_update},
     {0, 0}
 };
 

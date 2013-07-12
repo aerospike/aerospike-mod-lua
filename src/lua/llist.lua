@@ -1,8 +1,8 @@
 -- Large Ordered List (llist.lua)
--- Last Update July 10,  2013: tjl
+-- Last Update July 11,  2013: tjl
 --
 -- Keep this MOD value in sync with version above
-local MOD = "llist_2013_07_10.l"; -- module name used for tracing.  
+local MOD = "llist_2013_07_11.b"; -- module name used for tracing.  
 
 -- ======================================================================
 -- || GLOBAL PRINT ||
@@ -315,6 +315,7 @@ local PM_Version               = 'V'; -- (Top): Code Version
 local PM_LdtType               = 'T'; -- (Top): Type: stack, set, map, list
 local PM_BinName               = 'B'; -- (Top): LDT Bin Name
 local PM_Magic                 = 'Z'; -- (All): Special Sauce
+local PM_CreateTime            = 'C'; -- (All): Creation time of this rec
 local PM_EsrDigest             = 'E'; -- (All): Digest of ESR
 local PM_RecType               = 'R'; -- (All): Type of Rec:Top,Ldr,Esr,CDir
 local PM_LogInfo               = 'L'; -- (All): Log Info (currently unused)
@@ -469,6 +470,8 @@ local function ldtSummary( ldtList )
   resultMap.PropLdtType       = propMap[PM_LdtType];
   resultMap.PropEsrDigest     = propMap[PM_EsrDigest];
   resultMap.PropMagic         = propMap[PM_Magic];
+  resultMap.PropCreateTime    = propMap[PM_CreateTime];
+
 
   -- General Tree Settings
   resultMap.StoreMode         = ldtMap[R_StoreMode];
@@ -546,6 +549,7 @@ initializeLList( topRec, ldtBinName, transFunc, untransFunc )
   propMap[PM_BinName]    = ldtBinName; -- Defines the LDT Bin
   propMap[PM_RecType]    = RT_LDT; -- Record Type LDT Top Rec
   propMap[PM_EsrDigest]    = nil; -- not set yet.
+  propMap[PM_CreateTime] = aerospike:get_current_time();
 
   -- General Tree Settings
   ldtMap[R_TotalCount] = 0;    -- A count of all "slots" used in LLIST
@@ -1128,6 +1132,7 @@ local function initializeLeaf(topRec, ldtList, leafRec, firstValue )
   leafPropMap[PM_RecType] = RT_LEAF;
   leafPropMap[PM_ParentDigest] = topDigest;
   leafPropMap[PM_SelfDigest] = leafDigest;
+  leafPropMap[PM_CreateTime] = aerospike:get_current_time();
 
   leafMap = map();
   if( ldtMap[R_StoreMode] == SM_LIST ) then

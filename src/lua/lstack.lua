@@ -2,7 +2,7 @@
 -- lstack.lua:  July 11, 2013
 --
 -- Module Marker: Keep this in sync with the stated version
-local MOD="lstack_2013_07_11.a"; -- the module name used for tracing
+local MOD="lstack_2013_07_11.b"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -436,6 +436,7 @@ local PM_Version               = 'V'; -- (Top): Code Version
 local PM_LdtType               = 'T'; -- (Top): Type: stack, set, map, list
 local PM_BinName               = 'B'; -- (Top): LDT Bin Name
 local PM_Magic                 = 'Z'; -- (All): Special Sauce
+local PM_CreateTime            = 'C'; -- (All): Creation time of this rec
 local PM_EsrDigest             = 'E'; -- (All): Digest of ESR
 local PM_RecType               = 'R'; -- (All): Type of Rec:Top,Ldr,Esr,CDir
 local PM_LogInfo               = 'L'; -- (All): Log Info (currently unused)
@@ -545,12 +546,13 @@ local function lsoSummary( lsoList )
   local resultMap                = map();
 
   -- Properties
-  resultMap.SUMMARY              = "LSO Summary";
+  resultMap.SUMMARY              = "LStack Summary";
   resultMap.PropBinName          = propMap[PM_BinName];
   resultMap.PropItemCount        = propMap[PM_ItemCount];
   resultMap.PropVersion          = propMap[PM_Version];
   resultMap.PropLdtType          = propMap[PM_LdtType];
   resultMap.PropEsrDigest        = propMap[PM_EsrDigest];
+  resultMap.PropCreateTime       = propMap[PM_CreateTime];
   
   -- General LSO Parms:
   resultMap.StoreMode            = lsoMap[M_StoreMode];
@@ -599,8 +601,7 @@ end
 --     Similarly, we want the transfer from the LISTS to the Data pages
 --     and Data Directories to be as efficient as possible.
 -- (*) The HotEntryList should be the same size as the LDR Page that
---     holds the Data entries.
--- (*) The HotListTransfer should be half or one quarter the size of the
+--     holds the Data entries.  -- (*) The HotListTransfer should be half or one quarter the size of the
 --     HotList -- so that even amounts can be transfered to the warm list.
 -- (*) The WarmDigestList should be the same size as the DigestList that
 --     is in the ColdDirectory Page
@@ -644,6 +645,7 @@ local function initializeLso( topRec, lsoBinName )
   propMap[PM_BinName]    = lsoBinName; -- Defines the LSO Bin
   propMap[PM_RecType]    = RT_LDT; -- Record Type LDT Top Rec
   propMap[PM_EsrDigest]    = nil; -- not set yet.
+  propMap[PM_CreateTime] = aerospike:get_current_time();
 
   -- Specific LSO Parms: Held in LsoMap
   lsoMap[M_StoreMode]   = SM_LIST; -- SM_LIST or SM_BINARY:
