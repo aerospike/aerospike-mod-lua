@@ -1,8 +1,8 @@
 -- Large Stack Object (LSO or LSTACK) Operations
--- lstack.lua:  July 12, 2013
+-- lstack.lua:  July 14, 2013
 --
 -- Module Marker: Keep this in sync with the stated version
-local MOD="lstack_2013_07_12.b"; -- the module name used for tracing
+local MOD="lstack_2013_07_14.b"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -416,9 +416,13 @@ local PackageDebugModeBinary     = "DebugModeBinary";
 --     convention (fields become variables the reference a single char)
 --     and the mapping of long name to single char will be done in the code.
 -- ------------------------------------------------------------------------
+-- ------------------------------------------------------------------------
+-- Control Map Names: for Property Maps and Control Maps
+-- ------------------------------------------------------------------------
 -- Note:  All variables that are field names will be upper case.
 -- It is EXTREMELY IMPORTANT that these field names ALL have unique char
--- values. (There's no secret message hidden in these values).
+-- values -- within any given map.  They do NOT have to be unique across
+-- the maps (and there's no need -- they serve different purposes).
 -- Note that we've tried to make the mapping somewhat cannonical where
 -- possible. 
 -- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -428,6 +432,7 @@ local RPM_LdtCount             = 'C';  -- Number of LDTs in this rec
 local RPM_VInfo                = 'V';  -- Partition Version Info
 local RPM_Magic                = 'Z';  -- Special Sauce
 local RPM_SelfDigest           = 'D';  -- Digest of this record
+
 -- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 -- LDT specific Property Map (PM) Fields: One PM per LDT bin:
 -- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -749,7 +754,14 @@ local function setLdtRecordType( topRec )
     GP=F and trace("[DEBUG]<%s:%s>Creating Record LDT Map", MOD, meth );
     record.set_type( topRec, RT_LDT );
     recPropMap = map();
-    recPropMap[RPM_Vinfo] = 99; -- to be replaced later - on the server side.
+    -- vinfo will be a 5 byte value, but it will be easier for us to store
+    -- 6 bytes -- and just leave the high order one at zero.
+    -- Initialize the VINFO value to all zeros.
+    local vinfo = bytes(6);
+    bytes.put_int16(vinfo, 1, 0 );
+    bytes.put_int16(vinfo, 3, 0 );
+    bytes.put_int16(vinfo, 5, 0 );
+    recPropMap[RPM_VInfo] = vinfo; 
     recPropMap[RPM_LdtCount] = 1; -- this is the first one.
     recPropMap[RPM_Magic] = MAGIC;
   else

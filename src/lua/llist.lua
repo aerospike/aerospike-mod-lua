@@ -1,8 +1,8 @@
 -- Large Ordered List (llist.lua)
--- Last Update July 13,  2013: tjl
+-- Last Update July 14,  2013: tjl
 --
 -- Keep this MOD value in sync with version above
-local MOD = "llist_2013_07_13.j"; -- module name used for tracing.  
+local MOD = "llist_2013_07_14.b"; -- module name used for tracing.  
 
 -- ======================================================================
 -- || GLOBAL PRINT ||
@@ -308,6 +308,24 @@ local RT_LDT  = 1; -- 0x1: Top Record (contains an LDT)
 local RT_NODE = 2; -- 0x2: Regular Sub Record (LDR, CDIR, etc)
 local RT_LEAF = 3; -- xxx: Cold Dir Subrec::Not used for set_type() 
 local RT_ESR  = 4; -- 0x4: Existence Sub Record
+
+-- ------------------------------------------------------------------------
+-- Control Map Names: for Property Maps and Control Maps
+-- ------------------------------------------------------------------------
+-- Note:  All variables that are field names will be upper case.
+-- It is EXTREMELY IMPORTANT that these field names ALL have unique char
+-- values -- within any given map.  They do NOT have to be unique across
+-- the maps (and there's no need -- they serve different purposes).
+-- Note that we've tried to make the mapping somewhat cannonical where
+-- possible. 
+-- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+-- Record Level Property Map (RPM) Fields: One RPM per record
+-- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+local RPM_LdtCount             = 'C';  -- Number of LDTs in this rec
+local RPM_VInfo                = 'V';  -- Partition Version Info
+local RPM_Magic                = 'Z';  -- Special Sauce
+local RPM_SelfDigest           = 'D';  -- Digest of this record
+
 -- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 -- LDT specific Property Map (PM) Fields: One PM per LDT bin:
 -- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -925,7 +943,7 @@ local function openSubrec( src, topRec, digestString )
 
   local rec = src[digestString];
   if( rec == nil ) then
-    print("\n000000000000000 Opening SubRec  000000000000000000000000000\n");
+    print("\n000000000000000_Opening_SubRec_000000000000000000000000000\n");
     GP=F and trace("[OPENING]: <%s:%s> ", MOD, meth );
     rec = aerospike:open_subrec( topRec, digestString );
     GP=F and trace("[OPENING]: <%s:%s> ", MOD, meth );
@@ -960,7 +978,7 @@ local function closeAllSubrecs( src )
       rec = value;
       GP=F and trace("[DEBUG]<%s:%s>: Closing SubRec: Digest(%s) Rec(%s)",
         MOD, meth, digestString, tostring(rec) );
-      rc = aerospike:close_subrec( rec );
+      -- rc = aerospike:close_subrec( rec );
       GP=F and trace("[DEBUG]<%s:%s>: Closing Results(%d)", MOD, meth, rc );
     end
   end -- for all fields in SRC
@@ -1630,7 +1648,14 @@ local function setLdtRecordType( topRec )
     GP=F and trace("[DEBUG]<%s:%s>Creating Record LDT Map", MOD, meth );
     record.set_type( topRec, RT_LDT );
     recPropMap = map();
-    recPropMap[RPM_Vinfo] = 99; -- to be replaced later - on the server side.
+    -- vinfo will be a 5 byte value, but it will be easier for us to store
+    -- 6 bytes -- and just leave the high order one at zero.
+    -- Initialize the VINFO value to all zeros.
+    local vinfo = bytes(6);
+    bytes.put_int16(vinfo, 1, 0 );
+    bytes.put_int16(vinfo, 3, 0 );
+    bytes.put_int16(vinfo, 5, 0 );
+    recPropMap[RPM_VInfo] = vinfo; -- to be replaced later - on the server side.
     recPropMap[RPM_LdtCount] = 1; -- this is the first one.
     recPropMap[RPM_Magic] = MAGIC;
   else
@@ -1671,7 +1696,13 @@ local function createAndInitESR( src, topRec, ldtList )
 
   local rc = 0;
   local esr       = aerospike:create_subrec( topRec );
+  if( esr == nil ) then
+    warn("[ERROR]<%s:%s> Problems Createing ESR", MOD, meth );
+    error("[Create_ESR] Error: createAndInitESR()");
+  end
+
   addSubrecToContext( src, esr );
+
   local esrDigest = record.digest( esr );
   local topDigest = record.digest( topRec );
   local propMap = ldtList[1];
@@ -1907,7 +1938,6 @@ local function printTree( src, topRec, ldtBinName )
     for n = 1, listSize, 1 do
       digestString = tostring( nodeList[n] );
       GP=F and trace("[SUBREC]<%s:%s> OpenSR(%s)", MOD, meth, digestString );
-      -- nodeRec = aerospike:open_subrec( topRec, digestString );
       nodeRec = openSubrec( src, topRec, digestString );
       if( lvl < treeLevel ) then
         -- This is an inner node -- remember all children
@@ -2314,7 +2344,6 @@ treeSearch( subrecContext, topRec, searchPath, ldtList, searchKey )
         GB=F and info("[Opening Subrec]<%s:%s> Digest(%s) Pos(%d)",
             MOD, meth, digestString, position );
         -- Switching to subrecContext Mode
-        -- nodeRec = aerospike:open_subrec( topRec, digestString );
         nodeRec = openSubrec( subrecContext, topRec, digestString );
         GB=F and info("[Subrec Results]<%s:%s>nodeRec(%s)",
           MOD, meth, tostring(nodeRec));
@@ -2331,8 +2360,6 @@ treeSearch( subrecContext, topRec, searchPath, ldtList, searchKey )
         -- Next Node is a Leaf
         GP=F and info("[Opening Leaf]<%s:%s> Digest(%s) Pos(%d) TreeLevel(%d)",
           MOD, meth, digestString, position, i);
-        -- Switching to subrecContext Mode
-        -- nodeRec = aerospike:open_subrec( topRec, digestString );
         nodeRec = openSubrec( subrecContext, topRec, digestString );
         GP=F and info("[Open Leaf Results]<%s:%s>nodeRec(%s)",
           MOD,meth,tostring(nodeRec));
@@ -3378,7 +3405,7 @@ local function getNextLeaf( src, topRec, leafRec  )
     GP=F and trace("[OPEN SUB REC]:<%s:%s> Digest(%s)",
       MOD, meth, nextLeafDigestString);
 
-    nextLeaf = aerospike:open_subrec( topRec, nextLeafDigestString );
+    nextLeaf = openSubrec( src, topRec, nextLeafDigestString )
     if( nextLeaf == nil ) then
       info("[ERROR]<%s:%s> Can't Open Leaf(%s)",MOD,meth,nextLeafDigestString);
       error("[ERROR]Open Leaf Subrec Problems");
