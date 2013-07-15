@@ -23,6 +23,7 @@
 #include <dirent.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <setjmp.h>         // needed for gracefully handling lua panics
 
@@ -458,6 +459,29 @@ static void package_cpath_set(lua_State * l, char * system_path, char * user_pat
 }
 
 /**
+ * Checks whether a module is native (i.e., a ".so" file.)
+ *
+ * @return true if native, otherwise false
+ */
+static bool is_native_module(context * ctx, const char *filename)
+{
+	struct stat buf;
+	char fn[1024];
+
+	snprintf(fn, sizeof(fn), "%s/%s.so", ctx->config.user_path, filename);
+	if (!stat(fn, &buf)) {
+		return true;
+	}
+
+	snprintf(fn, sizeof(fn), "%s/%s.so", ctx->config.system_path, filename);
+	if (!stat(fn, &buf)) {
+		return true;
+	}
+
+	return false;
+}
+
+/**
  * Creates a new context (lua_State) populating it with default values.
  *
  * @return a new lua_State
@@ -468,7 +492,6 @@ static lua_State * create_state(context * ctx, const char * filename) {
     l = lua_open();
 
     luaL_openlibs(l);
-
 
     package_path_set(l, ctx->config.system_path, ctx->config.user_path);
     package_cpath_set(l, ctx->config.system_path, ctx->config.user_path);
@@ -489,6 +512,11 @@ static lua_State * create_state(context * ctx, const char * filename) {
         lua_close(l);
         return NULL;
     }
+
+	if (is_native_module(ctx, filename)) {
+		as_logger_trace(mod_lua.logger, "Not requiring native module: %s", filename);
+		return l;
+	}
 
     lua_getglobal(l, "require");
     lua_pushstring(l, filename);
