@@ -20,9 +20,6 @@
  * IN THE SOFTWARE.
  *****************************************************************************/
 
-#include <aerospike/as_iterator.h>
-#include <aerospike/as_list.h>
-#include <aerospike/as_list_iterator.h>
 #include <aerospike/as_val.h>
 
 #include <aerospike/mod_lua_val.h>
@@ -173,9 +170,9 @@ static int mod_lua_list_new(lua_State * l) {
 // }
 
 static int mod_lua_list_index(lua_State * l) {
-    mod_lua_box *	box		= mod_lua_checkbox(l, 1, CLASS_NAME);
-    as_list *		list	= (as_list *) mod_lua_box_value(box);
-    as_val *		val		= NULL;
+    mod_lua_box *   box     = mod_lua_checkbox(l, 1, CLASS_NAME);
+    as_list *       list    = (as_list *) mod_lua_box_value(box);
+    as_val *        val     = NULL;
 
     if ( list ) {
         const uint32_t  idx = (uint32_t) luaL_optlong(l, 2, 0);
@@ -196,7 +193,7 @@ static int mod_lua_list_index(lua_State * l) {
 }
 
 static int mod_lua_list_newindex(lua_State * l) {
-    as_list * list = mod_lua_checklist(l, 1);
+    as_list *   list    = mod_lua_checklist(l, 1);
 
     if ( list ) {
         const uint32_t idx = (uint32_t) luaL_optlong(l, 2, 0);
@@ -268,7 +265,7 @@ static int mod_lua_list_iterator(lua_State * l) {
     as_list *       list    = (as_list *) mod_lua_box_value(box);
     if ( list ) {
         lua_pushcfunction(l, mod_lua_list_iterator_next);
-        as_list_iterator * itr = (as_list_iterator *) mod_lua_pushiterator(l, sizeof(as_list_iterator));
+        as_iterator * itr = mod_lua_pushiterator(l);
         as_list_iterator_init(itr, list);
         return 2;
     }

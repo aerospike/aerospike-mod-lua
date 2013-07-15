@@ -24,7 +24,6 @@
 #include <lauxlib.h>
 #include <lualib.h>
 
-#include <aerospike/as_iterator.h>
 #include <aerospike/as_val.h>
 
 #include <aerospike/mod_lua_val.h>
@@ -53,9 +52,9 @@
     return (as_iterator *) itr;
 }
 
-as_iterator * mod_lua_pushiterator(lua_State * l, size_t sz) {
-    as_iterator * i = (as_iterator *) lua_newuserdata(l, sz);
-    memset(i, 0, sz);
+as_iterator * mod_lua_pushiterator(lua_State * l) {
+    as_iterator * i = (as_iterator *) lua_newuserdata(l, sizeof(as_iterator));
+    memset(i, 0, sizeof(as_iterator));
     luaL_getmetatable(l, CLASS_NAME);
     lua_setmetatable(l, -2);
     return i;
