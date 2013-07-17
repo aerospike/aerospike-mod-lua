@@ -1,8 +1,8 @@
 -- Large Stack Object (LSO or LSTACK) Operations
--- lstack.lua:  July 14, 2013
+-- lstack.lua:  July 16, 2013
 --
 -- Module Marker: Keep this in sync with the stated version
-local MOD="lstack_2013_07_14.b"; -- the module name used for tracing
+local MOD="lstack_2013_07_16.b"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -432,7 +432,6 @@ local RPM_LdtCount             = 'C';  -- Number of LDTs in this rec
 local RPM_VInfo                = 'V';  -- Partition Version Info
 local RPM_Magic                = 'Z';  -- Special Sauce
 local RPM_SelfDigest           = 'D';  -- Digest of this record
-
 -- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 -- LDT specific Property Map (PM) Fields: One PM per LDT bin:
 -- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -874,6 +873,7 @@ local function initializeLdrMap( topRec, ldrRec, ldrPropMap, ldrMap, lsoList)
   local lsoMap     = lsoList[2];
   local binName = lsoPropMap[PM_BinName];
 
+  ldrPropMap[PM_RecType]      = RT_SUB;
   ldrPropMap[PM_ParentDigest] = record.digest( topRec );
   ldrPropMap[PM_SelfDigest]   = record.digest( ldrRec );
   --  Not doing Log stuff yet
@@ -888,6 +888,10 @@ local function initializeLdrMap( topRec, ldrRec, ldrPropMap, ldrMap, lsoList)
   if( lsoPropMap[PM_EsrDigest] == nil or lsoPropMap[PM_EsrDigest] == 0 ) then
     lsoPropMap[PM_EsrDigest] = createAndInitESR( topRec, lsoList );
   end
+
+  -- Set the type of this record to LDT (it might already be set by another
+  -- LDT in this same record).
+  record.set_type( ldrRec, RT_SUB ); -- LDT Type Rec
 
 end -- initializeLdrMap()
 
@@ -916,12 +920,16 @@ local function initializeColdDirMap( topRec, cdRec, cdPropMap, cdMap, lsoList )
   local lsoPropMap = lsoList[1];
   local lsoMap     = lsoList[2];
   
+  cdPropMap[PM_RecType]      = RT_SUB;
   cdPropMap[PM_ParentDigest] = record.digest( topRec );
   cdPropMap[PM_SelfDigest] = record.digest( cdRec );
 
   cdMap[CDM_NextDirRec] = 0; -- no other Dir Records (yet).
   cdMap[CDM_DigestCount] = 0; -- no digests in the list -- yet.
 
+  -- Set the type of this record to LDT (it might already be set by another
+  -- LDT in this same record).
+  record.set_type( cdRec, RT_SUB ); -- LDT Type Rec
 end -- initializeColdDirMap()
 
 
@@ -2020,7 +2028,7 @@ local function hotListInsert( lsoList, newStorageValue  )
 
   -- Update the hot list with a new element (and update the map)
   local hotList = lsoMap[M_HotEntryList];
-  info("[HEY!!]<%s:%s> Appending to Hot List(%s)",MOD, meth,tostring(hotList));
+  GP=F and trace("[HEY!!]<%s:%s> Appending to Hot List(%s)",MOD, meth,tostring(hotList));
   -- list.append( lsoMap[M_HotEntryList], newStorageValue );
   list.append( hotList, newStorageValue );
   lsoMap[M_HotEntryList] = hotList;
