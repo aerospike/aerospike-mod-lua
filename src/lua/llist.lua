@@ -2,7 +2,7 @@
 -- Last Update July 18,  2013: tjl
 --
 -- Keep this MOD value in sync with version above
-local MOD = "llist_2013_07_18.o"; -- module name used for tracing.  
+local MOD = "llist_2013_07_18.q"; -- module name used for tracing.  
 
 -- ======================================================================
 -- || GLOBAL PRINT ||
@@ -14,6 +14,10 @@ local MOD = "llist_2013_07_18.o"; -- module name used for tracing.
 local GP=true;
 local F=true; -- Set F (flag) to true to turn ON global print
 
+-- TODO
+-- (*) Fix "leaf Count" in the ldt map
+-- (*) Fix delete
+-- (*) Fix Scan
 -- ======================================================================
 -- FORWARD DECLARATIONS
 -- ======================================================================
@@ -2524,7 +2528,6 @@ treeSearch( src, topRec, sp, ldtList, searchKey )
 
   for i = 1, treeLevels, 1 do
     info("\n\n >> SEARCH Loop TOP  << !!!!!!!!!!!!!!!!!!!!!!!!!! \n\n");
-    info("\n\n >> SEARCH Loop TOP  << !!!!!!!!!!!!!!!!!!!!!!!!!! \n\n");
     GB=F and info("[DEBUG]<%s:%s>Iter(%d) Lvls(%d)",MOD, meth,i,treeLevels);
     info("[::] KeyList(%s) DigList(%s) ObjectList(%s)",
       tostring(keyList), tostring(digestList), tostring(objectList));
@@ -4172,6 +4175,125 @@ treeScan(src, resultList, topRec, sp, ldtList, searchKey, func, fargs )
 end -- treeScan()
 
 -- ======================================================================
+-- listDelete()
+-- ======================================================================
+-- General List Delete function that can be used to delete items, employees
+-- or pesky Indian Developers (usually named "Raj").
+-- RETURN:
+-- A NEW LIST that 
+-- ======================================================================
+local function listDelete( objectList, key, position )
+  local meth = "listDelete()";
+  local resultList;
+  local listSize = list.size( objectList );
+
+  GP=F and trace("[ENTER]<%s:%s>List(%s) size(%d) Key(%s) Position(%d)", MOD,
+  meth, tostring(objectList), listSize, tostring(key), position );
+  
+  if( position < 1 or position > listSize ) then
+    warn("[DELETE ERROR]<%s:%s> Bad position(%d) for delete: key(%s)",
+      MOD, meth, position, tostring(key));
+    error("[INTERNAL ERROR]: Bad position value for Delete");
+  end
+
+  -- Move elements in the list to "cover" the item at Position.
+  --  +---+---+---+---+
+  --  |111|222|333|444|   Delete item (333) at position 3.
+  --  +---+---+---+---+
+  --  Moving forward, Iterate:  list[pos] = list[pos+1]
+  --  This is what you would THINK would work:
+  -- for i = position, (listSize - 1), 1 do
+  --   objectList[i] = objectList[i+1];
+  -- end -- for()
+  -- objectList[i+1] = nil;  (or, call trim() )
+  -- However, because we cannot assign "nil" to a list, nor can we just
+  -- trim a list, we have to build a NEW list from the old list, that
+  -- contains JUST the pieces we want.
+  -- So, basically, we're going to build a new list out of the LEFT and
+  -- RIGHT pieces of the original list.
+  --
+  -- Our List operators :
+  -- (*) list.take (take the first N elements) 
+  -- (*) list.drop (drop the first N elements, and keep the rest) 
+  -- The special cases are:
+  -- (*) A list of size 1:  Just return a new (empty) list.
+  -- (*) We're deleting the FIRST element, so just use RIGHT LIST.
+  -- (*) We're deleting the LAST element, so just use LEFT LIST
+  if( listSize > 1 ) then
+    resultList = list();
+  elseif( position == 1 ) then
+    resultList = list.drop( objectList, 1 );
+  elseif( position == listSize ) then
+    resultList = list.take( objectList, position - 1 );
+  else
+    resultList = list.take( objectList, position - 1);
+    local addList = list.drop( objectList, position );
+    local addLength = list.size( addList );
+    for i = 1, addLength, 1 do
+      list.append( resultList, addList[i] );
+    end
+  end
+
+  -- When we do deletes with Dups -- we'll change this to have a 
+  -- START position and an END position (or a length), rather than
+  -- an assumed SINGLE cell.
+  info("[NOTICE!!!]: Currently performing ONLY single delete");
+
+  GP=F and trace("[EXIT]<%s:%s>List(%s)", MOD, meth, tostring(resultList));
+  return resultList;
+end -- listDelete()
+
+
+-- ======================================================================
+-- leafDelete()
+-- ======================================================================
+-- Collapse the list to get rid of the entry in the leaf.
+-- We're not yet in the mode of "NULLing" out the entry, so we'll pay
+-- the extra cost of collapsing the list around the item.  The SearchPath
+-- parm shows us where the item is.
+-- Parms: 
+-- (*) src: SubRec Context (in case we have to open more leaves)
+-- (*) sp: Search Path structure
+-- (*) topRec:
+-- (*) ldtList:
+-- (*) key: the key -- in case we need to look for more dups
+-- ======================================================================
+local function leafDelete( src, sp, topRec, ldtList, key )
+  local meth = "leafDelete()";
+  GP=F and trace("[ENTER]<%s:%s> LDT(%s) key(%s)", MOD, meth,
+    ldtSummaryString( ldtList ), tostring( key ));
+  local rc = 0;
+
+  -- Our list and map has already been validated.  Just use it.
+  propMap = ldtList[1];
+  ldtMap  = ldtList[2];
+
+  local leafLevel = sp.LevelCount;
+  local leafRec = sp.RecList[leafLevel];
+  local objectList = leafRec[LSR_LIST_BIN];
+  local position = sp.PositionList[leafLevel];
+  
+  info("[DUMP]Before delete(%s) Key(%s)", tostring(objectList), tostring(key));
+
+  local resultList = listDelete( objectList, key, position )
+  leafRec[LSR_LIST_BIN] = resultList;
+
+  info("[DUMP]After delete(%s) Key(%s)", tostring(resultList), tostring(key));
+
+  rc = aerospike:update_subrec( leafRec );
+  if( rc == nil or rc == 0 ) then
+    GP=F and trace("[DEBUG]<%s:%s>::Updating TopRec", MOD, meth );
+    rc = aerospike:update( topRec );
+  end
+
+  GP=F and trace("[EXIT]<%s:%s>LdtSummary(%s) newValue(%s) rc(%s)",
+    MOD, meth, ldtSummaryString(ldtList), tostring(newValue), tostring(rc));
+  return rc;
+end -- leafDelete()
+
+-- ======================================================================
+-- treeDelete()
+-- ======================================================================
 -- Perform the delete of the delete value.  Remove this object from the
 -- tree.  Two cases:
 -- (*) Unique Key
@@ -4205,7 +4327,6 @@ local function treeDelete( src, topRec, ldtList, key )
   local rc = 0;
 
   -- Our list and map has already been validated.  Just use it.
-  ldtList = topRec[ ldtBinName ];
   propMap = ldtList[1];
   ldtMap  = ldtList[2];
 
@@ -4213,7 +4334,7 @@ local function treeDelete( src, topRec, ldtList, key )
   local status = treeSearch( src, topRec, sp, ldtList, key );
 
   if( status == ST_FOUND ) then
-    rc = leafDelete( src, sp, topRec, ldtList );
+    rc = leafDelete( src, sp, topRec, ldtList, key );
     if( rc == 0 ) then
       rc = closeAllSubrecs( src );
       if( rc < 0 ) then
@@ -4571,7 +4692,7 @@ end -- end llist_search_with_filter()
 -- scan function.  Search with a nil searchKey works just fine (I think).
 -- =======================================================================
 function llist_scan( topRec, ldtBinName )
-  local meth = "listScan()";
+  local meth = "llist_scan()";
   GP=F and trace("[ENTER]<%s:%s> LLIST BIN(%s)",
     MOD, meth, tostring(ldtBinName) );
 
@@ -4581,7 +4702,7 @@ function llist_scan( topRec, ldtBinName )
 end -- end llist_scan()
 
 function llist_scan_with_filter( topRec, ldtBinName, func, fargs )
-  local meth = "listScan()";
+  local meth = "llist_scan_with_filter()";
   GP=F and trace("[ENTER]<%s:%s> BIN(%s) func(%s) fargs(%s)",
     MOD, meth, tostring(ldtBinName), tostring(func), tostring(fargs));
 
@@ -4601,7 +4722,7 @@ end -- end llist_scan()
 -- (3) key: The key we'll search for
 --
 function llist_delete( topRec, binName, key )
-  local meth = "listDelete()";
+  local meth = "llist_delete()";
   local rc = 0;
 
   GP=F and info("\n\n  >>>>>>> API[ DELETE ] <<<<<<<<<<<<<<<<<<< \n\n");
