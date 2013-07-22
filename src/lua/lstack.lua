@@ -1,8 +1,8 @@
 -- Large Stack Object (LSO or LSTACK) Operations
--- lstack.lua:  July 16, 2013
+-- lstack.lua:  July 21, 2013
 --
 -- Module Marker: Keep this in sync with the stated version
-local MOD="lstack_2013_07_16.b"; -- the module name used for tracing
+local MOD="lstack_2013_07_21.g"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -19,17 +19,26 @@ local GP=true; -- Leave this ALWAYS true (but value seems not to matter)
 local F=true; -- Set F (flag) to true to turn ON global print
 
 -- TODO:
--- (*) initPropMap() method
--- (1) Init the record Prop Bin on first LDT Create
--- (2) Create the ESR on first SubRec Create
--- (3) Switch to lsoList (PropMap, lsoMap)
--- (4) Implement Trim (release LDR pages from Warm/Cold List)
--- (5) Add a LIMIT value to the control map -- and when we are a page over
+-- (+) Implement LDT Remove -- remove the ESR and the Bin Contents, and
+--     then let the NSUP/Defrag mechanism clean up the subrecs.
+-- (+) Implement Trim (release LDR pages from Warm/Cold List)
+-- (+) Add a LIMIT value to the control map -- and when we are a page over
 --     then release the page (ideally -- do not slow down transaction to
 --     do this.  Can we add a task to a cleanup thread for this?)
--- (6) Implement Destroy (use the "get all subrec digests method) to create
+-- (+) Implement Destroy (use the "get all subrec digests method) to create
 --     a list of digests that we then destroy.  Could this also be done
 --     in a background task?
+-- ANOTHER TO DO List:
+-- TODO: Implement stack_trim(): Must release storage before record delete.
+-- TODO: Implement stack_delete(): Release all storage for this LDT
+-- TODO: Implement LStackSubRecordDestructor():
+-- TODO: Add Exists Subrec Digest in LsoMap.
+-- ======================================================================
+-- DONE:
+-- (-) initPropMap() method
+-- (-) Init the record Prop Bin on first LDT Create
+-- (-) Create the ESR on first SubRec Create
+-- (-) Switch to lsoList (PropMap, lsoMap)
 --
 -- ======================================================================
 -- Additional lstack documentation may be found in: lstack_design.lua.
@@ -55,7 +64,7 @@ local F=true; -- Set F (flag) to true to turn ON global print
 -- (*) lstack_peek: Read N values from the stack, in LIFO order
 -- (*) lstack_peek_then_filter: Read N values from the stack, in LIFO order
 -- (*) lstack_trim: Release all but the top N values.
--- (*) lstack_delete: Release all storage related to this lstack object
+-- (*) lstack_remove: Release all storage related to this lstack object
 -- (*) lstack_config: retrieve all current config settings in map format
 -- (*) lstack_size: Report the NUMBER OF ITEMS in the stack.
 -- (*) lstack_subrec_list: Return the list of subrec digests
@@ -243,12 +252,6 @@ local F=true; -- Set F (flag) to true to turn ON global print
 --     adding it to the result list.  If the value doesn't pass the
 --     filter, the filter returns nil, and thus it would not be added
 --     to the result list.
--- ======================================================================
--- TO DO List: for Future (once delete_subrec() is available)
--- TODO: Implement stack_trim(): Must release storage before record delete.
--- TODO: Implement stack_delete(): Release all storage for this LDT
--- TODO: Implement LStackSubRecordDestructor():
--- TODO: Add Exists Subrec Digest in LsoMap.
 -- ======================================================================
 -- Aerospike SubRecord Calls:
 -- newRec = aerospike:create_subrec( topRec )
@@ -737,6 +740,7 @@ end -- initPropMap()
 -- When we create the initial LDT Control Bin for the entire record (the
 -- first time ANY LDT is initialized in a record), we create a property
 -- map in it with various values.
+-- TODO: Move this to LDT_COMMON (7/21/2013)
 -- ======================================================================
 local function setLdtRecordType( topRec )
   local meth = "setLdtRecordType()";
@@ -768,10 +772,10 @@ local function setLdtRecordType( topRec )
     recPropMap = topRec[REC_LDT_CTRL_BIN];
     local ldtCount = recPropMap[RPM_LdtCount];
     recPropMap[RPM_LdtCount] = ldtCount + 1;
-    topRec[REC_LDT_CTRL_BIN] = recPropMap;
     GP=F and trace("[DEBUG]<%s:%s>Record LDT Map Exists: Bump LDT Count(%d)",
       MOD, meth, ldtCount + 1 );
   end
+  topRec[REC_LDT_CTRL_BIN] = recPropMap;
 
   -- Now that we've changed the top rec, do the update to make sure the
   -- changes are saved.
@@ -802,16 +806,16 @@ local function createAndInitESR( topRec, lsoList )
   local esr       = aerospike:create_subrec( topRec );
   local esrDigest = record.digest( esr );
   local topDigest = record.digest( topRec );
-  local propMap = lsoList[1];
+  local topPropMap = lsoList[1];
   local lsoMap  = lsoList[2];
 
-  propMap[PM_RecType]   = RT_ESR;
-  propMap[PM_ParentDigest] = topDigest; -- Parent
-  propMap[PM_EsrDigest] = esrDigest; -- Self
-
+  -- Set the Property ControlMap for the ESR, and assign the parent Digest
+  -- Note that we use our standard convention for property maps - all subrecs
+  -- have a property map.
   -- Init the properties map for this ESR. Note that esrDigest is in here
   -- twice -- once for "self" and once for "esr".
-  initPropMap( propMap, esrDigest, esrDigest, topDigest, RT_ESR, lsoList );
+  local esrPropMap = map();
+  initPropMap( esrPropMap, esrDigest, esrDigest, topDigest, RT_ESR, lsoList );
 
   -- If the topRec already has an LDT CONTROL BIN (with a valid map in it),
   -- then we know that the main LDT record type has already been set.
@@ -824,14 +828,7 @@ local function createAndInitESR( topRec, lsoList )
   record.set_type( esr, RT_ESR );
   trace("[TRACE]<%s:%s> DONE SETTING RECORD TYPE", MOD, meth );
 
-  -- Set the Property ControlMap for the ESR, and assign the parent Digest
-  -- Note that we use our standard convention for property maps - all subrecs
-  -- have a property map.
-  local propMap = map();
-  propMap[PM_ParentDigest] = topDigest;
-  propMap[PM_EsrDigest] = esrDigest; -- Point to Self (mostly for tracing)
-
-  esr[SUBREC_PROP_BIN] = propMap;
+  esr[SUBREC_PROP_BIN] = esrPropMap;
 
   GP=F and trace("[EXIT]: <%s:%s> Leaving with ESR Digest(%s)",
     MOD, meth, tostring(esrDigest));
@@ -2898,7 +2895,234 @@ local function validateRecBinAndMap( topRec, lsoBinName, mustExist )
 
 end -- validateRecBinAndMap()
 
+-- ========================================================================
+-- buildSubRecList()
+-- ========================================================================
+-- Build the list of subrecs starting at location N.  ZERO means, get them
+-- all (which is what lstack_delete() uses).
+-- Parms:
+-- (1) topRec: the user-level record holding the LSO Bin
+-- (2) lsoList: The main LDT control structure
+-- (3) position: We start building the list with the first subrec that
+--     holds "position" (item count, not byte count).  If position is in
+--     the HotList, then all Warm and Cold recs are included.
+-- Result:
+--   res = (when successful) List of SUBRECs
+--   res = (when error) Empty List
+-- ========================================================================
+local function buildSubRecList( topRec, lsoList, position )
+  local meth = "buildSubRecList()";
 
+  GP=F and trace("[ENTER]: <%s:%s> position(%s) lsoSummary(%s)",
+    MOD, meth, tostring(position), lsoSummaryString( lsoList ));
+
+  local propMap = lsoList[1];
+  local lsoMap  = lsoList[2];
+
+  -- If position puts us into or past the warmlist, make the adjustment
+  -- here.  Otherwise, drop down into the FULL MONTY
+  --
+  if( position < 0 ) then
+    error("[BUILD SUBREC LIST ERROR] Can't have negative position");
+  end
+
+  -- Call buildSearchPath() to give us a searchPath object that shows us
+  -- the storage we are going to release.  It will tell us what do to in
+  -- each of the three types of storage: Hot, Warm and Cold, although, we
+  -- care only about warm and cold in this case
+  local searchPath = map();
+  buildSearchPath( topRec, lsoList, searchPath, position );
+
+  -- Use the search path to show us where to start collecting digests in
+  -- the WARM List.
+  local wdList = lsoMap[M_WarmDigestList];
+  local warmListSize = list.size(  wdList );
+
+  -- If warmListStart is outside the size of the list, then that means we
+  -- will just skip the for loop for the warm list.  Also, if the WarmPosition
+  -- is ZERO, then we treat that as the same case.
+  local resultList;
+  local warmListStart = searchPath.WarmPosition;
+  if( warmListStart == 0 or warmListStart > warmListSize ) then
+    trace("[REC LIST]<%s:%s> Skipping over warm list: Size(%d) Pos(%d)",
+      MOD, meth, warmListSize, warmListStart );
+  elseif( warmListStart == 1 ) then
+    -- Take it all
+    resultList = list.take( wdList, warmListSize );
+  else
+    -- Check this
+    resultList = list.drop( wdList, warmListStart - 1 );
+  end
+
+  -- Now for the harder part.  We will still have open the cold list directory
+  -- subrecords to know what is inside.  The searchPath is going to give us
+  -- a digest position in the cold list.  We will open each Cold Directory
+  -- Page until we get to the start position (which can be 1, or N)
+  local count = 0;
+
+  -- Now pull the digests from the Cold List
+  -- There are TWO types subrecords:
+  -- (*) There are the LDRs (Data Records) subrecs
+  -- (*) There are the Cold List Directory subrecs
+  -- We will read a Directory Head, and enter it's digest
+  -- Then we'll pull the digests out of it (just like a warm list)
+
+  -- If there is no Cold List, then return immediately -- nothing more read.
+  if(lsoMap[M_ColdDirListHead] == nil or lsoMap[M_ColdDirListHead] == 0) then
+    return resultList;
+  end
+
+  -- The challenge here is to collect the digests of all of the subrecords
+  -- that are to be released.
+
+  -- Process the coldDirList (a linked list) head to tail (that is "append"
+  -- order).  For each dir, read in the LDR Records (in reverse list order),
+  -- and then each page (in reverse list order), until we've read "count"
+  -- items.  If the 'all' flag is true, then read everything.
+  local coldDirRecDigest = lsoMap[M_ColdDirListHead];
+
+  -- LEFT OFF HERE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  info("\n\n LEFT OFF HERE<%s:%s>!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n",MOD, meth);
+  info("\n\n LEFT OFF HERE<%s:%s>!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n",MOD, meth);
+
+  while coldDirRecDigest ~= nil and coldDirRecDigest ~= 0 do
+    -- Save the Dir Digest
+    list.append( resultList, coldDirRecDigest );
+
+    -- Open the Directory Page, read the digest list
+    local stringDigest = tostring( coldDirRecDigest ); -- must be a string
+    local coldDirRec = aerospike:open_subrec( topRec, stringDigest );
+    local digestList = coldDirRec[COLD_DIR_LIST_BIN];
+    for i = 1, list.size(digestList), 1 do 
+      list.append( resultList, digestList[i] );
+    end
+
+    -- Get the next Cold Dir Node in the list
+    local coldDirMap = coldDirRec[COLD_DIR_CTRL_BIN];
+    coldDirRecDigest = coldDirMap[CDM_NextDirRec]; -- Next in Linked List.
+    -- If no more, we'll drop out of the loop, and if there's more, 
+    -- we'll get it in the next round.
+    -- Close this directory subrec before we open another one.
+    aerospike:close_subrec( coldDirRec );
+  end -- for each coldDirRecDigest
+
+  GP=F and trace("[EXIT]:<%s:%s> SubRec Digest Result List(%s)",
+      MOD, meth, tostring( resultList ) );
+
+  return resultList
+end -- buildResultList()
+
+
+-- ========================================================================
+-- buildSubRecListAll()
+-- ========================================================================
+-- Build the list of subrecs for the entire LDT.
+-- Parms:
+-- (1) topRec: the user-level record holding the LSO Bin
+-- (2) lsoList: The main LDT control structure
+-- Result:
+--   res = (when successful) List of SUBRECs
+--   res = (when error) Empty List
+-- ========================================================================
+function buildSubRecListAll( topRec, lsolist )
+  local meth = "buildSubRecListAll()";
+
+  GP=F and trace("[ENTER]: <%s:%s> LSO Summary(%s)",
+    MOD, meth, lsoSummaryString( lsoList ));
+
+  -- Extract the property map and lso control map from the lso bin list.
+  local propMap = lsoList[1];
+  local lsoMap  = lsoList[2];
+
+  -- Copy the warm list into the result list
+  local wdList = lsoMap[M_WarmDigestList];
+  local transAmount = list.size( wdList );
+  local resultList = list.take( wdList, transAmount );
+
+  -- Now pull the digests from the Cold List
+  -- There are TWO types subrecords:
+  -- (*) There are the LDRs (Data Records) subrecs
+  -- (*) There are the Cold List Directory subrecs
+  -- We will read a Directory Head, and enter it's digest
+  -- Then we'll pull the digests out of it (just like a warm list)
+
+  -- If there is no Cold List, then return immediately -- nothing more read.
+  if(lsoMap[M_ColdDirListHead] == nil or lsoMap[M_ColdDirListHead] == 0) then
+    return resultList;
+  end
+
+  -- Process the coldDirList (a linked list) head to tail (that is "append"
+  -- order).  For each dir, read in the LDR Records (in reverse list order),
+  -- and then each page (in reverse list order), until we've read "count"
+  -- items.  If the 'all' flag is true, then read everything.
+  local coldDirRecDigest = lsoMap[M_ColdDirListHead];
+
+  while coldDirRecDigest ~= nil and coldDirRecDigest ~= 0 do
+    -- Save the Dir Digest
+    list.append( resultList, coldDirRecDigest );
+
+    -- Open the Directory Page, read the digest list
+    local stringDigest = tostring( coldDirRecDigest ); -- must be a string
+    local coldDirRec = aerospike:open_subrec( topRec, stringDigest );
+    local digestList = coldDirRec[COLD_DIR_LIST_BIN];
+    for i = 1, list.size(digestList), 1 do 
+      list.append( resultList, digestList[i] );
+    end
+
+    -- Get the next Cold Dir Node in the list
+    local coldDirMap = coldDirRec[COLD_DIR_CTRL_BIN];
+    coldDirRecDigest = coldDirMap[CDM_NextDirRec]; -- Next in Linked List.
+    -- If no more, we'll drop out of the loop, and if there's more, 
+    -- we'll get it in the next round.
+    -- Close this directory subrec before we open another one.
+    aerospike:close_subrec( coldDirRec );
+
+  end -- Loop thru each cold directory
+
+  GP=F and trace("[EXIT]:<%s:%s> SubRec Digest Result List(%s)",
+      MOD, meth, tostring( resultList ) );
+
+  return resultList
+
+end -- buildSubRecListAll()
+
+-- ======================================================================
+-- locatePosition()
+-- ======================================================================
+-- Create a Search Path Object that shows where "position" lies in the
+-- stack object.  The possible places are:
+-- (*) Hot List
+-- (*) Warm List
+-- (*) Cold List
+-- ======================================================================
+local function locatePosition( topRec, lsoList, position )
+  local meth = "locatePosition()";
+  GP=F and trace("[ENTER]:<%s:%s> BinName(%s) ME(%s)",
+    MOD, meth, tostring( lsoBinName ), tostring( mustExist ));
+
+  GP=F and trace("[EXIT]: <%s:%s>", MOD, meth );
+end -- locatePosition
+
+-- ======================================================================
+-- localTrim( topRec, lsoList, searchPath )
+-- ======================================================================
+-- Release the storage that is colder than the location marked in the
+-- searchPath object.
+--
+-- It is not (yet) clear if this needs to be an EXACT operation, or just
+-- an approximate one.  We would prefer that we could release the storage
+-- at the LDR (page) boundary.
+-- ======================================================================
+local function localTrim( topRec, lsoList, searchPath )
+  local meth = "localTrim()";
+  GP=F and trace("[ENTER]:<%s:%s> LsoSummary(%s) SearchPath(%s)",
+    MOD, meth, lsoSummaryString(lsoList), tostring(searchPath));
+
+  GP=F and trace("[EXIT]: <%s:%s>", MOD, meth );
+end -- localTrim()
+
+-- ======================================================================
+-- ======================================================================
 -- ======================================================================
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- LSTACK Main Functions
@@ -3287,11 +3511,21 @@ function lstack_trim( topRec, lsoBinName, trimCount )
   GP=F and trace("[ENTER1]: <%s:%s> lsoBinName(%s) trimCount(%s)",
     MOD, meth, tostring(lsoBinName), tostring( trimCount ));
 
+  warn("[NOTICE!!]<%s:%s> Under Construction", MOD, meth );
+
   -- validate the topRec, the bin and the map.  If anything is weird, then
   -- this will kick out with a long jump error() call.
   validateRecBinAndMap( topRec, lsoBinName, true );
 
-  error('Trim() is not yet implemented (Sorry)');
+  lsoList = topRec[lsoBinName];
+
+  -- Move to the location (Hot, Warm or Cold) that is the trim point.
+  -- TODO: Create locatePosition()
+  local searchPath = locatePosition( topRec, lsoList, trimCount );
+
+  -- From searchPath to the end, release storage.
+  -- TODO: Create localTrim()
+  localTrim( topRec, lsoList, searchPath );
 
   GP=F and trace("[EXIT]: <%s:%s>", MOD, meth );
 
@@ -3379,8 +3613,8 @@ function lstack_subrec_list( topRec, lsoBinName )
   GP=F and trace("[ENTER]: <%s:%s> lsoBinName(%s)",
     MOD, meth, tostring(lsoBinName));
 
-  local lsoList = topRec[ lsoBinName ];
   -- Extract the property map and lso control map from the lso bin list.
+  local lsoList = topRec[ lsoBinName ];
   local propMap = lsoList[1];
   local lsoMap  = lsoList[2];
 
@@ -3438,7 +3672,106 @@ end -- lstack_subrec_list()
 
 
 -- ========================================================================
--- lstack_delete() -- Delete the entire lstack
+-- ld_remove() -- Remove the LDT entirely from the record.
+-- NOTE: This could eventually be moved to COMMON, and be "ldt_remove()",
+-- since it will work the same way for all LDTs.
+-- Remove the ESR, Null out the topRec bin.
+-- ========================================================================
+-- Release all of the storage associated with this LDT and remove the
+-- control structure of the bin.  If this is the LAST LDT in the record,
+-- then ALSO remove the HIDDEN LDT CONTROL BIN.
+--
+-- Question  -- Reset the record[binName] to NIL (does that work??)
+-- Parms:
+-- (1) topRec: the user-level record holding the LSO Bin
+-- (2) binName: The name of the LDT Bin
+-- Result:
+--   res = 0: all is well
+--   res = -1: Some sort of error
+-- ========================================================================
+local function ldt_remove( topRec, binName )
+  local meth = "ldt_remove()";
+
+  GP=F and trace("[ENTER]<%s:%s> binName(%s)", MOD, meth, tostring(binName));
+  local rc = 0; -- start off optimistic
+
+  -- Validate the binName before moving forward
+  validateRecBinAndMap( topRec, binName, true );
+
+  -- Extract the property map and lso control map from the lso bin list.
+  local ldtList = topRec[ binName ];
+  local propMap = ldtList[1];
+
+  -- Get the ESR and delete it.
+  local esrDigest = propMap[PM_EsrDigest];
+  local esrDigestString = tostring(esrDigest);
+  local esrRec = aerospike:open_subrec( topRec, esrDigestString );
+  rc = aerospike:delete( esrRec );
+  if( rc < 0 ) then
+    warn("[ESR DELETE ERROR]: Can't Delete: Bin(%s)", MOD, meth, binName);
+    error("[ESR DELETE ERROR] Cannot Delete Subrec");
+  end
+
+  topRec[binName] = nil;
+
+  -- Get the Common LDT (Hidden) bin, and update the LDT count.  If this
+  -- is the LAST LDT in the record, then remove the Hidden Bin entirely.
+  local recPropMap = topRec[REC_LDT_CTRL_BIN];
+  if( recPropMap == nil or recPropMap[RPM_Magic] ~= MAGIC ) then
+    warn("[INTERNAL ERROR]<%s:%s> Prop Map for LDT Hidden Bin invalid",
+    MOD, meth );
+    error("[INTERNAL ERROR]: Invalid Record LDT Control Bin");
+  end
+  local ldtCount = recPropMap[RPM_LdtCount];
+  if( ldtCount <= 1 ) then
+    -- Remove this bin
+    topRec[REC_LDT_CTRL_BIN] = nil;
+  else
+    recPropMap[RPM_LdtCount] = ldtCount - 1;
+    topRec[REC_LDT_CTRL_BIN] = recPropMap;
+  end
+
+  rc = aerospike:update( topRec );
+
+  return rc;
+end -- ldt_remove()
+
+
+-- ========================================================================
+-- lstack_remove() -- Remove the LDT entirely from the record.
+-- NOTE: This could eventually be moved to COMMON, and be "ldt_remove()",
+-- since it will work the same way for all LDTs.
+-- Remove the ESR, Null out the topRec bin.
+-- ========================================================================
+-- Release all of the storage associated with this LDT and remove the
+-- control structure of the bin.  If this is the LAST LDT in the record,
+-- then ALSO remove the HIDDEN LDT CONTROL BIN.
+--
+-- Question  -- Reset the record[lsoBinName] to NIL (does that work??)
+-- Parms:
+-- (1) topRec: the user-level record holding the LSO Bin
+-- (2) binName: The name of the LSO Bin
+-- Result:
+--   res = 0: all is well
+--   res = -1: Some sort of error
+-- ========================================================================
+function lstack_remove( topRec, lsoBinName )
+  return ldt_remove( topRec, binName );
+end -- lstack_remove()
+
+-- ========================================================================
+-- lstack_delete_subrecs() -- Delete the entire lstack -- in pieces.
+-- ========================================================================
+-- The real delete (above) will do the correct delete, which is to remove
+-- the ESR and the BIN.  THIS function is more of a test function, which
+-- will remove each SUBREC individually.
+-- Release all of the storage associated with this LDT and remove the
+-- control structure of the bin.  If this is the LAST LDT in the record,
+-- then ALSO remove the HIDDEN LDT CONTROL BIN.
+--
+-- First, fetch all of the digests of subrecords that go with this
+-- LDT, then iterate thru the list and delete them.
+-- Finally  -- Reset the record[lsoBinName] to NIL (does that work??)
 -- Parms:
 -- (1) topRec: the user-level record holding the LSO Bin
 -- (2) lsoBinName: The name of the LSO Bin
@@ -3446,22 +3779,44 @@ end -- lstack_subrec_list()
 --   res = 0: all is well
 --   res = -1: Some sort of error
 -- ========================================================================
-function lstack_delete( topRec, lsoBinName )
+function lstack_delete_subrecs( topRec, lsoBinName )
   local meth = "lstack_delete()";
 
   GP=F and trace("[ENTER]: <%s:%s> lsoBinName(%s)",
     MOD, meth, tostring(lsoBinName));
+
+  trace("[ATTENTION!!!]::LSTACK_DELETE IS NOT YET IMPLEMENTED!!!");
 
   local rc = 0; -- start off optimistic
 
   -- Validate the lsoBinName before moving forward
   validateRecBinAndMap( topRec, lsoBinName, true );
 
-  -- Get the lsoMap from the topRec.
-  local lsoMap = topRec[lsoBinName];
+  -- Extract the property map and lso control map from the lso bin list.
+  local lsoList = topRec[ lsoBinName ];
+  local propMap = lsoList[1];
+  local lsoMap  = lsoList[2];
 
-  trace("[ATTENTION!!!]::LSTACK_DELETE IS NOT YET IMPLEMENTED!!!");
-
+  -- TODO: Create buildSubRecList()
+  local deleteList = buildSubRecList( topRec, lsoList );
+  local listSize = list.size( deleteList );
+  local digestString;
+  local subrec;
+  for i = 1, listSize, 1 do
+      -- Open the Subrecord -- and then remove it.
+      digestString = tostring( deleteList[i] );
+      GP=F and trace("[SUBREC DELETE]<%s:%s> About to Open and Delete(%s)",
+        MOD, meth, digestString );
+      subrec = aerospike:open_subrec( topRec, digestString );
+      if( subrec ~= nil ) then
+        rc = aerospike:remove( subrec );
+        GP=F and trace("[REMOVE RESULTS]<%s:%s> rc(%s)", MOD, meth,
+          tostring( rc ));
+      else
+        warn("[ERROR]<%s:%s> Can't open Subrec: Digest(%s)", MOD, meth,
+          digestString );
+      end
+  end -- for each subrecord
   return rc;
 
 end -- lstack_delete()
