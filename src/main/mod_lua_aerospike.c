@@ -115,15 +115,25 @@ static int mod_lua_aerospike_crec_create(lua_State * l) {
  */
 static int mod_lua_aerospike_crec_update(lua_State * l) {
     as_aerospike *  a   = mod_lua_checkaerospike(l, 1);
-//    as_rec *        r   = mod_lua_torecord(l, 2);
     as_rec *        cr  = mod_lua_torecord(l, 2);
-    // Remove the TOP Rec parameter
-//    int             rc  = as_aerospike_crec_update(a, r, cr);
     int             rc  = as_aerospike_crec_update(a, cr);
     if (!rc) return 0;
     lua_pushinteger(l, rc);
     return 1;
 }
+
+/**
+ * aerospike.remove_subrec(record, record) => result<int>
+ */
+static int mod_lua_aerospike_crec_remove(lua_State * l) {
+    as_aerospike *  a   = mod_lua_checkaerospike(l, 1);
+    as_rec *        cr  = mod_lua_torecord(l, 2);
+    int             rc  = as_aerospike_crec_remove(a, cr);
+    if (!rc) return 0;
+    lua_pushinteger(l, rc);
+    return 1;
+}
+
 
 /**
  * aerospike.open_subrec(record, record) => result<bool>
