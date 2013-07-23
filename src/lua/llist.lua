@@ -1,8 +1,8 @@
 -- Large Ordered List (llist.lua)
--- Last Update July 21,  2013: tjl
+-- Last Update July 22,  2013: tjl
 --
 -- Keep this MOD value in sync with version above
-local MOD = "llist_2013_07_21.h"; -- module name used for tracing.  
+local MOD = "llist_2013_07_22.g"; -- module name used for tracing.  
 
 -- ======================================================================
 -- || GLOBAL PRINT ||
@@ -12,16 +12,32 @@ local MOD = "llist_2013_07_21.h"; -- module name used for tracing.
 -- print debug blocks -- as well as the individual trace/info lines.
 -- ======================================================================
 local GP=true;
-local F=false; -- Set F (flag) to true to turn ON global print
+local F=true; -- Set F (flag) to true to turn ON global print
 
--- TODO
+-- TODO (Major Feature Items:  (N) Now, (L) Later
+-- (N) Switch all Lua External functions to return two-part values, which
+--     Need to match what the new C API expects (when Chris returns).
+-- (N) Handle Duplicates (search, Scan, Delete)
+-- (L) Vector Operations for Insert, Search, Scan, Delete
+--     ==> A LIST of Operations to perform, along with a LIST of RESULT
+--         to return.
+-- (L) Change the SubRec Context to close READONLY pages when we're done
+--     with them -- and keep open ONLY the dirty pages.  So, we have to mark
+--     dirty pages in the SRC.  We could manage the SRC like a buffer pool
+--     that closes oldest READONLY pages when it needs space.
+-- (L) Build the tree from the list, using "buildTree()" method, rather
+--     than individual inserts.  Sorted list is broken into leaves, which
+--     become tree leaves.  Allocate parents as necessary.  Build bottom
+--     up.
+-- TODO (Minor Design changes, Adjustments and Fixes)
+-- TODO (Testing)
 -- (*) Fix "leaf Count" in the ldt map
 -- (*) Test/validate Simple delete
 -- (*) Test/validate Simple scan
 -- (*) Complex Insert
 -- (*) Complex Search
 -- (*) Complex delete
--- (*) Tree Delete (Destroy)
+-- (*) Tree Delete (Remove)
 -- (*) Switch CompactList to Sorted List (like the leaf list)
 -- (*) Switch CompactList routines to use the "Leaf" List routines
 --     for search, insert, delete and scan.
@@ -29,21 +45,8 @@ local F=false; -- Set F (flag) to true to turn ON global print
 --     Insert: Search, plus listInsert
 --     Delete: Search, plus listDelete
 --     Scan:   Search, plus listScan
--- (*) Handle Duplicates (search, Scan, Delete)
--- (*) Switch all Lua External functions to return two-part values
 -- (*) Test that Complex Type and KeyFunction is defined on create,
 --     otherwise error.  Take no default action.
--- (*) Build the tree from the list, using "buildTree()" method, rather
---     than individual inserts.  Sorted list is broken into leaves, which
---     become tree leaves.  Allocate parents as necessary.  Build bottom
---     up.
--- (*) Change the SubRec Context to close READONLY pages when we're done
---     with them -- and keep open ONLY the dirty pages.  So, we have to mark
---     dirty pages in the SRC.  We could manage the SRC like a buffer pool
---     that closes oldest READONLY pages when it needs space.
--- (*) Vector Operations for Insert, Search, Scan, Delete
---     ==> A LIST of Operations to perform, along with a LIST of RESULT
---         to return.
 --
 -- DONE LIST
 -- (*) Initialize Maps for Root, Nodes, Leaves
@@ -620,7 +623,7 @@ initializeLList( topRec, ldtBinName, transFunc, untransFunc )
   propMap[PM_Magic]      = MAGIC; -- Special Validation
   propMap[PM_BinName]    = ldtBinName; -- Defines the LDT Bin
   propMap[PM_RecType]    = RT_LDT; -- Record Type LDT Top Rec
-  propMap[PM_EsrDigest]    = nil; -- not set yet.
+  propMap[PM_EsrDigest]    = 0; -- not set yet.
   propMap[PM_CreateTime] = aerospike:get_current_time();
 
   -- General Tree Settings
@@ -802,18 +805,18 @@ local function packageDebugModeList( ldtMap )
   ldtMap[R_StoreMode] = SM_LIST; -- Use List Mode
   ldtMap[R_BinaryStoreSize] = nil; -- Don't waste room if we're not using it
   ldtMap[R_KeyType] = KT_ATOMIC; -- Atomic Keys
-  ldtMap[R_Threshold] = 20; -- Rehash after this many have been inserted
+  ldtMap[R_Threshold] = 10; -- Rehash after this many have been inserted
   ldtMap[R_KeyFunction] = nil; -- Special Attention Required.
   ldtMap[R_KeyUnique] = true; -- Just Unique keys for now.
 
   -- Top Node Tree Root Directory
-  ldtMap[R_RootListMax] = 4; -- Length of Key List (page list is KL + 1)
+  ldtMap[R_RootListMax] = 10; -- Length of Key List (page list is KL + 1)
   
   -- LLIST Inner Node Settings
-  ldtMap[R_NodeListMax] = 4;  -- Max # of items (key+digest)
+  ldtMap[R_NodeListMax] = 10;  -- Max # of items (key+digest)
 
   -- LLIST Tree Leaves (Data Pages)
-  ldtMap[R_LeafListMax] = 4;  -- Max # of items
+  ldtMap[R_LeafListMax] = 10;  -- Max # of items
 
   return 0;
 
@@ -1743,13 +1746,14 @@ end -- objectCompare()
 -- =======================================================================
 --     Node (key) Searching:
 -- =======================================================================
+--        Index:   1   2   3   4
 --     Key List: [10, 20, 30]
 --     Dig List: [ A,  B,  C,  D]
 --     +--+--+--+                        +--+--+--+
 --     |10|20|30|                        |40|50|60| 
 --     +--+--+--+                        +--+--+--+
---    /  1| 2| 3 \4                     /   |  |   \
---   A    B  C    D                    E    F  G    H
+--    / 1 |2 |3  \4 (index)             /   |  |   \
+--   A    B  C    D (Digest Ptr)       E    F  G    H
 --
 --   Child A: all values < 10
 --   Child B: all values >= 10 and < 20
@@ -1787,6 +1791,10 @@ initPropMap( propMap, esrDigest, selfDigest, topDigest, rtFlag, topPropMap )
   local meth = "initPropMap()";
   GP=F and trace("[ENTER]<%s:%s>", MOD, meth );
 
+  -- Remember the ESR in the Top Record
+  topPropMap[PM_EsrDigest] = esrDigest;
+
+  -- Initialize the PropertyMap of the new ESR
   propMap[PM_EsrDigest]    = esrDigest;
   propMap[PM_RecType  ]    = rtFlag;
   propMap[PM_Magic]        = MAGIC;
@@ -1846,7 +1854,6 @@ local function setLdtRecordType( topRec )
   return rc;
 end -- setLdtRecordType()
 
-
 -- ======================================================================
 -- Create and Init ESR
 -- ======================================================================
@@ -1874,26 +1881,19 @@ local function createAndInitESR( src, topRec, ldtList )
 
   local esrDigest = record.digest( esrRec );
   local topDigest = record.digest( topRec );
-
   local topPropMap = ldtList[1];
   local ldtMap  = ldtList[2];
-
-  local esrPropMap = map();
-
-  -- This has been moved into "initPropMap()"
-  -- esrPropMap[PM_RecType]   = RT_ESR;
-  -- esrPropMap[PM_ParentDigest] = topDigest; -- Parent
-  -- esrPropMap[PM_EsrDigest] = esrDigest; -- Self
-  -- esrPropMap[PM_CreateTime] = topPropMap[PM_CreateTime];
 
   -- Init the properties map for this ESR. Note that esrDigest is in here
   -- twice -- once for "self" and once for "esrRec".
   -- Set the Property ControlMap for the ESR, and assign the parent Digest
   -- Note that we use our standard convention for property maps - all subrecs
   -- have a property map, including ESRs.
+  local esrPropMap = map();
   initPropMap(esrPropMap, esrDigest, esrDigest, topDigest, RT_ESR, topPropMap);
 
   esrRec[SUBREC_PROP_BIN] = esrPropMap;
+  -- NOTE: We have to make sure that the TopRec propMap also gets saved.
 
   -- If the topRec already has an LDT CONTROL BIN (with a valid map in it),
   -- then we know that the main LDT record type has already been set.
@@ -4838,11 +4838,15 @@ local function ldt_remove( topRec, binName )
   local ldtList = topRec[ binName ];
   local propMap = ldtList[1];
 
+  GP=F and info("[STATUS]<%s:%s> propMap(%s) LDT Summary(%s)", MOD, meth,
+    tostring( propMap ), ldtSummaryString( ldtList ));
+
   -- Get the ESR and delete it.
   local esrDigest = propMap[PM_EsrDigest];
   local esrDigestString = tostring(esrDigest);
   local esrRec = aerospike:open_subrec( topRec, esrDigestString );
-  rc = aerospike:delete( esrRec );
+  GP=F and info("[STATUS]<%s:%s> About to Call Aerospike REMOVE", MOD, meth );
+  rc = aerospike:remove( esrRec );
   if( rc < 0 ) then
     warn("[ESR DELETE ERROR]: Can't Delete: Bin(%s)", MOD, meth, binName);
     error("[ESR DELETE ERROR] Cannot Delete Subrec");
@@ -4893,6 +4897,7 @@ end -- ldt_remove()
 --   res = -1: Some sort of error
 -- ========================================================================
 function llist_remove( topRec, lsoBinName )
+  info("\n\n >>>>>>>>> API[ LLIST REMOVE ] <<<<<<<<<< \n\n");
   return ldt_remove( topRec, lsoBinName );
 end
 
