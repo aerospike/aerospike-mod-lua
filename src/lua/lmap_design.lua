@@ -43,11 +43,11 @@
 --    The LMAP control-bin which was a simple map earlier has now been changed
 --    into a list. 
 --    a. The first entry of the list contains the ldt-bin specific 
---       property map referred in item 2. 
+--    property map referred in item 2. 
 --    b. The second entry of the list contains the original lsomap which has been
---       a map of the standard lmap attributes and their values 
+--    a map of standard lmap attributes and their values 
 -- 5. Modification: 
---    Abbreviated names for the lmap record attributes to save storage space: 
+--    Abbreviated names for the lmap record attributes to save storage space
 --
 --    ******************  Description copied-over from lstack.lua *********
 --
@@ -118,21 +118,16 @@
 --                    | LMAP    |
 --                    | control |
 --                    | info    |
---   		          +---------+                          LDR 1
---         	          |Digest 1 |+----------------------->+--------+
---                    |---------|              LDR 2      |Entry 1 |
---                    |Digest 2 |+------------>+--------+ |Entry 2 |
---                    +---------+              |Entry 1 | |   o    |
---                    | o o o   |              |Entry 2 | |   o    |
---                    |---------|    LDR N     |   o    | |   o    |
---                    |Digest N |+->+--------+ |   o    | |Entry n |
---                    +---------+   |Entry 1 | |   o    | +--------+
---                                  |Entry 2 | |Entry n |
---                                  |   o    | +--------+
---                                  |   o    |
---                                  |   o    |
---                                  |Entry n |
---                                  +--------+
+--   		          +---------+                         
+--                    | Entry 1 |
+--                    | Entry 2 |
+--					  | ..  o ..|
+--					  | ..  o ..|
+--					  | ..  o ..|
+--					  | ..  o ..|
+--                    | Entry n |
+--                    +---------+  
+--
 --
 --=============================================================================
 -- How does LMAP work ?
@@ -141,21 +136,58 @@
 -- which points to a list of digests. 
 -- 
 -- a. In the compact mode, there is only one LMAP bin pointing to a list of N
---    digest items. We compute the digest for the record, hash the digest over
---    the list of N bins, hash(digest) Modulo N, insert the digest in the 
---    appropriate list-index of the first and only lmap bin with a pointer 
---    to the actual LDR. 
---
--- b. In the standard mode, there are multiple LMAP bins in a record. When 
+--    LDR entries, directly placed as a list like a LSET structure. In this 
+--    mode, we simply append the record to the end of the singular list. 
+-- 
+-- b. When we reach lmapCtrlInfo[M_ThreshHold] or more items in the compact
+--    mode, we switch to the regular or standard mode. 
+-- 
+-- c. As a part of this switch, we first create a list of M_Modulo entries 
+--    which are all zeroed out initially. Later-on, they will become a list of
+--    digests each of which point to one LDR entry. 
+-- 
+-- d. Also as a part of the switch, we create a new LDR chunk, initialize the 
+--    property-map attributes for this LDR. We also create and initialize one 
+--    and only one Exists-Sub-Record per LMAP-bin. Then we fill-in this LDR 
+--    with the list we copied over from the first-bin. 
+-- 
+-- e. After we are done bulding the LDR entirely, it is now time to insert the 
+--    appropriate digest-list entry in LMAP with the digest-value of this LDR
+--    
+--    Digest_List[Index] = Digest of LDR x --------> LDR x
+--    
+-- f. So how does this step happen ? Every LDT-bin has a key-type field which 
+--    specifies if its key-type is atomic or complex. If the key-type field is
+--    atomic, it would be a simple integer or string hash. If the key-type is 
+--    complex, the user would also have to give us a function-table to compute
+--    this number. This hash is used to determine the index in the digest-list
+--    for the digest pointer entry. 
+-- 
+-- g. After the switch, normal lmap_inserts also go through the same hashing
+--    described above to perform insertions of elements. 
+-- 
+-- h. In the standard mode, there are multiple LMAP bins in a record. When 
 --    an LDR needss to be inserted, we first pick the matching lmap bin-name
---    and then proceed to hashing the digest and finding its place in the list. 
+--    and then proceed to hashing the object and finding its place in the list. 
 --
--- c. Unlike lstack which grows as a list but is read in reverse as a stack, 
---    lmap digest entries are meant to behave as a simple linear list. So a 
--- 	  lmap search is very much similar to the lset-search of hash-matching, 
+-- h.1 Note the distinction between StoreState vs StoreMode: StoreMode, as a
+--     SM_LIST or SM_BINARY is present for both LSET and LSTACK. But StoreState
+--     which determines whether the LDT is operating in compact or standard 
+--     mode is present only for LSET and NOT in LSTACK. In the case of LSTACK
+-- 	   the transfer-count and overflow counters acts as rehashing techniques. 
+--     Since LMAP is a hybrid LSET + Warm-list LDT, it has both the defines. 
+--     LMAP however does not have any Transfer metric, because there is no 
+--     notion of a transfer or overflow in LMAP. As in the case of LSET, the
+--     attribute that determines this switch will be LMAP threashold. Also 
+--     this will be a property of the LDT-bin specific control-information. 
+-- 
+-- i. Unlike lstack which grows as a list but is read in reverse as a stack, 
+--    lmap digest entries are meant to behave as a simple, oops hashed linear
+--    list. So a lmap search is very much similar to the lset-search of hash-matching, 
 -- 	  except that in the case of lset, we would hash to find the correct bin, 
 --    but in the case of lmap, we look-up by bin-name, but hash to find the 
---    digest entry amongst the list-indices. 
+--    digest entry amongst the list-indices (in the case of standard mode) or
+--    hash to find the actual entry index itself (in the case of compact mode. 
 --  
 ---- ======================================================================
 -- 
