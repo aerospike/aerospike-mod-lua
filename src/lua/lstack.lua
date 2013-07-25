@@ -1250,6 +1250,11 @@ local function initializeLdrMap(src,topRec,ldrRec,ldrPropMap,ldrMap,lsoList)
     lsoPropMap[PM_EsrDigest] = createAndInitESR(src,topRec, lsoList );
   end
 
+  local lsopropMap = lsoList[1];
+  ldrPropMap[PM_EsrDigest] = lsoPropMap[PM_EsrDigest];
+  GP=F and trace("LDR MAP: [%s:%s:%s]", tostring(ldrPropMap[PM_SelfDigest]),
+    tostring(ldrPropMap[PM_EsrDigest]), tostring(ldrPropMap[PM_ParentDigest]));
+
   -- Set the type of this record to LDT (it might already be set by another
   -- LDT in this same record).
   record.set_type( ldrRec, RT_SUB ); -- LDT Type Rec
@@ -1288,6 +1293,9 @@ local function initializeColdDirMap( topRec, cdRec, cdPropMap, cdMap, lsoList )
   cdMap[CDM_NextDirRec] = 0; -- no other Dir Records (yet).
   cdMap[CDM_PrevDirRec] = 0; -- no other Dir Records (yet).
   cdMap[CDM_DigestCount] = 0; -- no digests in the list -- yet.
+  local lsopropMap = lsoList[1];
+  cdPropMap[PM_EsrDigest] = lsoPropMap[PM_EsrDigest];
+  GP = F and trace("CD MAP: [%s:%s:%s]", tostring(cdPropMap[PM_SelfDigest]), tostring(cdPropMap[PM_EsrDigest]), tostring(cdPropMap[PM_ParentDigest]));
 
   -- Set the type of this record to LDT (it might already be set by another
   -- LDT in this same record).

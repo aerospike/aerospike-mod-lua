@@ -130,7 +130,7 @@
 --
 --
 --=============================================================================
--- How does LMAP work ?
+-- How does LMAP insertion work ?
 --
 -- The Large Map data structure has a control-bin (with a user-defined name) 
 -- which points to a list of digests. 
@@ -169,6 +169,14 @@
 -- h. In the standard mode, there are multiple LMAP bins in a record. When 
 --    an LDR needss to be inserted, we first pick the matching lmap bin-name
 --    and then proceed to hashing the object and finding its place in the list. 
+-- 
+-- i. What are some bounds on the lmap_insert ?
+-- *  For starters, when in compact mode, we can only insert upto M_Threshold
+--	  after which we can only continue in regular-mode 
+-- *  If we are in regular-mode, how many entries will each LDR list (pointed 
+--    to by a single digest have a max of ? That is determined by the M_Topfull
+--    variable that is actually a ldt-bin level attribute but it gets set and 
+--    reset for every LDR entry-list overflow. 
 --
 -- h.1 Note the distinction between StoreState vs StoreMode: StoreMode, as a
 --     SM_LIST or SM_BINARY is present for both LSET and LSTACK. But StoreState
@@ -189,6 +197,24 @@
 --    digest entry amongst the list-indices (in the case of standard mode) or
 --    hash to find the actual entry index itself (in the case of compact mode. 
 --  
+-- j. Note another subtle-difference between LMAP and LSTACK in terms of 
+--    insertion of entries (also applicable in reverse for search). 
+--    In the case of LSTACK, we simply add the new digest to the list of 
+--    warm-digests. In the case of LMAP, we take the digest of the top-most
+--    entry in our ldr-list-bin, obtain the list-entry corresponding to it,
+--    hash this list-entry over M_Modulo digest-bins and then insert the 
+--    digest into that index pointing to the top of LDR list of entries.
+-- 	  LSTACK appends digests to a list, LMAP hashes over M_Modulo to obtain
+--    this result. 
+-- 
+-- k. There is also no notion of a TOP in LMAP unlike LMAP. In stack, the top
+--    is determined to be top-most or most-recent index in the digest-list
+--    entry. This is the index at which the next LDR entry would be inserted. 
+--    In the case of LMAP, we first pick the digest-list index using the hash
+--    method described above. If that entry in the digest-list is nil, we go
+--    ahead and call a lmapLdrListChunkCreate() and also insert the bin. If 
+--    it is non-empty, we go ahead and directly call listInsert().     
+-- 
 ---- ======================================================================
 -- 
 -- Aerospike Large Map (LMAP) Operations :

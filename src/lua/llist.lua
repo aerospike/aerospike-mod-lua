@@ -231,7 +231,7 @@ local insertParentNode;
 -- newRec = aerospike:open_subrec( topRec, childRecDigestString )
 -- status = aerospike:update_subrec( topRec, childRec )
 -- status = aerospike:close_subrec( topRec, childRec )
--- status = aerospike:delete_subrec( topRec, childRec ) (not yet ready)
+-- status = aerospike:remove_subrec( topRec, childRec )
 -- digest = record.digest( childRec )
 -- ======================================================================
 -- For additional Documentation, please see llist_design.lua
@@ -4847,7 +4847,7 @@ local function ldt_remove( topRec, binName )
   local esrDigestString = tostring(esrDigest);
   local esrRec = aerospike:open_subrec( topRec, esrDigestString );
   GP=F and info("[STATUS]<%s:%s> About to Call Aerospike REMOVE", MOD, meth );
-  rc = aerospike:remove( esrRec );
+  rc = aerospike:remove_subrec( esrRec );
   if( rc < 0 ) then
     warn("[ESR DELETE ERROR]: Can't Delete: Bin(%s)", MOD, meth, binName);
     error("[ESR DELETE ERROR] Cannot Delete Subrec");
