@@ -501,7 +501,7 @@ local PackageProdListValBinStore = "ProdListValBinStore";
 -- set up our "outside" links
 -- local  CRC32 = require('CRC32'); -- Used by LSET, LMAP
 local functionTable = require('UdfFunctionTable');
-local LDTC = require('ldt_common');
+-- local LDTC = require('ldt_common');
 
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- <><><><> <Initialize Control Maps> <Initialize Control Maps> <><><><>
