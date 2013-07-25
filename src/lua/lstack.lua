@@ -1,8 +1,8 @@
 -- Large Stack Object (LSO or LSTACK) Operations
--- lstack.lua:  July 24, 2013 (Happy Birthday Jamie!!)
+-- lstack.lua:  July 25, 2013 (Happy Birthday Jamie!!)
 --
 -- Module Marker: Keep this in sync with the stated version
-local MOD="lstack_2013_07_24.s"; -- the module name used for tracing
+local MOD="lstack_2013_07_25.c"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
