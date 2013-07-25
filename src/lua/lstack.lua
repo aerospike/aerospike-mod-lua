@@ -1,13 +1,13 @@
 -- Large Stack Object (LSO or LSTACK) Operations
--- lstack.lua:  July 21, 2013
+-- lstack.lua:  July 24, 2013 (Happy Birthday Jamie!!)
 --
 -- Module Marker: Keep this in sync with the stated version
-local MOD="lstack_2013_07_21.k"; -- the module name used for tracing
+local MOD="lstack_2013_07_24.p"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
 -- amount of inter-version compatibility.
-local G_LDT_VERSION = 1.2;
+local G_LDT_VERSION = 1.1;
 
 -- ======================================================================
 -- || GLOBAL PRINT ||
@@ -24,9 +24,40 @@ local F=true; -- Set F (flag) to true to turn ON global print
 -- Priority: High, Medium and Low
 -- Difficulty: High, Medium and Low
 -- ======================================================================
+-- ACTIVITIES LIST:
+-- (*) IN-PROGRESS: (July 23, 2012)
+--   + Release Cold Storage:  Release an entire Cold Dir Page (with the list
+--     of subrec digests) on addition of a new Cold-Head, when the Cold Dir
+--     Count > Max.
+--   + Also, change the Cold Dir Pages to be doubly linked rather than singly
+--     linked.
+--   + Add a Cold Dir TAIL pointer in addition to the HEAD pointer -- so that
+--     releasing the oldest Dir Rec Page (and its children) is quicker/easier.
+--
+-- (*) IN-PROGRESS: (July 23, 2012)
+--   + Implement the subrecContext (subrec management) here in LSTACK that
+--     we have in LLIST.  Name them all ldt_subrecXXXX() because they
+--     will become ldt common methods.
+--
+-- (*) IN-PROGRESS: (July 23, 2012)
+--   + Switch to ldt_common.lua for the newly common functions.
+--
+-- (*) IN-PROGRESS: (July 23, 2012)
+--   + Added new method: lstack_set_storage_limit(), which limits peek sizes
+--     and also sets/resets the storage parameter values so that item counts
+--     over the size limits (Hot, Warm or Cold list) will discard old data.
+--
+-- (*) IN-PROGRESS: (July 25, 2012)
+--   + Add new "crec_release" method that takes a LIST of digests and
+--     releases the storage.  Raj will fill in the C code on the server
+--     side does the delete.
+--
 -- TODO:
 -- (+) Implement Trim (release LDR pages from Warm/Cold List)
 --     stack_trim(): Must release storage before record delete.
+--     Notice that this is lower priority now that we're going to look to
+--     the Cold List Storage Release to deal with storage reclaimation
+--     from lstack eviction.
 --     F:S, P:M, D:M
 -- (+) Add a LIMIT value to the control map -- and when we are a page over
 --     then release the page (ideally -- do not slow down transaction to
@@ -174,8 +205,8 @@ local F=true; -- Set F (flag) to true to turn ON global print
 --  |                                            
 --  |                                            
 --  |                           <Newest Dir............Oldest Dir>
---  +-------------------------->+-----+->+-----+->+-----+ ->+-----+-+
---                              |Rec  |  |Rec  |  |Rec  | o |Rec  | V
+--  +-------------------------->+-----+->+-----+->+-----+-->+-----+-+
+--   (DirRec Pages DoubleLink)<-+Rec  |<-+Rec  |<-+Rec  | <-+Rec  | V
 --    The cold dir is a linked  |Chunk|  |Chunk|  |Chunk| o |Chunk|
 --    list of dir pages that    |Dir  |  |Dir  |  |Rec  | o |Dir  |
 --    point to LSO Data Records +-----+  +-----+  +-----+   +-----+
@@ -304,8 +335,13 @@ local MAGIC="MAGIC";     -- the magic value for Testing LSO integrity
 -- one of the packages.
 local G_STORE_LIMIT = 20000  -- Store no more than this.  User can override.
 
+-- ++==================++
+-- || External Modules ||
+-- ++==================++
 -- Get addressability to the Function Table: Used for compress and filter
 local functionTable = require('UdfFunctionTable');
+-- Common LDT functions that are used by ALL of the LDTs.
+-- local LDTC = require('ldt_common');
 
 -- StoreMode (SM) values (which storage Mode are we using?)
 local SM_BINARY ='B'; -- Using a Transform function to compact values
@@ -336,7 +372,13 @@ local LDT_TYPE_LSTACK = "LSTACK";
 local ERR_OK            =  0; -- HEY HEY!!  Success
 local ERR_GENERAL       = -1; -- General Error
 local ERR_NOT_FOUND     = -2; -- Search Error
---
+
+-- We maintain a pool, or "context", of subrecords that are open.  That allows
+-- us to look up subrecs and get the open reference, rather than bothering
+-- the lower level infrastructure.  There's also a limit to the number
+-- of open subrecs.
+local G_OPEN_SR_LIMIT = 20;
+
 -- ++====================++
 -- || INTERNAL BIN NAMES || -- Local, but global to this module
 -- ++====================++
@@ -466,7 +508,8 @@ local RPM_SelfDigest           = 'D';  -- Digest of this record
 -- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 -- LDT specific Property Map (PM) Fields: One PM per LDT bin:
 -- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-local PM_ItemCount             = 'I'; -- (Top): Count of all items in LDT
+local PM_ItemCount             = 'I'; -- (Top): # of items in LDT
+local PM_SubRecCount           = 'S'; -- (Top): # of subrecs in the LDT
 local PM_Version               = 'V'; -- (Top): Code Version
 local PM_LdtType               = 'T'; -- (Top): Type: stack, set, map, list
 local PM_BinName               = 'B'; -- (Top): LDT Bin Name
@@ -490,6 +533,7 @@ local LDR_ByteEntryCount       = 'C'; -- Current Count of bytes used
 -- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 -- Cold Directory Control Map::In addition to the General Property Map
 local CDM_NextDirRec           = 'N';-- Ptr to next Cold Dir Page
+local CDM_PrevDirRec           = 'P';-- Ptr to Prev Cold Dir Page
 local CDM_DigestCount          = 'C';-- Current Digest Count
 -- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 -- Main LSO Map Field Name Mapping
@@ -506,20 +550,36 @@ local M_HotEntryListItemCount  = 'L'; -- The Hot List Count
 local M_HotListMax             = 'h'; -- Max Size of the Hot List
 local M_HotListTransfer        = 'X'; -- Amount to transfer from Hot List
 local M_WarmDigestList         = 'W'; -- The Warm Digest List
-local M_WarmTopFull            = 'F'; -- Boolean: Shows if Warm Top is full
 local M_WarmListDigestCount    = 'l'; -- # of Digests in the Warm List
 local M_WarmListMax            = 'w'; -- Max # of Digests in the Warm List
 local M_WarmListTransfer       = 'x'; -- Amount to Transfer from the Warm List
 -- Note that WarmTopXXXXCount will eventually replace the need to show if
 -- the Warm Top is FULL -- because we'll always know the count (and "full"
 -- will be self-evident).
+local M_WarmTopFull            = 'F'; -- Boolean: Shows if Warm Top is full
 local M_WarmTopEntryCount      = 'A'; -- # of Objects in the Warm Top (LDR)
 local M_WarmTopByteCount       = 'a'; -- # Bytes in the Warm Top (LDR)
-local M_ColdDirListHead        = 'C';
-local M_ColdTopFull            = 'f';
+
+-- Note that ColdTopListCount will eventually replace the need to know if
+-- the Cold Top is FULL -- because we'll always know the count of the Cold
+-- Directory Top -- and so "full" will be self-evident.
+local M_ColdTopFull            = 'f'; -- Boolean: Shows if Cold Top is full
+local M_ColdTopListCount       = 'T'; -- Shows List Count for Cold Top
+
+local M_ColdDirListHead        = 'Z'; -- Digest of the Head of the Cold List
+local M_ColdDirListTail        = 'z'; -- Digest of the Head of the Cold List
 local M_ColdDataRecCount       = 'R';-- # of LDRs in Cold Storage
+-- It's assumed that this will match the warm list size, and we'll move
+-- half of the warm digest list to a cold list on each transfer.
+local M_ColdListMax            = 'c';-- Max # of items in a cold dir list
+-- This is used to LIMIT the size of an LSTACK -- we will do it efficiently
+-- at the COLD DIR LEVEL.  So, for Example, if we set it to 3, then we'll
+-- discard the last (full) cold Dir List when we add a new fourth Dir Head.
+-- Thus, the number of FULL Cold Directory Pages "D" should be set at
+-- (D + 1).
+local M_ColdDirRecMax          = 'C';-- Max # of Cold Dir subrecs we'll have
 local M_ColdDirRecCount        = 'r';-- # of Cold Dir sub-Records
-local M_ColdListMax            = 'c';
+
 -- ------------------------------------------------------------------------
 -- Maintain the LSO letter Mapping here, so that we never have a name
 -- collision: Obviously -- only one name can be associated with a character.
@@ -528,7 +588,7 @@ local M_ColdListMax            = 'c';
 --
 -- A:M_WarmTopEntryCount      a:M_WarmTopByteCount      0:
 -- B:                         b:M_LdrByteCountMax       1:
--- C:M_ColdDirListHead        c:M_ColdListMax           2:
+-- C:M_ColdDirRecMax          c:M_ColdListMax           2:
 -- D:                         d:                        3:
 -- E:                         e:M_LdrEntryCountMax      4:
 -- F:M_WarmTopFull            f:M_ColdTopFull           5:
@@ -545,13 +605,13 @@ local M_ColdListMax            = 'c';
 -- Q:                         q:
 -- R:M_ColdDataRecCount       r:M_ColdDirRecCount
 -- S:M_StoreLimit             s:M_LdrByteEntrySize
--- T:                         t:M_Transform
+-- T:M_ColdTopListCount       t:M_Transform
 -- U:                         u:M_UnTransform
 -- V:                         v:
 -- W:M_WarmDigestList         w:M_WarmListMax
 -- X:M_HotListTransfer        x:M_WarmListTransfer
 -- Y:                         y:
--- Z:                         z:
+-- Z:M_ColdDirListHead        z:M_ColdDirListTail
 -- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 -- We won't bother with the sorted alphabet mapping for the rest of these
 -- fields -- they are so small that we should be able to stick with visual
@@ -614,9 +674,13 @@ local function lsoSummary( lsoList )
   resultMap.WarmListDigestCount   = lsoMap[M_WarmListDigestCount];
 
   -- Cold Directory List Settings: List of Directory Pages
+  resultMap.ColdDirListHead       = lsoMap[M_ColdDirListHead];
   resultMap.ColdListMax           = lsoMap[M_ColdListMax];
+  resultMap.ColdDirRecMax         = lsoMap[M_ColdDirRecMax];
   resultMap.ColdListDirRecCount   = lsoMap[M_ColdListDirRecCount];
   resultMap.ColdListDataRecCount  = lsoMap[M_ColdListDataRecCount];
+  resultMap.ColdTopFull           = lsoMap[M_ColdTopFull];
+  resultMap.ColdTopListCount      = lsoMap[M_ColdTopListCount];
 
   return resultMap;
 end -- lsoSummary()
@@ -625,10 +689,267 @@ end -- lsoSummary()
 -- Make it easier to use lsoSummary(): Have a String version.
 -- ======================================================================
 local function lsoSummaryString( lsoList )
-    return tostring( lsoSummary( lsoList ) );
+  return tostring( lsoSummary( lsoList ) );
 end
 
+
+-- =============================
+-- Begin SubRecord Function Area (MOVE THIS TO LDT_COMMON)
+-- =============================
+-- ======================================================================
+-- SUB RECORD CONTEXT DESIGN NOTE:
+-- All "outer" functions, will employ the "subrecContext" object, which
+-- will hold all of the subrecords that were opened during processing. 
+-- Note that some operations can potentially involve many subrec
+-- operations -- and can also potentially revisit pages.
 --
+-- SubRecContext Design:
+-- The key will be the DigestString, and the value will be the subRec
+-- pointer.  At the end of an outer call, we will iterate thru the subrec
+-- context and close all open subrecords.  Note that we may also need
+-- to mark them dirty -- but for now we'll update them in place (as needed),
+-- but we won't close them until the end.
+-- ======================================================================
+local function createSubrecContext()
+  local meth = "createSubrecContext()";
+  GP=F and trace("[ENTER]<%s:%s>", MOD, meth );
+
+  -- We need to track BOTH the Open Records and their Dirty State.
+  -- Do this with a LIST of maps:
+  -- recMap   = srcList[1]
+  -- dirtyMap = srcList[2]
+
+  -- Code not yet changed.
+  local srcList = list();
+  local recMap = map();
+  local dirtyMap = map();
+  recMap.ItemCount = 0;
+  list.append( srcList, recMap ); -- recMap
+  list.append( srcList, dirtyMap ); -- dirtyMap
+
+  GP=F and trace("[EXIT]: <%s:%s> : SRC(%s)", MOD, meth, tostring(srcList));
+  return srcList;
+end -- createSubrecContext()
+
+-- ======================================================================
+-- Given an already opened subrec (probably one that was recently created),
+-- add it to the subrec context.
+-- ======================================================================
+local function addSubrecToContext( srcList, subrec )
+  local meth = "addSubrecContext()";
+  GP=F and trace("[ENTER]<%s:%s> src(%s)", MOD, meth, tostring( srcList));
+
+  if( srcList == nil ) then
+    error("[BAD SUB REC CONTEXT] src is nil");
+  end
+
+  local recMap = srcList[1];
+  local dirtyMap = srcList[2];
+
+  local digest = record.digest( subrec );
+  local digestString = tostring( digest );
+  recMap[digestString] = subrec;
+
+  local itemCount = recMap.ItemCount;
+  recMap.ItemCount = itemCount + 1;
+
+  GP=F and trace("[EXIT]: <%s:%s> : SRC(%s)", MOD, meth, tostring(srcList));
+  return 0;
+end -- addSubrecToContext()
+
+-- ======================================================================
+-- openSubrec()
+-- ======================================================================
+local function openSubrec( srcList, topRec, digestString )
+  local meth = "openSubrec()";
+  GP=F and trace("[ENTER]<%s:%s> TopRec(%s) DigestStr(%s) SRC(%s)",
+    MOD, meth, tostring(topRec), digestString, tostring(srcList));
+
+  -- We have a global limit on the number of subrecs that we can have
+  -- open at a time.  If we're at (or above) the limit, then we must
+  -- exit with an error (better here than in the subrec code).
+  local recMap = srcList[1];
+  local dirtyMap = srcList[2];
+  local itemCount = recMap.ItemCount;
+
+  local subrec = recMap[digestString];
+  if( subrec == nil ) then
+    if( itemCount >= G_OPEN_SR_LIMIT ) then
+      warn("[ERROR]<%s:%s> SRC Count(%d) Exceeded Limit(%d)", MOD, meth,
+        itemCount, G_OPEN_SR_LIMIT );
+      error("[SUBREC OPEN LIMIT]: Exceeded Open Subrec Limit");
+    end
+
+    recMap.ItemCount = itemCount + 1;
+    GP=F and trace("[OPEN SUBREC]<%s:%s>SRC.ItemCount(%d) TR(%s) DigStr(%s)",
+      MOD, meth, recMap.ItemCount, tostring(topRec), digestString );
+    subrec = aerospike:open_subrec( topRec, digestString );
+    GP=F and trace("[OPEN SUBREC RESULTS]<%s:%s>(%s)", 
+      MOD,meth,tostring(subrec));
+    if( subrec == nil ) then
+      warn("[ERROR]<%s:%s> Subrec Open Failure: Digest(%s)", MOD, meth,
+        digestString );
+      error("[SUBREC OPEN FAILURE]: Couldn't open Subrec");
+    end
+  else
+    GP=F and trace("[FOUND REC]<%s:%s>Rec(%s)", MOD, meth, tostring(subrec));
+  end
+
+  GP=F and trace("[EXIT]<%s:%s>Rec(%s) Dig(%s)",
+    MOD, meth, tostring(subrec), digestString );
+  return subrec;
+end -- openSubrec()
+
+
+-- ======================================================================
+-- closeSubrec()
+-- ======================================================================
+-- Close the subrecord -- providing it is NOT dirty.  For all dirty
+-- subrecords, we have to wait until the end of the UDF call, as THAT is
+-- when all dirty subrecords get written out and closed.
+-- ======================================================================
+local function closeSubrec( srcList, digestString )
+  local meth = "closeSubrec()";
+  GP=F and trace("[ENTER]<%s:%s> DigestStr(%s) SRC(%s)",
+    MOD, meth, digestString, tostring(srcList));
+
+  local recMap = srcList[1];
+  local dirtyMap = srcList[2];
+  local itemCount = recMap.ItemCount;
+  local rc = 0;
+
+  local subrec = recMap[digestString];
+  local dirtyStatus = dirtyMap[digestString];
+  if( subrec == nil ) then
+    warn("[INTERNAL ERROR]<%s:%s> Rec not found for Digest(%s)", MOD, meth,
+      digestString );
+    error("[INTERNAL ERROR]: Rec not found ");
+  end
+
+  info("[STATUS]<%s:%s> Closing Rec: Digest(%s)", MOD, meth, digestString);
+
+  if( dirtyStatus == true ) then
+    warn("[WARNING]<%s:%s> Can't close Dirty Record: Digest(%s)",
+      MOD, meth, digestString);
+  else
+    rc = aerospike:close_subrec( subrec );
+    GP=F and trace("[STATUS]<%s:%s>Closed Rec: Digest(%s) rc(%s)", MOD, meth,
+      digestString, tostring( rc ));
+  end
+
+  GP=F and trace("[EXIT]<%s:%s>Rec(%s) Dig(%s) rc(%s)",
+    MOD, meth, tostring(subrec), digestString, tostring(rc));
+  return rc;
+end -- closeSubrec()
+
+
+-- ======================================================================
+-- updateSubrec()
+-- ======================================================================
+-- Update the subrecord -- and then mark it dirty.
+-- ======================================================================
+local function updateSubrec( srcList, subrec, digest )
+  local meth = "updateSubrec()";
+  GP=F and trace("[ENTER]<%s:%s> TopRec(%s) DigestStr(%s) SRC(%s)",
+    MOD, meth, tostring(topRec), digestString, tostring(srcList));
+
+  local recMap = srcList[1];
+  local dirtyMap = srcList[2];
+  local rc = 0;
+
+  if( digest == nil or digest == 0 ) then
+    digest = record.digest( subrec );
+  end
+  local digestString = tostring( digest );
+
+  aerospike:update_subrec( subrec );
+  dirtyMap[digestString] = true;
+
+  GP=F and trace("[EXIT]<%s:%s>Rec(%s) Dig(%s) rc(%s)",
+    MOD, meth, tostring(subrec), digestString, tostring(rc));
+  return rc;
+end -- updateSubrec()
+
+-- ======================================================================
+-- markSubrecDirty()
+-- ======================================================================
+local function markSubrecDirty( srcList, digestString )
+  local meth = "markSubrecDirty()";
+  GP=F and trace("[ENTER]<%s:%s> src(%s)", MOD, meth, tostring(srcList));
+
+  -- Pull up the dirtyMap, find the entry for this digestString and
+  -- mark it dirty.  We don't even care what the existing value used to be.
+  local recMap = srcList[1];
+  local dirtyMap = srcList[2];
+
+  dirtyMap[digestString] = true;
+  
+  GP=F and trace("[EXIT]<%s:%s> SRC(%s)", MOD, meth, tostring(srcList) );
+  return 0;
+end -- markSubrecDirty()
+
+-- ======================================================================
+-- closeAllSubrecs()
+-- ======================================================================
+local function closeAllSubrecs( srcList )
+  local meth = "closeAllSubrecs()";
+  GP=F and trace("[ENTER]<%s:%s> src(%s)", MOD, meth, tostring(srcList));
+
+  local recMap = srcList[1];
+  local dirtyMap = srcList[2];
+
+  -- Iterate thru the SubRecContext and close all subrecords.
+  local digestString;
+  local rec;
+  local rc = 0;
+  for name, value in map.pairs( recMap ) do
+    GP=F and trace("[DEBUG]: <%s:%s>: Processing Pair: Name(%s) Val(%s)",
+      MOD, meth, tostring( name ), tostring( value ));
+    if( name == "ItemCount" ) then
+      GP=F and trace("[DEBUG]<%s:%s>: Processing(%d) Items", MOD, meth, value);
+    else
+      digestString = name;
+      rec = value;
+      GP=F and trace("[DEBUG]<%s:%s>: Would have closed SubRec(%s) Rec(%s)",
+      MOD, meth, digestString, tostring(rec) );
+      -- GP=F and trace("[DEBUG]<%s:%s>: Closing SubRec: Digest(%s) Rec(%s)",
+      --   MOD, meth, digestString, tostring(rec) );
+      -- rc = aerospike:close_subrec( rec );
+      -- GP=F and trace("[DEBUG]<%s:%s>: Closing Results(%d)", MOD, meth, rc );
+    end
+  end -- for all fields in SRC
+
+  GP=F and trace("[EXIT]: <%s:%s> : RC(%s)", MOD, meth, tostring(rc) );
+  -- return rc;
+  return 0; -- Mask the error for now:: TODO::@TOBY::Figure this out.
+end -- closeAllSubrecs()
+
+-- ===========================
+-- End SubRecord Function Area
+-- ===========================
+
+-- ======================================================================
+-- listAppend()
+-- ======================================================================
+-- General tool to append one list to another.   At the point that we
+-- find a better/cheaper way to do this, then we change THIS method and
+-- all of the LDT calls to handle lists will get better as well.
+-- ======================================================================
+local function listAppend( baseList, additionalList )
+  if( baseList == nil ) then
+    warn("[INTERNAL ERROR] Null baselist in listAppend()" );
+    error("[INTERNAL ERROR] Null baselist in listAppend()" );
+  end
+  local listSize = list.size( additionalList );
+  for i = 1, listSize, 1 do
+    list.append( baseList, additionalList[i] );
+  end -- for each element of additionalList
+
+  return baseList;
+end -- listAppend()
+
+
+-- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- <><><><> <Initialize Control Maps> <Initialize Control Maps> <><><><>
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- Notes on Configuration:
@@ -713,8 +1034,9 @@ local function initializeLso( topRec, lsoBinName )
   lsoMap[M_ColdDirListHead]= 0; -- Head (Rec Digest) of the Cold List Dir Chain
   lsoMap[M_ColdTopFull]    = false; -- true when cold head is full (next write)
   lsoMap[M_ColdDataRecCount]= 0; -- # of Cold DATA Records (data chunks)
-  lsoMap[M_ColdDirRecCount]= 0; -- # of Cold DIRECTORY Records
-  lsoMap[M_ColdListMax]    = 100; -- # of list entries in a Cold list dir node
+  lsoMap[M_ColdDirRecCount] = 0; -- # of Cold DIRECTORY Records
+  lsoMap[M_ColdDirRecMax]   = 5; -- Max# of Cold DIRECTORY Records
+  lsoMap[M_ColdListMax]     = 100; -- # of list entries in a Cold list dir node
 
   -- Put our new maps in a list, in the record, then store the record.
   list.append( lsoList, propMap );
@@ -834,7 +1156,7 @@ end -- setLdtRecordType()
 -- and read.  It must be the same for all LDT recs.
 --
 -- ======================================================================
-local function createAndInitESR( topRec, lsoList )
+local function createAndInitESR(src,topRec, lsoList )
   local meth = "createAndInitESR()";
   GP=F and trace("[ENTER]: <%s:%s>", MOD, meth );
 
@@ -904,7 +1226,7 @@ end -- createAndInitESR()
 -- we must check to see if that is the FIRST one, and if so, we must also
 -- create the Existence Sub-Record for this LDT.
 -- ======================================================================
-local function initializeLdrMap( topRec, ldrRec, ldrPropMap, ldrMap, lsoList)
+local function initializeLdrMap(src,topRec,ldrRec,ldrPropMap,ldrMap,lsoList)
   local meth = "initializeLdrMap()";
   GP=F and trace("[ENTER]: <%s:%s>", MOD, meth );
 
@@ -925,7 +1247,7 @@ local function initializeLdrMap( topRec, ldrRec, ldrPropMap, ldrMap, lsoList)
   -- If this is the first LDR, then it's time to create an ESR for this
   -- LDT.
   if( lsoPropMap[PM_EsrDigest] == nil or lsoPropMap[PM_EsrDigest] == 0 ) then
-    lsoPropMap[PM_EsrDigest] = createAndInitESR( topRec, lsoList );
+    lsoPropMap[PM_EsrDigest] = createAndInitESR(src,topRec, lsoList );
   end
 
   -- Set the type of this record to LDT (it might already be set by another
@@ -964,6 +1286,7 @@ local function initializeColdDirMap( topRec, cdRec, cdPropMap, cdMap, lsoList )
   cdPropMap[PM_SelfDigest] = record.digest( cdRec );
 
   cdMap[CDM_NextDirRec] = 0; -- no other Dir Records (yet).
+  cdMap[CDM_PrevDirRec] = 0; -- no other Dir Records (yet).
   cdMap[CDM_DigestCount] = 0; -- no digests in the list -- yet.
 
   -- Set the type of this record to LDT (it might already be set by another
@@ -1013,6 +1336,7 @@ local function packageStandardList( lsoMap )
   lsoMap[M_WarmListTransfer] = 50; -- # of Warm Data Record Chunks
   -- Cold Directory List Settings: List of Directory Pages
   lsoMap[M_ColdListMax]      = 100; -- # of list entries in a Cold dir node
+  lsoMap[M_ColdDirRecMax]    = 10; -- Max# of Cold DIRECTORY Records
 end -- packageStandardList()
 
 -- ======================================================================
@@ -1036,6 +1360,7 @@ local function packageTestModeList( lsoMap )
   lsoMap[M_WarmListTransfer] = 50; -- # of Warm Data Record Chunks
   -- Cold Directory List Settings: List of Directory Pages
   lsoMap[M_ColdListMax]      = 100; -- # of list entries in a Cold dir node
+  lsoMap[M_ColdDirRecMax]    = 10; -- Max# of Cold DIRECTORY Records
 end -- packageTestModeList()
 
 -- ======================================================================
@@ -1059,6 +1384,7 @@ local function packageTestModeBinary( lsoMap )
   lsoMap[M_WarmListTransfer] = 50; -- # of Warm Data Record Chunks
   -- Cold Directory List Settings: List of Directory Pages
   lsoMap[M_ColdListMax]      = 100; -- # of list entries in a Cold dir node
+  lsoMap[M_ColdDirRecMax]    = 10; -- Max# of Cold DIRECTORY Records
 end -- packageTestModeBinary()
 
 -- ======================================================================
@@ -1086,6 +1412,7 @@ local function packageProdListValBinStore( lsoMap )
   lsoMap[M_WarmListTransfer] = 50; -- # of Warm Data Record Chunks
   -- Cold Directory List Settings: List of Directory Pages
   lsoMap[M_ColdListMax]      = 100; -- # of list entries in a Cold dir node
+  lsoMap[M_ColdDirRecMax]    = 10; -- Max# of Cold DIRECTORY Records
 end -- packageProdListValBinStore()
 
 -- ======================================================================
@@ -1112,6 +1439,7 @@ local function packageDebugModeList( lsoMap )
   lsoMap[M_WarmListTransfer] = 2; -- # of Warm Data Record Chunks
   -- Cold Directory List Settings: List of Directory Pages
   lsoMap[M_ColdListMax]      = 4; -- # of list entries in a Cold dir node
+  lsoMap[M_ColdDirRecMax]    = 10; -- Max# of Cold DIRECTORY Records
 end -- packageDebugModeList()
 
 -- ======================================================================
@@ -1138,6 +1466,7 @@ local function packageDebugModeBinary( lsoMap )
   lsoMap[M_WarmListTransfer] = 2; -- # of Warm Data Record Chunks
   -- Cold Directory List Settings: List of Directory Pages
   lsoMap[M_ColdListMax]      = 4; -- # of list entries in a Cold dir node
+  lsoMap[M_ColdDirRecMax]    = 10; -- Max# of Cold DIRECTORY Records
 end -- packageDebugModeBinary()
 
 -- ======================================================================
@@ -1850,14 +2179,14 @@ end -- ldrChunkRead()
 -- (*) all: When == true, read all items, regardless of "count".
 -- Return: Return the amount read from the Digest List.
 -- ======================================================================
-local function digestListRead(topRec, resultList, lsoList, digestList, count,
-                           func, fargs, all)
+local function digestListRead(src, topRec, resultList, lsoList, digestList,
+                              count, func, fargs, all)
   local meth = "digestListRead()";
   GP=F and trace("[ENTER]: <%s:%s> Count(%d) all(%s)",
-      MOD, meth, count, tostring(all) );
+    MOD, meth, count, tostring(all) );
 
   GP=F and trace("[DEBUG]: <%s:%s> Count(%d) DigList(%s) ResList(%s)",
-      MOD, meth, count, tostring( digestList), tostring( resultList ));
+    MOD, meth, count, tostring( digestList), tostring( resultList ));
 
   local propMap = lsoList[1];
   local lsoMap  = lsoList[2];
@@ -2093,11 +2422,15 @@ end -- hotListInsert()
 -- ======================================================================
 --
 -- ======================================================================
--- warmListChunkCreate( topRec, lsoList )
+-- warmListChunkCreate()
+-- Parms:
+-- (*) src: Subrec Context -- Manage the Open Subrec Pool
+-- (*) topRec: User-level Record holding the LSO Bin
+-- (*) lsoList: The main structure of the LSO Bin.
 -- ======================================================================
 -- Create and initialise a new LDR "chunk", load the new digest for that
 -- new chunk into the lsoMap (the warm dir list), and return it.
-local function   warmListChunkCreate( topRec, lsoList )
+local function   warmListChunkCreate( src, topRec, lsoList )
   local meth = "warmListChunkCreate()";
   GP=F and trace("[ENTER]: <%s:%s> ", MOD, meth );
 
@@ -2111,7 +2444,7 @@ local function   warmListChunkCreate( topRec, lsoList )
   local lsoMap     = lsoList[2];
   local binName    = lsoPropMap[PM_BinName];
 
-  initializeLdrMap( topRec, newLdrChunkRecord, ldrPropMap, ldrMap, lsoList );
+  initializeLdrMap(src,topRec,newLdrChunkRecord,ldrPropMap,ldrMap,lsoList );
 
   -- Assign Prop, Control info and List info to the LDR bins
   newLdrChunkRecord[SUBREC_PROP_BIN] = ldrPropMap;
@@ -2222,6 +2555,7 @@ end -- warmListHasRoom()
 -- Synopsis: Pass the Warm list on to "digestListRead()" and let it do
 -- all of the work.
 -- Parms:
+-- (*) src: Subrec Context -- Manage the Open Subrec Pool
 -- (*) topRec: User-level Record holding the LSO Bin
 -- (*) resultList: What's been accumulated so far -- add to this
 -- (*) lsoList: The main structure of the LSO Bin.
@@ -2231,23 +2565,26 @@ end -- warmListHasRoom()
 -- (*) all: When == 1, read all items, regardless of "count".
 -- Return: Return the amount read from the Warm Dir List.
 -- ======================================================================
-local function warmListRead(topRec, resultList, lsoList, count, func,
+local function warmListRead(src, topRec, resultList, lsoList, count, func,
     fargs, all)
 
   local lsoMap  = lsoList[2];
   local digestList = lsoMap[M_WarmDigestList];
 
-  return digestListRead(topRec, resultList, lsoList,
+  return digestListRead(src, topRec, resultList, lsoList,
                           digestList, count, func, fargs, all);
 end -- warmListRead()
 
 -- ======================================================================
--- warmListGetTop( topRec, lsoMap )
+-- warmListGetTop()
 -- ======================================================================
 -- Find the digest of the top of the Warm Dir List, Open that record and
 -- return that opened record.
+-- (*) src: Subrec Context -- Manage the Open Subrec Pool
+-- (*) topRec: the top record -- needed if we create a new LDR
+-- (*) lsoMap: the LSO control Map (lsoList not needed here)
 -- ======================================================================
-local function warmListGetTop( topRec, lsoMap )
+local function warmListGetTop( src, topRec, lsoMap )
   local meth = "warmListGetTop()";
   GP=F and trace("[ENTER]: <%s:%s> lsoMap(%s)", MOD, meth, tostring( lsoMap ));
 
@@ -2278,12 +2615,13 @@ end -- warmListGetTop()
 -- Notice that we're basically dealing in item counts, NOT in total storage
 -- bytes.  That (total byte storage) is future work.
 -- Parms:
+-- (*) src: Subrec Context -- Manage the Open Subrec Pool
 -- (*) topRec: the top record -- needed if we create a new LDR
 -- (*) lsoList: the control structure of the top record
 -- (*) entryList: the list of entries to be inserted (as_val or binary)
 -- Return: 0 for success, -1 if problems.
 -- ======================================================================
-local function warmListInsert( topRec, lsoList, entryList )
+local function warmListInsert( src, topRec, lsoList, entryList )
   local meth = "warmListInsert()";
   local rc = 0;
 
@@ -2307,11 +2645,11 @@ local function warmListInsert( topRec, lsoList, entryList )
   -- rather than after we read the old top and see that it's already full.
   if list.size( warmDigestList ) == 0 or lsoMap[M_WarmTopFull] == true then
     GP=F and trace("[DEBUG]: <%s:%s> Calling Chunk Create ", MOD, meth );
-    topWarmChunk = warmListChunkCreate( topRec, lsoList ); -- create new
+    topWarmChunk = warmListChunkCreate(src, topRec, lsoList ); -- create new
     lsoMap[M_WarmTopFull] = false; -- reset for next time.
   else
     GP=F and trace("[DEBUG]: <%s:%s> Calling Get TOP ", MOD, meth );
-    topWarmChunk = warmListGetTop( topRec, lsoMap ); -- open existing
+    topWarmChunk = warmListGetTop( src, topRec, lsoMap ); -- open existing
   end
   GP=F and trace("[DEBUG]: <%s:%s> Post 'GetTop': LsoMap(%s) ", 
     MOD, meth, tostring( lsoMap ));
@@ -2333,7 +2671,7 @@ local function warmListInsert( topRec, lsoList, entryList )
     aerospike:close_subrec( topWarmChunk );
 
     GP=F and trace("[DEBUG]:<%s:%s>Calling Chunk Create: AGAIN!!", MOD, meth );
-    topWarmChunk = warmListChunkCreate( topRec, lsoMap ); -- create new
+    topWarmChunk = warmListChunkCreate( src, topRec, lsoMap ); -- create new
     -- Unless we've screwed up our parameters -- we should never have to do
     -- this more than once.  This could be a while loop if it had to be, but
     -- that doesn't make sense that we'd need to create multiple new LDRs to
@@ -2387,7 +2725,33 @@ end -- warmListInsert
 -- COLD LIST FUNCTIONS
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- ======================================================================
---
+
+-- ======================================================================
+-- Update the ColdDir Page pointers -- used on initial create
+-- and subsequent ColdDir page creates.  Each Cold Dir Page has a
+-- Previous and Next pointer (in the form of a digest).
+-- Parms:
+-- (*) coldDirRec:
+-- (*) prevDigest:  Set PrevPage ptr, if not nil
+-- (*) nextDigest:  Set NextPage ptr, if not nil
+-- ======================================================================
+local function setPagePointers( coldDirRec, prevDigest, nextDigest )
+  local meth = "setLeafPagePointers()";
+  GP=F and trace("[ENTER]<%s:%s> prev(%s) next(%s)",
+    MOD, meth, tostring(prevDigest), tostring(nextDigest) );
+  leafMap = leafRec[LSR_CTRL_BIN];
+  if( prevDigest ~= nil ) then
+    leafMap[LF_PrevPage] = prevDigest;
+  end
+  if( prevDigest ~= nil ) then
+    leafMap[LF_NextPage] = nextDigest;
+  end
+  leafRec[LSR_CTRL_BIN] = leafMap;
+  aerospike:update_subrec( leafRec );
+
+  GP=F and trace("[EXIT]<%s:%s> ", MOD, meth );
+end -- setPagePointers()
+
 -- ======================================================================
 -- coldDirHeadCreate()
 -- ======================================================================
@@ -2396,55 +2760,252 @@ end -- warmListInsert
 -- the data pages (LDR pages) are already built from the warm list, so
 -- the cold list just holds those LDR digests after the record agest out
 -- of the warm list. 
+--
+-- New for the summer of 2013::We're going to allow data to gracefully age
+-- out by limiting the number of active Cold Directory Pages that we'll have
+-- in an LSTACK at one time. So, if the limit is set to "N", then we'll
+-- have (N-1) FULL directory pages, and one directory page that is being
+-- filled up.  We check ONLY when it's time to create a new directory head,
+-- so that is on the order of once every 10,000 inserts (or so).
+--
 -- Parms:
+-- (*) src: Subrec Context
 -- (*) topRec: the top record -- needed when we create a new dir and LDR
 -- (*) lsoList: the control map of the top record
-local function coldDirHeadCreate( topRec, lsoList )
+-- (*) Space Estimate of the number of items needed
+-- Return:
+-- Success: NewColdHead Sub-Record Pointer
+-- Error:   Nil
+-- ======================================================================
+local function coldDirHeadCreate( src, topRec, lsoList, spaceEstimate )
   local meth = "coldDirHeadCreate()";
+  GP=F and trace("[ENTER]<%s:%s>LSO(%s)",MOD,meth,lsoSummaryString(lsoList));
+
   local propMap = lsoList[1];
   local lsoMap  = lsoList[2];
   local binName = propMap[PM_BinName];
+  local ldrDeleteList; -- List of LDR subrecs to be removed (eviction)
+  local dirDeleteList; -- List of Cold Directory Subrecs to be removed.
+  local ldrItemCount = lsoMap[ldrEntryCountMax];
+  local subrecDeleteCount; -- ALL subrecs (LDRs and Cold Dirs)
+  local coldDirMap;
+  local coldDirList;
+  local coldDirRec;
+  local returnColdHead; -- this is what we return
+  local coldDirDigest;
+  local coldDirDigestString;
+  local createNewHead = true;
+  local itemsDeleted = 0;
+  local subrecsDeleted = 0;
 
-  GP=F and trace("[ENTER]: <%s:%s>: lsoMap(%s)", MOD, meth, tostring(lsoMap));
-
-  -- Create the Aerospike Record, initialize the bins: Ctrl, List
-  -- Note: All Field Names start with UPPER CASE.
-  local newColdHead    = aerospike:create_subrec( topRec );
-  local coldDirMap     = map();
-  local coldDirPropMap = map();
-  initializeColdDirMap(topRec,newColdHead,coldDirPropMap,coldDirMap,lsoList);
-
-  -- Update our global counts ==> One more Cold Dir Record.
+  -- This is new code to deal with the expiration/eviction of old data.
+  -- Usually, it will be data in the Cold List.  We will release cold list
+  -- data when we create a new ColdDirectoryHead.  That's the best time
+  -- to assess what's happening in the cold list. (July 2013: tjl)
+  --
+  -- In the unlikely event that the user has specified that they want ONE
+  -- (and only one) Cold Dir Record, that means that we shouldn't actually
+  -- create a NEW Cold Dir Record.  We should just free up the digest
+  -- list (release the sub rec storage) and return the existing cold dir
+  -- head -- just in a freshened state.
   local coldDirRecCount = lsoMap[M_ColdDirRecCount];
-  lsoMap[M_ColdDirRecCount] = coldDirRecCount + 1;
+  local coldDirRecMax = lsoMap[M_ColdDirRecMax];
+  GP=F and trace("[DEBUG]<%s:%s>coldDirRecCount(%s) coldDirRecMax(%s)",
+    MOD, meth, tostring(coldDirRecCount), tostring(coldDirRecMax));
+  if( coldDirRecMax == 1 and coldDirRecCount == 1 ) then
+    GP=F and trace("[ENTER]<%s:%s>Special Case ONE Dir", MOD, meth );
+    -- We have the weird special case. We will NOT delete this Cold Dir Head
+    -- and Create a new one.  Instead, we will just clean out
+    -- the Digest List enough so that we have room for "newItemCount".
+    -- We expect that in most configurations, the transfer list coming in
+    -- will be roughly half of the array size.  We don't expect to see
+    -- a "newCount" that is greater than the Cold Dir Limit.
+    -- ALSO -- do NOT drop into the code below that Creates a new head.
+    createNewHead = false;
+    coldDirDigest = lsoMap[M_ColdDirListHead];
+    coldDirDigestString = tostring( coldDirDigest );
+    coldDirRec = openSubrec( src, topRec, coldDirDigestString );
+    if( coldDirRec == nil ) then
+      warn("[INTERNAL ERROR]<%s:%s> Can't open Cold Head(%s)", MOD, meth,
+        coldDirDigestString );
+      error("[INTERNAL ERROR]ColdDirHeadCreate: Open Head ERROR", MOD, meth );
+    end
+    coldDirList = coldDirRec[COLD_DIR_LIST_BIN];
+    if( spaceEstimate >= lsoMap[M_ColdListMax] ) then
+      -- Just clear out the whole thing.
+      ldrDeleteList = coldDirList; -- Pass this on to "release storage"
+      coldDirRec[COLD_DIR_LIST_BIN] = list(); -- reset the list.
+    else
+      -- Take gets the [1..N] elements.
+      -- Drop gets the [(N+1)..end] elements (it drops [1..N] elements)
+      ldrDeleteList = list.take( coldDirList, spaceEstimate );
+      local saveList = list.drop( coldDirList, spaceEstimate );
+      coldDirRec[COLD_DIR_LIST_BIN] = saveList;
+    end
 
-  -- Plug this directory into the chain of Dir Records (starting at HEAD).
-  coldDirMap[CDM_NextDirRec] = lsoMap[M_ColdDirListHead];
-  lsoMap[M_ColdDirListHead] = coldDirPropMap[PM_SelfDigest];--set in initDirMap
+    -- Gather up some statistics:
+    -- Track the sub-record count (LDRs and Cold Dirs).  Notice that the
+    -- Cold Dir here stays, so we have only LDRs.
+    subrecsDeleted = list.size( ldrDeleteList );
+    -- Track the items -- assume that all of the SUBRECS were full.
+    itemsDeleted = subrecsDeleted * ldrItemCount;
 
-  GP=F and trace("[DEBUG]: <%s:%s> Just Set ColdHead = (%s) Cold Next = (%s)",
-    MOD, meth, tostring(lsoMap[M_ColdDirListHead]),
-    tostring(coldDirPropMap[CDM_NextDirRec]));
+    -- Save the changes to the Cold Head
+    updateSubrec( src, coldDirRec, coldDirDigest );
+    returnColdHead = coldDirRec;
 
-  GP=F and trace("[REVIEW]: <%s:%s> LSOMAP = (%s) COLD DIR PROP MAP = (%s)",
-    MOD, meth, tostring(lsoMap), tostring(coldDirPropMap));
+  elseif( coldDirRecCount >= coldDirRecMax ) then
+    GP=F and trace("[ENTER]<%s:%s>Release Cold Dirs: Cnt(%d) Max(%d)",
+    MOD, meth, coldDirRecCount, coldDirRecMax );
+    -- Release as many cold dirs as we are OVER the max.  Release
+    -- them in reverse order, starting with the tail.  We put all of the
+    -- LDR subrec digests in the delete list, followed by the ColdDir 
+    -- subrec.
+    local coldDirCount = (coldDirRecCount + 1) - coldDirRecMax;
+    local tailDigest = lsoMap[M_ColdDirListTail];
+    local tailDigestString = tostring( tailDigest );
+    GP=F and trace("[DEBUG]<%s:%s>Cur Cold Tail(%s)", MOD, meth,
+      tostring( tailDigestString ));
+    ldrDeleteList = list();
+    dirDeleteList = list();
+    while( coldDirCount > 0 ) do
+      if( tailDigestString == nil or tailDigestString == 0 ) then
+        -- Something is wrong -- don't continue.
+        break;
+      else
+        -- Open the Cold Dir Record, add the digest list to the delete
+        -- list and move on to the next Cold Dir Record.
+        -- Note that we track the LDRs and the DIRs separately.
+        -- Also note the two different types of LIST APPEND.
+        coldDirRec = openSubrec( src, topRec, tailDigestString );
+        -- Append a digest LIST to the LDR delete list
+        listAppend( ldrDeleteList, coldDirRec[COLD_DIR_LIST_BIN] );
+        -- Append a cold Dir Digest to the DirDelete list
+        list.append( dirDeleteList, tailDigest ); 
 
-  -- Save our updates in the records
-  newColdHead[COLD_DIR_LIST_BIN] = list(); -- allocate a new digest list
-  newColdHead[COLD_DIR_CTRL_BIN] = coldDirMap;
-  newColdHead[SUBREC_PROP_BIN] = coldDirPropMap;-- same binName for all subrecs
+        -- Move back one to the previous ColdDir Rec.  Make it the
+        -- NEW TAIL.
+        coldDirMap = coldDirRec[COLD_DIR_CTRL_BIN];
+        tailDigest = coldDirMap[CDM_PrevDirRec];
+        GP=F and trace("[DEBUG]<%s:%s> Cur Tail(%s) Next Cold Dir Tail(%s)",
+          MOD, meth, tailDigestString, tostring(tailDigest) );
+        tailDigestString = tostring(tailDigest);
+        
+        -- It is best to adjust the new tail now, even though in some
+        -- cases we might remove this cold dir rec as well.
+        coldDirRec = openSubrec( src, topRec, tailDigestString );
+        coldDirMap = coldDirRec[COLD_DIR_CTRL_BIN];
+        coldDirMap[CDM_NextDirRec] = 0; -- this is now the tail
 
-  aerospike:update_subrec( newColdHead );
+        -- If we go around again -- we'll need this.
+        tailDigestString = record.digest( coldDirRec );
+      end -- else tail digest ok
+      coldDirCount = coldDirCount - 1; -- get ready for next iteration
+    end -- while; count down Cold Dir Recs
 
-  -- NOTE: We don't want to update the TOP RECORD until we know that
-  -- the  underlying children record operations are complete.
-  -- However, we can update topRec here, since that won't get written back
-  -- to storage until there's an explicit update_subrec() call.
-  topRec[ binName ] = lsoMap;
+    -- Update the LAST Cold Dir that we were in.  It's the new tail
+    updateSubrec( src, coldDirRec, coldDirDigest );
+
+    -- Gather up some statistics:
+    -- Track the sub-record counts (LDRs and Cold Dirs). 
+    -- Track the items -- assume that all of the SUBRECS were full.
+    itemsDeleted = list.size(ldrDeleteList) * ldrItemCount;
+    subrecsDeleted = list.size(ldrDeleteList) + list.size(dirDeleteList);
+
+    -- releaseStorage( topRec, lsoList, deleteList );
+  end -- end -- cases for when we remove OLD storage
+
+  -- If we did some deletes -- clean that all up now.
+  -- Update the various statistics (item and subrec counts)
+  if( itemsDeleted > 0 or subrecsDeleted > 0 ) then
+    local subrecCount = propMap[PM_SubRecCount];
+    propMap[PM_SubRecCount] = subrecCount - subrecsDeleted;
+
+    local itemCount = propMap[PM_ItemCount];
+    propMap[PM_ItemCount] = itemCount - itemsDeleted;
+
+
+    -- Now release any freed subrecs.
+    releaseStorage( topRec, lsoList, ldrDeleteList );
+    releaseStorage( topRec, lsoList, dirDeleteList );
+  end
+
+  -- Now -- whether or not we removed some old storage above, NOW are are
+  -- going to add a new Cold Directory HEAD.
+  if( createNewHead == true ) then
+
+    GP=F and trace("[ENTER]<%s:%s>Regular Cold Head Case", MOD, meth );
+
+    -- Create the Cold Head Record, initialize the bins: Ctrl, List
+    -- Also -- now that we have a DOUBLY linked list, get the NEXT Cold Dir,
+    -- if present, and have it point BACK to this new one.
+    --
+    -- Note: All Field Names start with UPPER CASE.
+    local newColdHeadRec = aerospike:create_subrec( topRec );
+    local newColdHeadMap     = map();
+    local newColdHeadPropMap = map();
+    initializeColdDirMap(topRec, newColdHeadRec, newColdHeadPropMap,
+                         newColdHeadMap, lsoList);
+
+    -- Update our global counts ==> One more Cold Dir Record.
+    lsoMap[M_ColdDirRecCount] = coldDirRecCount + 1;
+
+    -- Plug this directory into the (now doubly linked) chain of Cold Dir
+    -- Records (starting at HEAD).
+    local oldColdHeadDigest = lsoMap[M_ColdDirListHead];
+    local newColdHeadDigest = newColdHeadPropMap[PM_SelfDigest];
+
+    newColdHeadMap[CDM_NextDirRec] = oldColdHeadDigest;
+    newColdHeadMap[CDM_PrevDirRec] = 0; -- Nothing ahead of this one, yet.
+    lsoMap[M_ColdDirListHead] = newColdHeadPropMap[PM_SelfDigest];
+
+    GP=F and trace("[DEBUG]<%s:%s> New ColdHead = (%s) Cold Next = (%s)",
+      MOD, meth, tostring(newColdHeadDigest),tostring(oldColdHeadDigest));
+
+    -- Get the NEXT Cold Dir (the OLD Head) if there is one, and set it's
+    -- PREV pointer to THIS NEW HEAD.  This is the one downfall for having a
+    -- double linked list, but since we now need to traverse the list in
+    -- both directions, it's a necessary evil.
+    if( oldColdHeadDigest == nil or oldColdHeadDigest == 0 ) then
+      -- There is no Next Cold Dir, so we're done.
+      GP=F and trace("[DEBUG]<%s:%s> No Next CDir (assign ZERO)",MOD, meth );
+    else
+      -- Regular situation:  Go open the old ColdDirRec and update it.
+      local oldColdHeadDigestString = tostring(oldColdHeadDigest);
+      local oldColdHeadRec = openSubrec(src,topRec,oldColdHeadDigestString);
+      if( oldColdHeadRec == nil ) then
+        warn("[ERROR]<%s:%s> oldColdHead NIL from openSubrec: digest(%s)",
+          MOD, meth, oldColdHeadDigestString );
+        error("[SUBREC ERROR]: Can't open Old ColdHead in CreateColdHead");
+      end
+      local oldColdHeadMap = oldColdHeadRec[COLD_DIR_CTRL_BIN];
+      oldColdHeadMap[CDM_PrevDirRec] = newColdHeadDigest;
+
+      updateSubrec( src, oldColdHeadRec, oldColdHeadDigest );
+      -- aerospike:update_subrec( oldColdHeadRec );
+    end
+
+    GP=F and trace("[REVIEW]: <%s:%s> LSOMAP = (%s) COLD DIR PROP MAP = (%s)",
+      MOD, meth, tostring(lsoMap), tostring(newColdHeadPropMap));
+
+    -- Save our updates in the records
+    newColdHeadRec[COLD_DIR_LIST_BIN] = list(); -- allocate a new digest list
+    newColdHeadRec[COLD_DIR_CTRL_BIN] = newColdHeadMap;
+    newColdHeadRec[SUBREC_PROP_BIN] =   newColdHeadPropMap;
+
+    aerospike:update_subrec( newColdHeadRec );
+
+    -- NOTE: We don't want to update the TOP RECORD until we know that
+    -- the  underlying children record operations are complete.
+    -- However, we can update topRec here, since that won't get written back
+    -- to storage until there's an explicit update_subrec() call.
+    topRec[ binName ] = lsoMap;
+    returnColdHead = newColdHeadRec;
+  end -- if we should create a new Cold HEAD
 
   GP=F and trace("[EXIT]: <%s:%s> New Cold Head Record(%s) ",
-    MOD, meth, coldDirRecSummary( newColdHead ));
-  return newColdHead;
+    MOD, meth, coldDirRecSummary( returnColdHead ));
+  return returnColdHead;
 end --  coldDirHeadCreate()()
 
 -- ======================================================================
@@ -2540,6 +3101,38 @@ local function coldDirRecInsert(lsoList,coldHeadRec,digestListIndex,digestList)
   return newItemsStored;
 end -- coldDirRecInsert()
 
+-- ======================================================================
+-- releaseStorage():: @RAJ Can we do this???
+-- ======================================================================
+-- Release the storage in this digest list.  Either iterate thru the
+-- list and release it immediately (if that's the only option), or
+-- deliver the digestList to a component that can schedule the digest
+-- to be cleaned up later.
+-- ======================================================================
+local function releaseStorage( topRec, lsoList, digestList )
+  local meth = "releaseStorage()";
+  local rc = 0;
+  GP=F and trace("[ENTER]:<%s:%s> lsoSummary(%s) digestList(%s)",
+    MOD, meth, lsoSummaryString( lsoList ), tostring(digestList));
+
+    warn("[UNDER CONSTRUCTION]<%s:%s> Not Yet Finished", MOD, meth );
+
+    local subrec;
+    local digestString;
+
+    if( digestList == nil or list.size( digestList ) == 0 ) then
+      warn("[INTERNAL ERROR]<%s:%s> DigestList is nil or empty", MOD, meth );
+    else
+      local listSize = list.size( digestList );
+      for i = 1, listSize, 1 do
+        digestString = tostring( digestList[i] );
+        local subrec = aerospike:open_subrec( topRec, digestString );
+        rc = aerospike:remove( subrec );
+      end
+    end
+
+  GP=F and trace("[EXIT]: <%s:%s> ", MOD, meth );
+end -- releaseStorage()
 
 -- ======================================================================
 -- coldListInsert()
@@ -2550,12 +3143,13 @@ end -- coldDirRecInsert()
 -- warm list was created, so all we're doing now is moving the LDR page
 -- DIGESTS -- not the data itself.
 -- Parms:
+-- (*) src: Subrec Context -- Manage the Open Subrec Pool
 -- (*) topRec: the top record -- needed if we create a new LDR
 -- (*) lsoList: the control map of the top record
 -- (*) digestList: the list of digests to be inserted (as_val or binary)
 -- Return: 0 for success, -1 if problems.
 -- ======================================================================
-local function coldListInsert( topRec, lsoList, digestList )
+local function coldListInsert( src, topRec, lsoList, digestList )
   local meth = "coldListInsert()";
   local rc = 0;
 
@@ -2564,18 +3158,31 @@ local function coldListInsert( topRec, lsoList, digestList )
   local lsoMap  = lsoList[2];
   local binName = propMap[PM_BinName];
 
-  GP=F and trace("[ENTER]: <%s:%s> LSO Map Contents(%s) ",
-      MOD, meth, tostring(lsoMap), tostring( digestList ));
+  GP=F and trace("[ENTER]<%s:%s>SRC(%s) LSO Summary(%s) DigestList(%s)", MOD,
+    meth, tostring(src), lsoSummaryString(lsoList), tostring( digestList ));
 
   GP=F and trace("[DEBUG 0]:Map:WDL(%s)", tostring(lsoMap[M_WarmDigestList]));
 
-  local transferAmount = list.size( digestList );
+  -- The very first thing we must check is to see if we are ALLOWED to have
+  -- a cold list.  If M_ColdDirRecMax is ZERO, then that means we are
+  -- not having a cold list -- so the warmListTransfer data is effectively
+  -- being deleted.  If that's the case, then we pass those digests to
+  -- the "release storage" method and return.
+  if( lsoMap[M_ColdDirRecMax] == 0 ) then
+    rc = releaseStorage( topRec, lsoList, digestList );
+    GP=F and trace("[Early EXIT]: <%s:%s> Release Storage Status(%s) RC(%d)",
+      MOD,meth, tostring(status), rc );
+    return rc;
+  end
 
+  -- Ok, we WILL do cold storage, so we have to check the status.
   -- If we don't have a cold list, then we have to build one.  Also, if
   -- the current cold Head is completely full, then we also need to add
-  -- a new one.
+  -- a new one.  And, if we ADD one, then we have to check to see if we
+  -- need to delete the oldest one (or more than one).
   local stringDigest;
   local coldHeadRec;
+  local transferAmount = list.size( digestList );
 
   local coldHeadDigest = lsoMap[M_ColdDirListHead];
   GP=F and trace("[DEBUG]<%s:%s>Cold List Head Digest(%s), ColdFullorNew(%s)",
@@ -2587,7 +3194,7 @@ local function coldListInsert( topRec, lsoList, digestList )
   then
     -- Create a new Cold Directory Head and link it in the Dir Chain.
     GP=F and trace("[DEBUG]:<%s:%s>:Creating FIRST NEW COLD HEAD", MOD, meth );
-    coldHeadRec = coldDirHeadCreate( topRec, lsoList );
+    coldHeadRec = coldDirHeadCreate(src, topRec, lsoList, transferAmount );
     coldHeadDigest = record.digest( coldHeadRec );
     stringDigest = tostring( coldHeadDigest );
   else
@@ -2599,7 +3206,7 @@ local function coldListInsert( topRec, lsoList, digestList )
   local coldDirMap = coldHeadRec[COLD_DIR_CTRL_BIN];
   local coldHeadList = coldHeadRec[COLD_DIR_LIST_BIN];
 
-  GP=F and trace("[DEBUG]:<%s:%s>:Digest(%s) ColdHeadCtrl(%s) ColdHeadList(%s)",
+  GP=F and trace("[DEBUG]<%s:%s>Digest(%s) ColdHeadCtrl(%s) ColdHeadList(%s)",
     MOD, meth, tostring( stringDigest ), tostring( coldDirMap ),
     tostring( coldHeadList ));
 
@@ -2625,7 +3232,9 @@ local function coldListInsert( topRec, lsoList, digestList )
       aerospike:close_subrec( coldHeadRec );
       GP=F and trace("[DEBUG]: <%s:%s> Calling Cold DirHead Create: AGAIN!!",
           MOD, meth );
-      coldHeadRec = coldDirHeadCreate( topRec, lsoList );
+      -- Note that coldDirHeadCreate() deals with the data Expiration and
+      -- eviction for any data that is in cold storage.
+      coldHeadRec = coldDirHeadCreate( topRec, lsoList, digestsLeft );
     end
   end -- while digests left to write.
   
@@ -2652,17 +3261,8 @@ local function coldListInsert( topRec, lsoList, digestList )
   GP=F and trace("[EXIT]: <%s:%s> SUB-REC  Close Status(%s) RC(%d)",
     MOD,meth, tostring(status), rc );
 
-  -- Note: warm->cold transfer only.  No new data added here.
-  -- So, no new counts to upate (just warm/cold adjustments).
-  --
-  -- With the recent addition of the "StoreLimit", we now need to look
-  -- after a cold Store addition to see if we also need to release
-  -- some "frozen" data -- cold storage that is BEYOND the storage limit.
-  -- Any such data will be released in this version, and maybe in later
-  -- versions will be pushed to some archive storage.
-  --
-  -- Compute the item count in Hot and Warm storage.
-  local hotStorageList = lsoMap[M_HotEntryList];
+  -- Note: This is warm to cold transfer only.  So, no new data added here,
+  -- and as a result, no new counts to upate (just warm/cold adjustments).
 
   return rc;
 end -- coldListInsert
@@ -2676,6 +3276,7 @@ end -- coldListInsert
 -- read "count" data entries.  Use the same ReadDigestList method as the
 -- warm list.
 -- Parms:
+-- (*) src: Subrec Context -- Manage the Open Subrec Pool
 -- (*) topRec: User-level Record holding the LSO Bin
 -- (*) resultList: What's been accumulated so far -- add to this
 -- (*) lsoList: The main structure of the LSO Bin.
@@ -2686,7 +3287,7 @@ end -- coldListInsert
 -- Return: Return the amount read from the Cold Dir List.
 -- ======================================================================
 local function
-coldListRead(topRec, resultList, lsoList, count, func, fargs, all)
+coldListRead(src, topRec, resultList, lsoList, count, func, fargs, all)
   local meth = "coldListRead()";
   GP=F and trace("[ENTER]: <%s:%s> Count(%d) All(%s) lsoMap(%s)",
       MOD, meth, count, tostring( all ), tostring( lsoMap ));
@@ -2731,7 +3332,7 @@ coldListRead(topRec, resultList, lsoList, count, func, fargs, all)
     GP=F and trace("[DEBUG]<%s:%s>Cold Dir subrec digest(%s) Map(%s) List(%s)",
       MOD, meth, stringDigest, tostring(coldDirMap),tostring(digestList));
 
-    numRead = digestListRead(topRec, resultList, lsoList, digestList,
+    numRead = digestListRead(src, topRec, resultList, lsoList, digestList,
                             countRemaining, func, fargs, all)
     if numRead <= 0 then
         warn("[ERROR]:<%s:%s>:Cold List Read Error: Digest(%s)",
@@ -2744,8 +3345,9 @@ coldListRead(topRec, resultList, lsoList, count, func, fargs, all)
 
     GP=F and trace("[DEBUG]:<%s:%s>:After Read: TotalRead(%d) NumRead(%d)",
           MOD, meth, totalNumRead, numRead );
-    GP=F and trace("[DEBUG]:<%s:%s>:CountRemain(%d) NextDir(%s)",
-          MOD, meth, countRemaining, tostring(coldDirMap[CDM_NextDirRec]));
+    GP=F and trace("[DEBUG]:<%s:%s>:CountRemain(%d) NextDir(%s)PrevDir(%s)",
+          MOD, meth, countRemaining, tostring(coldDirMap[CDM_NextDirRec]),
+          tostring(coldDirMap[CDM_PrevDirRec]));
 
     if countRemaining <= 0 or coldDirMap[CDM_NextDirRec] == 0 then
         GP=F and trace("[EARLY EXIT]:<%s:%s>:Cold Read: (%d) Items",
@@ -2805,15 +3407,16 @@ end -- coldListRead()
 -- transfer can trigger several operations in the cold list (see the
 -- function makeRoomInColdList( lso, digestCount )
 -- Parms:
+-- (*) src: Subrec Context -- Manage the Open Subrec Pool
 -- (*) topRec: The top level user record (needed for create_subrec)
 -- (*) lsoList
 -- Return: Success (0) or Failure (-1)
 -- ======================================================================
-local function warmListTransfer( topRec, lsoList )
+local function warmListTransfer( src, topRec, lsoList )
   local meth = "warmListTransfer()";
   local rc = 0;
-  GP=F and trace("[ENTER]<%s:%s>\n\n <> TRANSFER TO COLD LIST <> lsoMap(%s)\n",
-    MOD, meth, tostring(lsoMap) );
+  GP=F and trace("[ENTER]<%s:%s>\n\n <> TRANSFER TO COLD LIST <> lso(%s)\n",
+    MOD, meth, tostring(lsoList) );
 
   -- if we haven't yet initialized the cold list, then set up the
   -- first Directory Head (a page of digests to data pages).  Note that
@@ -2824,8 +3427,8 @@ local function warmListTransfer( topRec, lsoList )
   -- Build the list of items (digests) that we'll be moving from the warm
   -- list to the cold list. Use coldListInsert() to insert them.
   local transferList = extractWarmListTransferList( lsoList );
-  rc = coldListInsert( topRec, lsoList, transferList );
-  GP=F and trace("[EXIT]: <%s:%s> lsoMap(%s) ", MOD, meth, tostring(lsoMap) );
+  rc = coldListInsert( src, topRec, lsoList, transferList );
+  GP=F and trace("[EXIT]: <%s:%s> lso(%s) ", MOD, meth, tostring(lsoList) );
   return rc;
 end -- warmListTransfer()
 
@@ -2839,7 +3442,12 @@ end -- warmListTransfer()
 -- (1) If there's room in the WarmDigestList, then do the transfer there.
 -- (2) If there's insufficient room in the WarmDir List, then make room
 --     by transferring some stuff from Warm to Cold, then insert into warm.
-local function hotListTransfer( topRec, lsoList )
+-- Parms:
+-- (*) src: Subrec Context -- Manage the Open Subrec Pool
+-- (*) topRec
+-- (*) lsoList
+-- ======================================================================
+local function hotListTransfer( src, topRec, lsoList )
   local meth = "hotListTransfer()";
   local rc = 0;
   GP=F and trace("[ENTER]: <%s:%s> LSO Summary(%s) ",
@@ -2852,14 +3460,14 @@ local function hotListTransfer( topRec, lsoList )
   -- if no room in the WarmList, then make room (transfer some of the warm
   -- list to the cold list)
   if warmListHasRoom( lsoMap ) == 0 then
-    warmListTransfer( topRec, lsoList );
+    warmListTransfer( src, topRec, lsoList );
   end
 
   -- Do this the simple (more expensive) way for now:  Build a list of the
   -- items (data entries) that we're moving from the hot list to the warm dir,
   -- then call insertWarmDir() to find a place for it.
   local transferList = extractHotListTransferList( lsoMap );
-  rc = warmListInsert( topRec, lsoList, transferList );
+  rc = warmListInsert( src, topRec, lsoList, transferList );
 
   GP=F and trace("[EXIT]: <%s:%s> result(%d) LsoMap(%s) ",
     MOD, meth, rc, tostring( lsoMap ));
@@ -3082,13 +3690,14 @@ end -- buildResultList()
 -- ========================================================================
 -- Build the list of subrecs for the entire LDT.
 -- Parms:
--- (1) topRec: the user-level record holding the LSO Bin
--- (2) lsoList: The main LDT control structure
+-- (*) src: Subrec Context -- Manage the Open Subrec Pool
+-- (*) topRec: the user-level record holding the LSO Bin
+-- (*) lsoList: The main LDT control structure
 -- Result:
 --   res = (when successful) List of SUBRECs
 --   res = (when error) Empty List
 -- ========================================================================
-function buildSubRecListAll( topRec, lsolist )
+function buildSubRecListAll( src, topRec, lsolist )
   local meth = "buildSubRecListAll()";
 
   GP=F and trace("[ENTER]: <%s:%s> LSO Summary(%s)",
@@ -3213,6 +3822,9 @@ local function locatePosition( topRec, lsoList, sp, position )
   GP=F and trace("[ENTER]:<%s:%s> LDT(%s) Position(%d)",
     MOD, meth, ldtSummaryString( lsoList ), position );
 
+    -- TODO: Finish this
+  warn("[WARNING!!]<%s:%s> FUNCTION UNDER CONSTRUCTION!!! ", MOD, meth );
+
   -- Extract the property map and lso control map from the lso bin list.
   local propMap = lsoList[1];
   local lsoMap  = lsoList[2];
@@ -3222,24 +3834,25 @@ local function locatePosition( topRec, lsoList, sp, position )
   local entryListPosition = 0;     -- The place in the entry list.
 
   info("[NOTICE!!]<%s:%s> This is LIST MODE ONLY", MOD, meth );
+  -- TODO: Must be extended for BINARY -- MODE.
   if( lsoMap[M_StoreMode] == SM_LIST ) then
-    -- TODO: Must be extended for BINARY -- MODE.
     local hotListAmount = list.size( lsoMap[M_HotEntryList] );
     local warmListMax = lsoMap[M_WarmListMax];
     local warmFullCount = lsoMap[M_WarmListDigestCount] - 1;
     local warmTopEntries = lsoMap[M_WarmTopEntryCount];
     local warmListPart = (warmFullCount * warmListMax) + warmTopEntries;
     local warmListAmount = hotListPart + warmListPart;
-    if( position < hotListLimit ) then
+    if( position <= hotListLimit ) then
       info("[Status]<%s:%s> In the Hot List", MOD, meth );
       -- It's a hot list position:
       entryListPosition = position;
-    elseif( position < warmListSize ) then
+    elseif( position <= warmListSize ) then
       info("[Status]<%s:%s> In the Warm List", MOD, meth );
       -- Its a warm list position: Subtract off the HotList portion and then
       -- calculate where in the Warm list we are.  Integer divide to locate
       -- the LDR, modulo to locate the warm List Position in the LDR
-      --
+      local remaining = position - hotListAmount;
+      -- digestListPosition = 
     else
       info("[Status]<%s:%s> In the Cold List", MOD, meth );
       -- It's a cold list position: Subract off the Hot and Warm List portions
@@ -3413,6 +4026,11 @@ local function localStackPush( topRec, lsoBinName, newValue, createSpec )
   -- Some simple protection of faulty records or bad bin names
   validateRecBinAndMap( topRec, lsoBinName, false );
 
+  -- Create the SubrecContext, which will hold all of the open subrecords.
+  -- The key will be the DigestString, and the value will be the subRec
+  -- pointer.
+  local src = createSubrecContext();
+
   -- Check for existence, and create if not there.  If we create AND there
   -- is a "createSpec", then configure this LSO appropriately.
   local lsoList;
@@ -3462,7 +4080,7 @@ local function localStackPush( topRec, lsoBinName, newValue, createSpec )
   -- cold list.  (Ok to use lsoMap and not lsoList here).
   if hotListHasRoom( lsoMap, newStoreValue ) == false then
     GP=F and trace("[DEBUG]:<%s:%s>: CALLING TRANSFER HOT LIST!!",MOD, meth );
-    hotListTransfer( topRec, lsoList );
+    hotListTransfer( src, topRec, lsoList );
   end
   hotListInsert( lsoList, newStoreValue );
   -- Must always assign the object BACK into the record bin.
@@ -3531,6 +4149,8 @@ end -- lstack_create_and_push()
 -- NOTE: Any parameter that might be printed (for trace/debug purposes)
 -- must be protected with "tostring()" so that we do not encounter a format
 -- error if the user passes in nil or any other incorrect value/type.
+-- NOTE: July 2013:tjl: Now using the SubrecContext to track the open
+-- subrecs.
 -- ======================================================================
 local function localStackPeek( topRec, lsoBinName, peekCount, func, fargs )
   local meth = "localStackPeek()";
@@ -3547,6 +4167,12 @@ local function localStackPeek( topRec, lsoBinName, peekCount, func, fargs )
 
   GP=F and trace("[DEBUG]: <%s:%s> LSO List Summary(%s)",
     MOD, meth, lsoSummaryString( lsoList ) );
+
+
+  -- Create the SubrecContext, which will hold all of the open subrecords.
+  -- The key will be the DigestString, and the value will be the subRec
+  -- pointer.
+  local src = createSubrecContext();
 
   -- Build the user's "resultList" from the items we find that qualify.
   -- They must pass the "transformFunction()" filter.
@@ -3605,7 +4231,7 @@ local function localStackPeek( topRec, lsoBinName, peekCount, func, fargs )
   -- If no Warm List, then we're done (assume no cold list if no warm)
   if list.size(lsoMap[M_WarmDigestList]) > 0 then
     warmCount =
-      warmListRead(topRec,resultList,lsoList,remainingCount,func,fargs,all);
+     warmListRead(src,topRec,resultList,lsoList,remainingCount,func,fargs,all);
   end
 
   -- As Agent Smith would say... "MORE!!!".
@@ -3632,7 +4258,7 @@ local function localStackPeek( topRec, lsoBinName, peekCount, func, fargs )
 
   -- Otherwise, go look for more in the Cold List.
   local coldCount = 
-      coldListRead(topRec,resultList,lsoList,remainingCount,func,fargs,all);
+     coldListRead(src,topRec,resultList,lsoList,remainingCount,func,fargs,all);
 
   GP=F and trace("[EXIT]: <%s:%s>: PeekCount(%d) ResultListSummary(%s)",
     MOD, meth, peekCount, summarizeList(resultList));
@@ -4030,6 +4656,84 @@ function lstack_set_storage_limit( topRec, lsoBinName, newLimit )
 
   -- Update the LSO Control map with the new storage limit
   lsoMap[M_StoreLimit] = newLimit;
+
+  -- Use the new "Limit" to compute how this affects the storage parameters.
+  -- Basically, we want to determine how many Cold List directories this
+  -- new limit equates to.  Then, if we add more than that many cold list
+  -- directories, we'll release that storage.
+  -- Note: We're doing this in terms of LIST mode, not yet in terms of
+  -- binary mode.  We must compute this in terms of MINIMAL occupancy, so
+  -- that we always have AT LEAST "Limit" items in the stack.  Therefore,
+  -- we compute Hotlist as minimal size (max - transfer) as well as WarmList
+  -- (max - transfer)
+  -- Total Space comprises:
+  -- (*) Hot List Storage
+  -- ==> (HotListMax - HotListTransfer)  Items (minimum)
+  -- (*) Warm List Storage
+  -- ==> ((WarmListMax - WarmListTransfer) * LdrEntryCountMax)
+  -- (*) ColdList (one Cold Dir) Capacity -- because there is no limit to
+  --     the number of coldDir Records we can have.
+  -- ==> ColdListMax * LdrEntryCountMax
+  --
+  -- So -- if we set the limit to 10,000 items and all of our parameters
+  -- are set to 100:
+  -- HotListMax = 100
+  -- HotListTransfer = 50
+  -- WarmListMax = 100
+  -- WarmListTransfer = 50
+  -- LdrEntryCountMax = 100
+  -- ColdListMax = 100
+  --
+  -- Then, our numbers look like this:
+  -- (*) Hot Storage (between 50 and 100 data elements)
+  -- (*) LDR Storage (100 elements) (per Warm or Cold Digest)
+  -- (*) Warm Storage (between 5,000 and 10,000 elements)
+  -- (*) Cold Dir Storage ( between 5,000 and 10,000 elements for the FIRST
+  --     Cold Dir (the head), and 10,000 elements for every Cold Dir after
+  --     that.
+  --
+  -- So, a limit of 75 would keep all storage in the hot list, with a little
+  -- overflow into the warm List.  An Optimal setting would set the
+  -- Hot List to 100 and the transfer amount to 25, thus guaranteeing that
+  -- the HotList always contained the desired top 75 elements.  However,
+  -- we expect capacity numbers to be in the thousands, not tens.
+  --
+  -- A limit of 1,000 would limit Warm Storage to 10 (probably 10+1)
+  -- warm list digest cells.
+  --
+  -- A limit of 10,000 would limit the Cold Storage to a single Dir list,
+  -- which would release "transfer list" amount of data when that much more
+  -- was coming in.
+  --
+  -- A limit of 20,000 would limit Cold Storage to 2:
+  -- 50 Hot, 5,000 Warm, 15,000 Cold.
+  --
+  -- For now, we're just going to release storage at the COLD level.  So,
+  -- we'll basically compute a stairstep function of how many Cold Directory
+  -- records we want to use, based on the system parameters.
+  -- Under 10,000:  1 Cold Dir
+  -- Under 20,000:  2 Cold Dir
+  -- Under 50,000:  5 Cold Dir
+  
+  local hotListMin = lsoMap[HotListMax] - lsoMap[HotListTransfer];
+  local ldrSize = lsoMap[M_LdrEntryCountMax];
+  local warmListMin =
+    (lsoMap[WarmListMax] - lsoMap[WarmListTransfer]) * ldrSize;
+  local coldListSize = lsoMap[M_ColdListMax];
+  local coldGranuleSize = ldrSize * coldListSize;
+  local coldRecsNeeded = 0;
+  if( newLimit < (hotListMin + warmListMin) ) then
+    coldRecsNeeded = 0;
+  elseif( newLimit < granuleSize ) then
+    coldRecsNeeded = 1;
+  else
+    coldRecsNeeded = math.ceil( newLimit / granuleSize );
+  end
+
+  GP=F and trace("[UPDATE]:<%s:%s> New Cold Rec Limit(%d)", MOD, meth, 
+    coldRecsNeeded );
+
+  lsoMap[MColdDirRecMax] = coldRecsNeeded;
   topRec[lsoBinName] = lsoList; -- lsoMap is implicitly included.
 
   -- Update the Top Record.  Not sure if this returns nil or ZERO for ok,

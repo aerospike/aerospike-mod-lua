@@ -1,8 +1,13 @@
 -- Large Ordered List (llist.lua)
--- Last Update July 22,  2013: tjl
+-- Last Update July 23,  2013: tjl
 --
 -- Keep this MOD value in sync with version above
-local MOD = "llist_2013_07_22.g"; -- module name used for tracing.  
+local MOD = "llist_2013_07_23.g"; -- module name used for tracing.  
+
+-- This variable holds the version of the code (Major.Minor).
+-- We'll check this for Major design changes -- and try to maintain some
+-- amount of inter-version compatibility.
+local G_LDT_VERSION = 1.1;
 
 -- ======================================================================
 -- || GLOBAL PRINT ||
@@ -289,11 +294,6 @@ local LSR_BINARY_BIN      = "LsrBinaryBin";
 -- Each LDT defines its type in string form.
 local LDT_TYPE_LLIST = "LLIST";
 
--- This variable holds the version of the code (Major.Minor).
--- We'll check this for Major design changes -- and try to maintain some
--- amount of inter-version compatibility.
-local G_LDT_VERSION = 1.0;
-
 -- Flag values
 local FV_INSERT  = 'I'; -- flag to scanList to Insert the value (if not found)
 local FV_SCAN    = 'S'; -- Regular Scan (do nothing else)
@@ -499,8 +499,9 @@ local PackageDebugModeNumber = "DebugModeNumber";
 local PackageProdListValBinStore = "ProdListValBinStore";
 
 -- set up our "outside" links
-local  CRC32 = require('CRC32');
+-- local  CRC32 = require('CRC32'); -- Used by LSET, LMAP
 local functionTable = require('UdfFunctionTable');
+local LDTC = require('ldt_common');
 
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- <><><><> <Initialize Control Maps> <Initialize Control Maps> <><><><>
