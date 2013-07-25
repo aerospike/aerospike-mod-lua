@@ -2,7 +2,7 @@
 -- lstack.lua:  July 24, 2013 (Happy Birthday Jamie!!)
 --
 -- Module Marker: Keep this in sync with the stated version
-local MOD="lstack_2013_07_24.p"; -- the module name used for tracing
+local MOD="lstack_2013_07_24.s"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -1447,7 +1447,7 @@ local function packageDebugModeList( lsoMap )
   lsoMap[M_WarmListTransfer] = 2; -- # of Warm Data Record Chunks
   -- Cold Directory List Settings: List of Directory Pages
   lsoMap[M_ColdListMax]      = 4; -- # of list entries in a Cold dir node
-  lsoMap[M_ColdDirRecMax]    = 10; -- Max# of Cold DIRECTORY Records
+  lsoMap[M_ColdDirRecMax]    = 2; -- Max# of Cold DIRECTORY Records
 end -- packageDebugModeList()
 
 -- ======================================================================
@@ -2794,7 +2794,7 @@ local function coldDirHeadCreate( src, topRec, lsoList, spaceEstimate )
   local binName = propMap[PM_BinName];
   local ldrDeleteList; -- List of LDR subrecs to be removed (eviction)
   local dirDeleteList; -- List of Cold Directory Subrecs to be removed.
-  local ldrItemCount = lsoMap[ldrEntryCountMax];
+  local ldrItemCount = lsoMap[M_LdrEntryCountMax];
   local subrecDeleteCount; -- ALL subrecs (LDRs and Cold Dirs)
   local coldDirMap;
   local coldDirList;
@@ -4201,7 +4201,7 @@ local function localStackPeek( topRec, lsoBinName, peekCount, func, fargs )
     if( itemCount < storeLimit ) then
       all = true;
     else
-      peekCount = storeLimit; -- peek NO MORE than our storage limit.
+      count = storeLimit; -- peek NO MORE than our storage limit.
     end
   elseif( peekCount > storeLimit ) then
     count = storeLimit;
@@ -4211,6 +4211,9 @@ local function localStackPeek( topRec, lsoBinName, peekCount, func, fargs )
 
   -- Set up our answer list.
   local resultList = list(); -- everyone will fill this in
+
+  GP=F and trace("[DEBUG]<%s:%s> Peek with Count(%d) StoreLimit(%d)",
+      MOD, meth, count, storeLimit );
 
   -- Fetch from the Hot List, then the Warm List, then the Cold List.
   -- Each time we decrement the count and add to the resultlist.
@@ -4658,9 +4661,11 @@ function lstack_set_storage_limit( topRec, lsoBinName, newLimit )
   local propMap = lsoList[1];
   local lsoMap  = lsoList[2];
 
+  GP=F and trace("[LSO SUMMARY]: <%s:%s> Summary(%s)", MOD, meth,
+    lsoSummaryString( lsoList ));
 
   info("[PARAMETER UPDATE]<%s:%s> StoreLimit: Old(%d) New(%d) ItemCount(%d)",
-    MOD, meth, lsoMap[M_StoreLimit], newLimit, lsoMap[M_ItemCount] );
+    MOD, meth, lsoMap[M_StoreLimit], newLimit, propMap[PM_ItemCount] );
 
   -- Update the LSO Control map with the new storage limit
   lsoMap[M_StoreLimit] = newLimit;
@@ -4723,25 +4728,27 @@ function lstack_set_storage_limit( topRec, lsoBinName, newLimit )
   -- Under 20,000:  2 Cold Dir
   -- Under 50,000:  5 Cold Dir
   
-  local hotListMin = lsoMap[HotListMax] - lsoMap[HotListTransfer];
+  local hotListMin = lsoMap[M_HotListMax] - lsoMap[M_HotListTransfer];
   local ldrSize = lsoMap[M_LdrEntryCountMax];
   local warmListMin =
-    (lsoMap[WarmListMax] - lsoMap[WarmListTransfer]) * ldrSize;
+    (lsoMap[M_WarmListMax] - lsoMap[M_WarmListTransfer]) * ldrSize;
   local coldListSize = lsoMap[M_ColdListMax];
   local coldGranuleSize = ldrSize * coldListSize;
   local coldRecsNeeded = 0;
   if( newLimit < (hotListMin + warmListMin) ) then
     coldRecsNeeded = 0;
-  elseif( newLimit < granuleSize ) then
+  elseif( newLimit < coldGranuleSize ) then
     coldRecsNeeded = 1;
   else
-    coldRecsNeeded = math.ceil( newLimit / granuleSize );
+    coldRecsNeeded = math.ceil( newLimit / coldGranuleSize );
   end
 
+  GP=F and trace("[STATUS]<%s:%s> Cold Granule(%d) HLM(%d) WLM(%d)",
+    MOD, meth, coldGranuleSize, hotListMin, warmListMin );
   GP=F and trace("[UPDATE]:<%s:%s> New Cold Rec Limit(%d)", MOD, meth, 
     coldRecsNeeded );
 
-  lsoMap[MColdDirRecMax] = coldRecsNeeded;
+  lsoMap[M_ColdDirRecMax] = coldRecsNeeded;
   topRec[lsoBinName] = lsoList; -- lsoMap is implicitly included.
 
   -- Update the Top Record.  Not sure if this returns nil or ZERO for ok,
