@@ -2,7 +2,7 @@
 -- lstack.lua:  July 25, 2013 (Happy Birthday Jamie!!)
 --
 -- Module Marker: Keep this in sync with the stated version
-local MOD="lstack_2013_07_25.c"; -- the module name used for tracing
+local MOD="lstack_2013_07_25.d"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -16,7 +16,7 @@ local G_LDT_VERSION = 1.1;
 -- in the server).
 -- ======================================================================
 local GP=true; -- Leave this ALWAYS true (but value seems not to matter)
-local F=true; -- Set F (flag) to true to turn ON global print
+local F=false; -- Set F (flag) to true to turn ON global print
 
 -- ======================================================================
 -- LSTACK TODO LIST:
@@ -1005,6 +1005,7 @@ local function initializeLso( topRec, lsoBinName )
   propMap[PM_RecType]    = RT_LDT; -- Record Type LDT Top Rec
   propMap[PM_EsrDigest]    = 0; -- not set yet.
   propMap[PM_CreateTime] = aerospike:get_current_time();
+  propMap[PM_SelfDigest] = record.digest( topRec );
 
   -- Specific LSO Parms: Held in LsoMap
   lsoMap[M_StoreMode]   = SM_LIST; -- SM_LIST or SM_BINARY:
@@ -2734,6 +2735,40 @@ end -- warmListInsert
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- ======================================================================
 
+
+-- ======================================================================
+-- releaseStorage():: @RAJ @TOBY TODO: Change inside to crec_release() call
+-- ======================================================================
+-- Release the storage in this digest list.  Either iterate thru the
+-- list and release it immediately (if that's the only option), or
+-- deliver the digestList to a component that can schedule the digest
+-- to be cleaned up later.
+-- ======================================================================
+local function releaseStorage( topRec, lsoList, digestList )
+  local meth = "releaseStorage()";
+  local rc = 0;
+  GP=F and trace("[ENTER]:<%s:%s> lsoSummary(%s) digestList(%s)",
+    MOD, meth, lsoSummaryString( lsoList ), tostring(digestList));
+
+    info("LSTACK Subrecord Eviction: Subrec List(%s)",tostring(digestList));
+
+    local subrec;
+    local digestString;
+
+    if( digestList == nil or list.size( digestList ) == 0 ) then
+      warn("[INTERNAL ERROR]<%s:%s> DigestList is nil or empty", MOD, meth );
+    else
+      local listSize = list.size( digestList );
+      for i = 1, listSize, 1 do
+        digestString = tostring( digestList[i] );
+        local subrec = aerospike:open_subrec( topRec, digestString );
+        rc = aerospike:remove( subrec );
+      end
+    end
+
+  GP=F and trace("[EXIT]: <%s:%s> ", MOD, meth );
+end -- releaseStorage()
+
 -- ======================================================================
 -- Update the ColdDir Page pointers -- used on initial create
 -- and subsequent ColdDir page creates.  Each Cold Dir Page has a
@@ -3108,39 +3143,6 @@ local function coldDirRecInsert(lsoList,coldHeadRec,digestListIndex,digestList)
 
   return newItemsStored;
 end -- coldDirRecInsert()
-
--- ======================================================================
--- releaseStorage():: @RAJ Can we do this???
--- ======================================================================
--- Release the storage in this digest list.  Either iterate thru the
--- list and release it immediately (if that's the only option), or
--- deliver the digestList to a component that can schedule the digest
--- to be cleaned up later.
--- ======================================================================
-local function releaseStorage( topRec, lsoList, digestList )
-  local meth = "releaseStorage()";
-  local rc = 0;
-  GP=F and trace("[ENTER]:<%s:%s> lsoSummary(%s) digestList(%s)",
-    MOD, meth, lsoSummaryString( lsoList ), tostring(digestList));
-
-    warn("[UNDER CONSTRUCTION]<%s:%s> Not Yet Finished", MOD, meth );
-
-    local subrec;
-    local digestString;
-
-    if( digestList == nil or list.size( digestList ) == 0 ) then
-      warn("[INTERNAL ERROR]<%s:%s> DigestList is nil or empty", MOD, meth );
-    else
-      local listSize = list.size( digestList );
-      for i = 1, listSize, 1 do
-        digestString = tostring( digestList[i] );
-        local subrec = aerospike:open_subrec( topRec, digestString );
-        rc = aerospike:remove( subrec );
-      end
-    end
-
-  GP=F and trace("[EXIT]: <%s:%s> ", MOD, meth );
-end -- releaseStorage()
 
 -- ======================================================================
 -- coldListInsert()

@@ -1,8 +1,8 @@
 -- Large Ordered List (llist.lua)
--- Last Update July 23,  2013: tjl
+-- Last Update July 26,  2013: tjl
 --
 -- Keep this MOD value in sync with version above
-local MOD = "llist_2013_07_23.g"; -- module name used for tracing.  
+local MOD = "llist_2013_07_26.g"; -- module name used for tracing.  
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -489,13 +489,19 @@ local KH_DEFAULT="keyHash";         -- Key Hash used only in complex mode
 
 -- Package Names
 -- Standard, Test and Debug Packages
-local PackageStandardList    = "StandardList";
-local PackageTestModeList    = "TestModeList";
-local PackageTestModeBinary  = "TestModeBinary";
-local PackageTestModeNumber  = "TestModeNumber";
-local PackageDebugModeList   = "DebugModeList";
-local PackageDebugModeBinary = "DebugModeBinary";
-local PackageDebugModeNumber = "DebugModeNumber";
+local PackageStandardList        = "StandardList";
+local PackageTestModeObject      = "TestModeObject";
+local PackageTestModeObjectDup   = "TestModeObjectDup";
+local PackageTestModeList        = "TestModeList";
+local PackageTestModeBinary      = "TestModeBinary";
+local PackageTestModeNumber      = "TestModeNumber";
+local PackageTestModeNumberDup   = "TestModeNumberDup";
+local PackageDebugModeObjectDup  = "DebugModeObjectDup";
+local PackageDebugModeObject     = "DebugModeObject";
+local PackageDebugModeList       = "DebugModeList";
+local PackageDebugModeBinary     = "DebugModeBinary";
+local PackageDebugModeNumber     = "DebugModeNumber";
+local PackageDebugModeNumberDup  = "DebugModeNumberDup";
 local PackageProdListValBinStore = "ProdListValBinStore";
 
 -- set up our "outside" links
@@ -626,6 +632,7 @@ initializeLList( topRec, ldtBinName, transFunc, untransFunc )
   propMap[PM_RecType]    = RT_LDT; -- Record Type LDT Top Rec
   propMap[PM_EsrDigest]    = 0; -- not set yet.
   propMap[PM_CreateTime] = aerospike:get_current_time();
+  propMap[PM_SelfDigest]  = record.digest( topRec );
 
   -- General Tree Settings
   ldtMap[R_TotalCount] = 0;    -- A count of all "slots" used in LLIST
@@ -703,11 +710,22 @@ local function packageStandardList( ldtMap )
   ldtMap[R_StoreMode] = SM_LIST; -- Use List Mode
   ldtMap[R_BinaryStoreSize] = nil; -- Don't waste room if we're not using it
   ldtMap[R_KeyType] = KT_ATOMIC; -- Atomic Keys
-  -- ldtMap[R_BinName] = ldtBinName;
   ldtMap[R_Threshold] = DEFAULT_THRESHOLD; -- Rehash after this many inserts
   ldtMap[R_KeyFunction] = nil; -- Special Attention Required.
-  return 0;
 
+  -- Top Node Tree Root Directory
+  ldtMap[R_RootListMax] = 100; -- Length of Key List (page list is KL + 1)
+  ldtMap[R_RootByteCountMax] = 0; -- Max bytes for key space in the root
+  
+  -- LLIST Inner Node Settings
+  ldtMap[R_NodeListMax] = 100;  -- Max # of items (key+digest)
+  ldtMap[R_NodeByteCountMax] = 0; -- Max # of BYTES
+
+  -- LLIST Tree Leaves (Data Pages)
+  ldtMap[R_LeafListMax] = 100;  -- Max # of items
+  ldtMap[R_LeafByteCountMax] = 0; -- Max # of BYTES per data page
+
+  return 0;
 end -- packageStandardList()
 
 -- ======================================================================
@@ -721,14 +739,91 @@ local function packageTestModeNumber( ldtMap )
   ldtMap[R_StoreState] = SS_COMPACT; -- start in "compact mode"
   ldtMap[R_StoreMode] = SM_LIST; -- Use List Mode
   ldtMap[R_BinaryStoreSize] = nil; -- Don't waste room if we're not using it
-  ldtMap[R_KeyType] = KT_ATOMIC; -- Atomic Keys
-  -- ldtMap[R_BinName] = ldtBinName;
-  ldtMap[R_Threshold] = DEFAULT_THRESHOLD; -- Rehash after this many have been inserted
+  ldtMap[R_KeyType] = KT_ATOMIC; -- Atomic Keys (A Number)
+  ldtMap[R_Threshold] = 2; -- Change to TREE Ops after this many inserts
   ldtMap[R_KeyFunction] = nil; -- Special Attention Required.
  
-  return 0;
-end -- packageTestModeList()
+  -- Top Node Tree Root Directory
+  ldtMap[R_RootListMax] = 100; -- Length of Key List (page list is KL + 1)
+  ldtMap[R_RootByteCountMax] = 0; -- Max bytes for key space in the root
+  
+  -- LLIST Inner Node Settings
+  ldtMap[R_NodeListMax] = 100;  -- Max # of items (key+digest)
+  ldtMap[R_NodeByteCountMax] = 0; -- Max # of BYTES
 
+  -- LLIST Tree Leaves (Data Pages)
+  ldtMap[R_LeafListMax] = 100;  -- Max # of items
+  ldtMap[R_LeafByteCountMax] = 0; -- Max # of BYTES per data page
+
+  return 0;
+end -- packageTestModeNumber()
+
+-- ======================================================================
+-- Package = "TestModeObjectDup"
+-- ======================================================================
+local function packageTestModeObjectDup( ldtMap )
+  
+  -- General Parameters
+  ldtMap[R_Transform] = nil;
+  ldtMap[R_UnTransform] = nil;
+  ldtMap[R_StoreState] = SS_COMPACT; -- start in "compact mode"
+  ldtMap[R_StoreMode] = SM_LIST; -- Use List Mode
+  ldtMap[R_BinaryStoreSize] = nil; -- Don't waste room if we're not using it
+  ldtMap[R_KeyType] = KT_COMPLEX; -- Atomic Keys (A Number)
+  ldtMap[R_Threshold] = 10; -- Change to TREE Ops after this many inserts
+  -- Use the special function that simply returns the value held in
+  -- the object's map field "key".
+  ldtMap[R_KeyFunction] = "keyExtract"; -- Special Attention Required.
+  ldtMap[R_KeyUnique] = false; -- allow Duplicates
+ 
+  -- Top Node Tree Root Directory
+  ldtMap[R_RootListMax] = 100; -- Length of Key List (page list is KL + 1)
+  ldtMap[R_RootByteCountMax] = 0; -- Max bytes for key space in the root
+  
+  -- LLIST Inner Node Settings
+  ldtMap[R_NodeListMax] = 100;  -- Max # of items (key+digest)
+  ldtMap[R_NodeByteCountMax] = 0; -- Max # of BYTES
+
+  -- LLIST Tree Leaves (Data Pages)
+  ldtMap[R_LeafListMax] = 100;  -- Max # of items
+  ldtMap[R_LeafByteCountMax] = 0; -- Max # of BYTES per data page
+
+  return 0;
+end -- packageTestModeObjectDup()
+
+
+-- ======================================================================
+-- Package = "TestModeObject"
+-- ======================================================================
+local function packageTestModeObject( ldtMap )
+  
+  -- General Parameters
+  ldtMap[R_Transform] = nil;
+  ldtMap[R_UnTransform] = nil;
+  ldtMap[R_StoreState] = SS_COMPACT; -- start in "compact mode"
+  ldtMap[R_StoreMode] = SM_LIST; -- Use List Mode
+  ldtMap[R_BinaryStoreSize] = nil; -- Don't waste room if we're not using it
+  ldtMap[R_KeyType] = KT_COMPLEX; -- Atomic Keys (A Number)
+  ldtMap[R_Threshold] = 10; -- Change to TREE Ops after this many inserts
+  -- Use the special function that simply returns the value held in
+  -- the object's map field "key".
+  ldtMap[R_KeyFunction] = "keyExtract"; -- Special Attention Required.
+  ldtMap[R_KeyUnique] = true; -- Assume Unique Objects
+ 
+  -- Top Node Tree Root Directory
+  ldtMap[R_RootListMax] = 100; -- Length of Key List (page list is KL + 1)
+  ldtMap[R_RootByteCountMax] = 0; -- Max bytes for key space in the root
+  
+  -- LLIST Inner Node Settings
+  ldtMap[R_NodeListMax] = 100;  -- Max # of items (key+digest)
+  ldtMap[R_NodeByteCountMax] = 0; -- Max # of BYTES
+
+  -- LLIST Tree Leaves (Data Pages)
+  ldtMap[R_LeafListMax] = 100;  -- Max # of items
+  ldtMap[R_LeafByteCountMax] = 0; -- Max # of BYTES per data page
+
+  return 0;
+end -- packageTestModeObject()
 
 -- ======================================================================
 -- Package = "TestModeList"
@@ -743,8 +838,9 @@ local function packageTestModeList( ldtMap )
   ldtMap[R_BinaryStoreSize] = nil; -- Don't waste room if we're not using it
   ldtMap[R_KeyType] = KT_COMPLEX; -- Complex Object (need key function)
   -- ldtMap[R_BinName] = ldtBinName;
-  ldtMap[R_Threshold] = DEFAULT_THRESHOLD; -- Rehash after this many have been inserted
+  ldtMap[R_Threshold] = 2; -- Change to TREE Operations after this many inserts
   ldtMap[R_KeyFunction] = nil; -- Special Attention Required.
+  ldtMap[R_KeyUnique] = true; -- Assume Unique Objects
   return 0;
  
 end -- packageTestModeList()
@@ -762,7 +858,7 @@ local function packageTestModeBinary( ldtMap )
   ldtMap[R_BinaryStoreSize] = nil; -- Don't waste room if we're not using it
   ldtMap[R_KeyType] = KT_COMPLEX; -- Complex Object (need key function)
   -- ldtMap[R_BinName] = ldtBinName;
-  ldtMap[R_Threshold] = DEFAULT_THRESHOLD; -- Rehash after this many have been inserted
+  ldtMap[R_Threshold] = 2; -- Change to TREE Mode after this many ops.
   ldtMap[R_KeyFunction] = nil; -- Special Attention Required.
   return 0;
 
@@ -787,6 +883,79 @@ local function packageProdListValBinStore( ldtMap )
   return 0;
   
 end -- packageProdListValBinStore()
+
+-- ======================================================================
+-- Package = "DebugModeObject"
+-- Test the LLIST with Objects (i.e. Complex Objects in the form of MAPS)
+-- where we sort them based on a map field called "key".
+-- ======================================================================
+local function packageDebugModeObject( ldtMap )
+  local meth = "packageDebugModeObject()";
+  
+  GP=F and trace("[ENTER]<%s:%s> : ldtMap(%s)",
+      MOD, meth , tostring(ldtMap));
+
+  -- General Parameters
+  ldtMap[R_Transform] = nil;
+  ldtMap[R_UnTransform] = nil;
+  ldtMap[R_StoreState] = SS_COMPACT; -- start in "compact mode"
+  ldtMap[R_StoreMode] = SM_LIST; -- Use List Mode
+  ldtMap[R_BinaryStoreSize] = nil; -- Don't waste room if we're not using it
+  ldtMap[R_KeyType] = KT_COMPLEX; -- Atomic Keys
+  ldtMap[R_Threshold] = 2; -- Rehash after this many have been inserted
+  ldtMap[R_KeyFunction] = "keyExtract"; -- Special Attention Required.
+  ldtMap[R_KeyUnique] = true; -- Just Unique keys for now.
+
+  -- Top Node Tree Root Directory
+  ldtMap[R_RootListMax] = 4; -- Length of Key List (page list is KL + 1)
+  
+  -- LLIST Inner Node Settings
+  ldtMap[R_NodeListMax] = 4;  -- Max # of items (key+digest)
+
+  -- LLIST Tree Leaves (Data Pages)
+  ldtMap[R_LeafListMax] = 4;  -- Max # of items
+
+  return 0;
+
+end -- packageDebugModeObject()
+
+
+-- ======================================================================
+-- Package = "DebugModeObjectDup"
+-- Test the LLIST with Objects (i.e. Complex Objects in the form of MAPS)
+-- where we sort them based on a map field called "key".
+-- ASSUME that we will support DUPLICATES.
+-- ======================================================================
+local function packageDebugModeObjectDup( ldtMap )
+  local meth = "packageDebugModeObjectDup()";
+  
+  GP=F and trace("[ENTER]<%s:%s> : ldtMap(%s)",
+      MOD, meth , tostring(ldtMap));
+
+  -- General Parameters
+  ldtMap[R_Transform] = nil;
+  ldtMap[R_UnTransform] = nil;
+  ldtMap[R_StoreState] = SS_COMPACT; -- start in "compact mode"
+  ldtMap[R_StoreMode] = SM_LIST; -- Use List Mode
+  ldtMap[R_BinaryStoreSize] = nil; -- Don't waste room if we're not using it
+  ldtMap[R_KeyType] = KT_COMPLEX; -- Atomic Keys
+  ldtMap[R_Threshold] = 2; -- Rehash after this many have been inserted
+  ldtMap[R_KeyFunction] = "keyExtract"; -- Special Attention Required.
+  ldtMap[R_KeyUnique] = false; -- Assume there will be Duplicates
+
+  -- Top Node Tree Root Directory
+  ldtMap[R_RootListMax] = 4; -- Length of Key List (page list is KL + 1)
+  
+  -- LLIST Inner Node Settings
+  ldtMap[R_NodeListMax] = 4;  -- Max # of items (key+digest)
+
+  -- LLIST Tree Leaves (Data Pages)
+  ldtMap[R_LeafListMax] = 4;  -- Max # of items
+
+  return 0;
+
+end -- packageDebugModeObjectDup()
+
 
 -- ======================================================================
 -- Package = "DebugModeList"
@@ -903,6 +1072,10 @@ local function adjustLListMap( ldtMap, argListMap )
       -- Figure out WHICH package we're going to deploy:
       if value == PackageStandardList then
           packageStandardList( ldtMap );
+      elseif value == PackageTestModeObject then
+          packageTestModeObject( ldtMap );
+      elseif value == PackageTestModeObjectDup then
+          packageTestModeObjectDup( ldtMap );
       elseif value == PackageTestModeList then
           packageTestModeList( ldtMap );
       elseif value == PackageTestModeBinary then
@@ -911,6 +1084,10 @@ local function adjustLListMap( ldtMap, argListMap )
           packageTestModeNumber( ldtMap );
       elseif value == PackageProdListValBinStore then
           packageProdListValBinStore( ldtMap );
+      elseif value == PackageDebugModeObjectDup then
+          packageDebugModeObjectDup( ldtMap );
+      elseif value == PackageDebugModeObject then
+          packageDebugModeObject( ldtMap );
       elseif value == PackageDebugModeList then
           packageDebugModeList( ldtMap );
       elseif value == PackageDebugModeBinary then
@@ -1029,7 +1206,8 @@ local function initializeNode(topRec, nodeRec, ldtList)
   nodePropMap[PM_Magic] = MAGIC;
   nodePropMap[PM_EsrDigest] = topPropMap[PM_EsrDigest];
   nodePropMap[PM_RecType] = RT_NODE;
-  nodePropMap[PM_ParentDigest] = topPropMap[PM_SelfDigest];
+  -- nodePropMap[PM_ParentDigest] = topPropMap[PM_SelfDigest];
+  nodePropMap[PM_ParentDigest] = record.digest( topRec );
   nodePropMap[PM_SelfDigest] = record.digest( nodeRec );
 
   -- Notes:
@@ -1398,6 +1576,7 @@ local function nodeSummary( nodeRec )
   resultMap.PropCreateTime    = propMap[PM_CreateTime];
   resultMap.PropEsrDigest     = propMap[PM_EsrDigest];
   resultMap.PropRecordType    = propMap[PM_RecType];
+  resultMap.PropParentDigest  = propMap[PM_ParentDigest];
   
   -- Node Control Map
   resultMap.ListEntryCount = nodeMap[ND_ListEntryCount];
@@ -1437,6 +1616,7 @@ local function leafSummary( leafRec )
   resultMap.PropEsrDigest     = propMap[PM_EsrDigest];
   resultMap.PropSelfDigest    = propMap[PM_SelfDigest];
   resultMap.PropRecordType    = propMap[PM_RecType];
+  resultMap.PropParentDigest  = propMap[PM_ParentDigest];
 
   info("[LEAF PROPS]: %s", tostring(resultMap));
   
@@ -1636,8 +1816,9 @@ local function getKeyValue( ldtMap, value )
   if( ldtMap[R_KeyType] == KT_ATOMIC ) then
     keyValue = value;
   else
-    -- for the moment, we assume complex objects (maps) have a field
-    -- called 'key'.  If not, then, well ... tough.
+    -- Employ the user's supplied function (keyFunction) and if that's not
+    -- there, look for the special case where the object has a field
+    -- called 'key'.  If not, then, well ... tough.  We tried.
     local keyFunction = ldtMap[R_KeyFunction];
     if( keyFunction ~= nil ) and functionTable[keyFunction] ~= nil then
       keyValue = functionTable[keyFunction]( value );
@@ -1782,7 +1963,7 @@ end -- objectCompare()
 -- Parms:
 -- (*) propMap: 
 -- (*) esrDigest:
--- (*) subDigest:
+-- (*) selfDigest:
 -- (*) topDigest:
 -- (*) rtFlag:
 -- (*) topPropMap:
@@ -2986,7 +3167,8 @@ local function splitRootInsert( src, topRec, sp, ldtList, key, digest )
   -- Calculate the split position and the key to propagate up to parent.
   local splitPosition =
       getNodeSplitPosition( ldtMap, keyList, rootPosition, key );
-  local splitKey = getKeyValue( ldtMap, keyList[splitPosition] );
+  -- local splitKey = getKeyValue( ldtMap, keyList[splitPosition] );
+  local splitKey = keyList[splitPosition];
 
   GP=F and trace("[STATUS]<%s:%s> About to Take and Drop::Key(%s) Digest(%s)",
     MOD, meth, tostring(keyList), tostring(digestList));
@@ -3142,7 +3324,9 @@ local function splitNodeInsert( src, topRec, sp, ldtList, key, digest, level )
     -- Calculate the split position and the key to propagate up to parent.
     local splitPosition =
         getNodeSplitPosition( ldtMap, keyList, nodePosition, key );
-    local splitKey = getKeyValue( ldtMap, keyList[splitPosition] );
+    -- We already have a key list -- don't need to "extract".
+    -- local splitKey = getKeyValue( ldtMap, keyList[splitPosition] );
+    local splitKey = keyList[splitPosition];
 
     GP=F and trace("\n[DUMP]<%s:%s> Take and Drop:: Map(%s) KeyList(%s) DigestList(%s)",
       MOD, meth, tostring(nodeMap), tostring(keyList), tostring(digestList));
@@ -3783,8 +3967,8 @@ local function complexScanList(resultList, ldtList, objList, value, flag )
   local meth = "complexScanList()";
   GP=F and trace("[ENTER]<%s:%s> ", MOD, meth );
 
-  info("[HEY!!]<%s:%s> Must Change this to use RESULT MAP", MOD, meth );
-  info("[HEY!!]<%s:%s> Must ALSO Change this Result List", MOD, meth );
+  GP=F and info("[HEY!!]<%s:%s> Must Change this to use RESULT MAP",MOD,meth );
+  GP=F and info("[HEY!!]<%s:%s> Must ALSO Change this Result List", MOD,meth );
 
   local result = nil;
   local rc = 0;
@@ -3805,6 +3989,8 @@ local function complexScanList(resultList, ldtList, objList, value, flag )
     unTransform = functionTable[ldtMap[R_UnTransform]];
   end
 
+  local key = getKeyValue( ldtMap, value );
+
   -- Scan the list for the item, return true if found,
   -- Later, we may return a set of things 
   local resultValue = nil;
@@ -3813,7 +3999,7 @@ local function complexScanList(resultList, ldtList, objList, value, flag )
                    MOD, meth, i, tostring(value), tostring(objList[i]));
     if objList[i] ~= nil and objList[i] ~= FV_EMPTY then
       resultValue =
-          unTransformComplexCompare(ldtMap, unTransform, objList[i], value);
+          unTransformComplexCompare(ldtMap, unTransform, objList[i], key);
       if resultValue ~= nil then
         GP=F and trace("[EARLY EXIT]: <%s:%s> Found(%s)",
           MOD, meth, tostring(resultValue));
@@ -3875,8 +4061,8 @@ local function simpleScanList(resultList, ldtList, objList, newValue, flag,
                  tostring(objList))
   local rc = 0;
 
-  info("[HEY!!]<%s:%s> Must Change this to use RESULT MAP", MOD, meth );
-  info("[HEY!!]<%s:%s> Must ALSO Change this Result List", MOD, meth );
+  GP=F and info("[HEY!!]<%s:%s> Must Change this to use RESULT MAP", MOD, meth );
+  GP=F and info("[HEY!!]<%s:%s> Must ALSO Change this Result List", MOD, meth );
 
   -- Extract the property map and control map from the ldt bin list.
   local propMap = ldtList[1];
@@ -4422,7 +4608,7 @@ end -- treeDelete()
 function llist_create( topRec, ldtBinName, argList )
   local meth = "listCreate()";
 
-  info("\n\n >>>>>>>>> API[ LLIST CREATE ] <<<<<<<<<< \n\n");
+  GP=F and info("\n\n >>>>>>>>> API[ LLIST CREATE ] <<<<<<<<<< \n\n");
 
   if argList == nil then
     GP=F and trace("[ENTER1]: <%s:%s> ldtBinName(%s) NULL argList",
@@ -4545,9 +4731,9 @@ local function localLListInsert( topRec, ldtBinName, newValue, createSpec )
   -- When we're in "Compact" mode, before each insert, look to see if 
   -- it's time to turn our single list into a tree.
   local totalCount = ldtMap[R_TotalCount];
-  GP=F and trace("[NOTICE!!]<%s:%s> Checking State for Conversion", MOD, meth );
-  GP=F and trace("[NOTICE!!]<%s:%s> State(%s) C val(%s) TotalCount(%d)", MOD, meth,
-    tostring( ldtMap[R_StoreState] ), tostring( SS_COMPACT ), totalCount);
+  GP=F and trace("[NOTICE!!]<%s:%s>Checking State for Conversion", MOD, meth );
+  GP=F and trace("[NOTICE!!]<%s:%s>State(%s) C val(%s) TotalCount(%d)", MOD,
+    meth, tostring(ldtMap[R_StoreState]), tostring(SS_COMPACT), totalCount);
 
   -- We're going to base the conversion on TotalCount, not ItemCount, since
   -- it's really the amount of space we're using (empty slots and full slots)
@@ -4599,12 +4785,12 @@ end -- function localLListInsert()
 -- all of the work.
 -- =======================================================================
 function llist_insert( topRec, ldtBinName, newValue )
-  info("\n\n >>>>>>>>> API[ LLIST INSERT ] <<<<<<<<<< \n\n");
+  GP=F and info("\n\n >>>>>>>>> API[ LLIST INSERT ] <<<<<<<<<< \n\n");
   return localLListInsert( topRec, ldtBinName, newValue, nil )
 end -- end llist_insert()
 
 function llist_create_and_insert( topRec, ldtBinName, newValue, createSpec )
-  info("\n\n >>>>>>>>> API[ LLIST CREATE And INSERT ] <<<<<<<<<< \n\n");
+  GP=F and info("\n\n >>>>>>>>> API[ LLIST CREATE And INSERT ] <<<<<<<<<< \n\n");
   return localLListInsert( topRec, ldtBinName, newValue, createSpec );
 end -- llist_create_and_insert()
 
@@ -4688,7 +4874,7 @@ function llist_search( topRec, ldtBinName, searchKey )
   GP=F and trace("[ENTER]<%s:%s> LLIST BIN(%s) searchKey(%s)",
     MOD, meth, tostring(ldtBinName), tostring(searchKey) )
 
-  info("\n\n >>>>>>>>> API[ LLIST SEARCH ] <<<<<<<<<< \n\n");
+  GP=F and info("\n\n >>>>>>>>> API[ LLIST SEARCH ] <<<<<<<<<< \n\n");
 
   return localLListSearch( topRec, ldtBinName, searchKey, nil, nil );
 end -- end llist_search()
@@ -4699,7 +4885,7 @@ function llist_search_with_filter(topRec,ldtBinName,searchKey,func,fargs )
     MOD, meth, tostring(ldtBinName), tostring(searchKey),
     tostring(func), tostring(fargs));
 
-  info("\n\n >>>>>>>>> API[ LLIST SEARCH With FILTER] <<<<<<<<<< \n\n");
+  GP=F and info("\n\n >>>>>>>>> API[ LLIST SEARCH With FILTER] <<<<<<<<<< \n\n");
 
   return localLListSearch( topRec, ldtBinName, searchKey, func, fargs );
 end -- end llist_search_with_filter()
@@ -4898,7 +5084,7 @@ end -- ldt_remove()
 --   res = -1: Some sort of error
 -- ========================================================================
 function llist_remove( topRec, lsoBinName )
-  info("\n\n >>>>>>>>> API[ LLIST REMOVE ] <<<<<<<<<< \n\n");
+  GP=F and info("\n\n >>>>>>>>> API[ LLIST REMOVE ] <<<<<<<<<< \n\n");
   return ldt_remove( topRec, lsoBinName );
 end
 
@@ -4912,7 +5098,7 @@ function llist_size( topRec, ldtBinName )
   GP=F and trace("[ENTER1]: <%s:%s> ldtBinName(%s)",
   MOD, meth, tostring(ldtBinName));
 
-  info("\n\n >>>>>>>>> API[ LLIST SIZE ] <<<<<<<<<< \n\n");
+  GP=F and info("\n\n >>>>>>>>> API[ LLIST SIZE ] <<<<<<<<<< \n\n");
 
   -- Validate the topRec, the bin and the map.  If anything is weird, then
   -- this will kick out with a long jump error() call.
@@ -4937,7 +5123,7 @@ function llist_config( topRec, ldtBinName )
   GP=F and trace("[ENTER1]: <%s:%s> ldtBinName(%s)",
   MOD, meth, tostring(ldtBinName));
 
-  info("\n\n >>>>>>>>> API[ LLIST CONFIG ] <<<<<<<<<< \n\n");
+  GP=F and info("\n\n >>>>>>>>> API[ LLIST CONFIG ] <<<<<<<<<< \n\n");
 
   -- Validate the topRec, the bin and the map.  If anything is weird, then
   -- this will kick out with a long jump error() call.

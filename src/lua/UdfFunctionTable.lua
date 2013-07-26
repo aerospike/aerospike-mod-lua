@@ -4,10 +4,10 @@
 -- |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- ======================================================================
 -- UDF Function Table:
--- Version 04.22.0:    Last Update: (April 22, 2013) tjl
+-- Version 07.26.0:    Last Update: (July 26, 2013) tjl
 
 -- Keep this global value in sync with (above) version
-local MOD="UdfFunctionTable_4.22.0"; -- the module name used for tracing
+local MOD="UdfFunctionTable_7.26.0"; -- the module name used for tracing
 
 -- Table of Functions: Used for Transformation and Filter Functions in
 -- conjunction with Large Stack Objects (LSO) and Large Sets (LSET).
@@ -432,6 +432,28 @@ function UdfFunctionTable.listUnCompress_5_20( b20, arglist )
   return listTuple;
 end -- listUnCompress_5_20()
 -- ======================================================================
+--
+-- ======================================================================
+-- Extraction Functions (For Complex Objects)
+-- ======================================================================
+-- ======================================================================
+-- Function keyExtract():  Return the simple "key" field.
+-- For the simple key extraction, return the key value that is held in
+-- the map key, "key".
+-- Return:
+-- (*) The value that is associated with the key "key".
+-- ======================================================================
+function UdfFunctionTable.keyExtract( objectValue )
+    info("[ENTER] Extract Key from Object(%s)", tostring(objectValue));
+
+  if objectValue == nil or objectValue["key"] == nil then
+    return nil;
+  else
+    return objectValue.key;
+  end
+end -- keyExtract()
+-- ======================================================================
+--
 -- ======================================================================
 -- Compare Functions (For Sets and Lists)
 -- ======================================================================
