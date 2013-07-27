@@ -2,7 +2,7 @@
 -- Last Update July 26, 2013: TJL
 --
 -- Keep this in sync with the version above.
-local MOD="lset_2013_07_26.g"; -- the module name used for tracing
+local MOD="lset_2013_07_26.j"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -535,7 +535,7 @@ local function adjustLSetMap( lsetMap, argListMap )
 end -- adjustLSetMap
 
 -- ======================================================================
--- local function lsetSummary( lsetMap ) (DEBUG/Trace Function)
+-- local function lsetSummary( lsetList ) (DEBUG/Trace Function)
 -- ======================================================================
 -- For easier debugging and tracing, we will summarize the lsetMap
 -- contents -- without printing out the entire thing -- and return it
@@ -587,7 +587,7 @@ local function lsetSummary( lsetList )
 end -- lsetSummary()
 
 -- ======================================================================
--- local function lsetSummaryString( lsetMap ) (DEBUG/Trace Function)
+-- local function lsetSummaryString( lsetList ) (DEBUG/Trace Function)
 -- ======================================================================
 -- For easier debugging and tracing, we will summarize the lsetMap
 -- contents -- without printing out the entire thing -- and return it
@@ -785,26 +785,22 @@ local function computeSetBin( newValue, lsetMap )
   if lsetMap[M_StoreState] == SS_COMPACT then
     return 0
   else
-    if type(newValue) == "number" then
+    if( lsetMap[M_KeyType] == KT_ATOMIC ) then
+      local key = newValue;
+    else
+      local key = getKeyValue( lsetMap, newValue );
+    end
+
+    -- There are really only TWO primitive types that we can handle,
+    -- and that is NUMBER and STRING.  Anything else is just wrong!!
+    if type(key) == "number" then
       binNumber  = numberHash( newValue, lsetMap[M_Modulo] );
-    elseif type(newValue) == "string" then
+    elseif type(key) == "string" then
       binNumber  = stringHash( newValue, lsetMap[M_Modulo] );
-    elseif type(newValue) == "userdata" then
-      -- We are assuming that the user has supplied a function for us to
-      -- deal with a complex object.  If no function, then error.
-      -- Note that the easy case is the keyHashFunction(), which is a
-      -- hash on a field called "KEY".
-
-      -- TODO: Fix this
-      print("COMPUTE SET BIN::MUST USE EXTRACT FUNCTION HERE!!!");
-
-      print("MUST REGISTER A HASH FUNCTION FOR COMPLEX TYPES!!");
-
-      binNumber  = stringHash( newValue.KEY, lsetMap[M_Modulo]);
-    else -- error case
-      warn("[ERROR]<%s:%s>Unexpected Type (should be number, string or map)",
-           MOD, meth );
-      error('ERROR: Incorrect Type for new Large Set value');
+    else
+      warn("[INTERNAL ERROR]<%s:%s>Hash(%s) requires type number or string!",
+        MOD, meth, type(key) );
+      error("Object or Key MUST be Number or String");
     end
   end
   GP=F and trace("[EXIT]: <%s:%s> Val(%s) BinNumber (%d) ",
@@ -812,6 +808,27 @@ local function computeSetBin( newValue, lsetMap )
 
   return binNumber;
 end -- computeSetBin()
+
+-- ======================================================================
+-- listAppend()
+-- ======================================================================
+-- General tool to append one list to another.   At the point that we
+-- find a better/cheaper way to do this, then we change THIS method and
+-- all of the LDT calls to handle lists will get better as well.
+-- ======================================================================
+local function listAppend( baseList, additionalList )
+  if( baseList == nil ) then
+    warn("[INTERNAL ERROR] Null baselist in listAppend()" );
+    error("[INTERNAL ERROR] Null baselist in listAppend()" );
+  end
+  local listSize = list.size( additionalList );
+  for i = 1, listSize, 1 do
+    list.append( baseList, additionalList[i] );
+  end -- for each element of additionalList
+
+  return baseList;
+end -- listAppend()
+--
 
 -- =======================================================================
 -- Apply Transform Function
@@ -901,6 +918,8 @@ end -- unTransformComplexCompare()
 -- We've added a delete flag that will allow us to remove the element if
 -- we choose -- but for now, we are not collapsing the list.
 -- Parms:
+-- (*) resultList: List holding search result
+-- (*) lsetList: Main LDT Control Structure
 -- (*) binList: the list of values from the record
 -- (*) value: the value we're searching for
 -- (*) flag:
@@ -909,8 +928,9 @@ end -- unTransformComplexCompare()
 --     ==> if ==  FV_DELETE:  then replace the found element with nil
 -- Return:
 -- For FV_SCAN and FV_DELETE:
---    nil if not found, Value if found.
---   (NOTE: Can't return 0 -- because that might be a valid value)
+--    Answer is attached to "resultList", Status is returned via function.
+--    ERR_OK (0) if FOUND 
+--    ERR_NOT_FOUND (-2) if NOT FOUND
 -- For FV_INSERT:
 -- Return 0 if found (and not inserted), otherwise 1 if inserted.
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
@@ -978,7 +998,7 @@ local function simpleScanList(resultList, lsetList, binList, value, flag )
   end
   GP=F and trace("[LATE EXIT]: <%s:%s> Did NOT Find(%s)",
                  MOD, meth, tostring(value));
-  return 0; -- All is well.
+  return ERR_NOT_FOUND; -- All is well, but NOT FOUND.
 end -- simpleScanList
 
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
@@ -988,6 +1008,8 @@ end -- simpleScanList
 -- We've added a delete flag that will allow us to remove the element if
 -- we choose -- but for now, we are not collapsing the list.
 -- Parms:
+-- (*) resultList: List holding search result
+-- (*) lsetList: The main LDT control structure
 -- (*) objList: the list of values from the record
 -- (*) value: the value we're searching for
 -- (*) flag:
@@ -996,12 +1018,13 @@ end -- simpleScanList
 --     ==> if ==  FV_DELETE:  then replace the found element with nil
 -- Return:
 -- For FV_SCAN and FV_DELETE:
---    nil if not found, Value if found.
---   (NOTE: Can't return 0 -- because that might be a valid value)
+--    Answer is attached to "resultList", Status is returned via function.
+--    ERR_OK (0) if FOUND 
+--    ERR_NOT_FOUND (-2) if NOT FOUND
 -- For insert (FV_INSERT):
 -- Return 0 if found (and not inserted), otherwise 1 if inserted.
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
-local function complexScanList(lsetList, objList, value, flag ) 
+local function complexScanList(resultList, lsetList, objList, value, flag ) 
   local meth = "complexScanList()";
   local result = nil;
   local propMap = lsetList[1]; 
@@ -1040,8 +1063,9 @@ local function complexScanList(lsetList, objList, value, flag )
         elseif flag == FV_INSERT then
           return 0 -- show caller nothing got inserted (don't count it)
         end
-        -- Found it -- return result
-        return resultValue;
+        -- Found it -- return result (only for scan and delete, not insert)
+        list.append( resultList, resultValue );
+        return 0;
       end -- end if found it
     end -- end if value not nil or empty
   end -- for each list entry in this objList
@@ -1059,7 +1083,7 @@ local function complexScanList(lsetList, objList, value, flag )
 
   GP=F and trace("[LATE EXIT]: <%s:%s> Did NOT Find(%s)",
     MOD, meth, tostring(value));
-  return nil;
+  return ERR_NOT_FOUND; -- All is well, but NOT FOUND.
 end -- complexScanList
 
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
@@ -1224,64 +1248,52 @@ end
 
 
 -- ======================================================================
---  ( lsetMap, newValue, stats )
+-- localInsert()
 -- ======================================================================
 -- Perform the main work of insert (used by both rehash and insert)
 -- Parms:
 -- (*) topRec: The top DB Record:
--- (*) lsetMap: The LSet control map
+-- (*) lsetList: The LSet control map
 -- (*) newValue: Value to be inserted
 -- (*) stats: 1=Please update Counts, 0=Do NOT update counts (rehash)
 -- ======================================================================
-local function localInsert( topRec, lsetMap, newValue, stats )
+local function localInsert( topRec, lsetList, newValue, stats )
   local meth = "localInsert()";
   
   GP=F and info("[ENTER]:<%s:%s>Insert(%s)", MOD, meth, tostring(newValue));
+
+  local propMap = lsetList[1];  
+  local lsetMap = lsetList[2];
   
   -- Notice that "computeSetBin()" will know which number to return, depending
   -- on whether we're in "compact" or "regular" storageState.
   local binNumber = computeSetBin( newValue, lsetMap );
   local binName = getBinName( binNumber );
-  
-  local tmplsetList =  topRec[LSET_CONTROL_BIN];
   local binList = topRec[binName];
-  local propMap = tmplsetList[1];  
   local insertResult = 0;
   
   if binList == nil then
-  GP=F and warn("[INTERNAL ERROR]:<%s:%s> binList is nil: binName(%s)",
+    GP=F and warn("[INTERNAL ERROR]:<%s:%s> binList is nil: binName(%s)",
                  MOD, meth, tostring( binName ) );
     error('Insert: INTERNAL ERROR: Nil Bin');
   else
-  GP=F and trace("[INTERNAL DUMP]:<%s:%s> binList is NOT nil: binName(%s)",
+    GP=F and trace("[INTERNAL DUMP]:<%s:%s> binList is NOT nil: binName(%s)",
                  MOD, meth, tostring( binName ) );
     -- Look for the value, and insert if it is not there.
     insertResult =
-      scanList( nil, tmplsetList, binList, newValue, FV_INSERT, nil, nil );
-    -- list.append( binList, newValue );
-    topRec[LSET_CONTROL_BIN] = tmplsetList;
+      scanList( nil, lsetList, binList, newValue, FV_INSERT, nil, nil );
     topRec[binName] = binList; 
   end
                 
-  local lsetList =  topRec[LSET_CONTROL_BIN];
-  local propMap = lsetList[1];  
-  local lsetMap = lsetList[2]; 
-   
   -- update stats if appropriate.
   if stats == 1 and insertResult == 1 then -- Update Stats if success
-    local lsetList =  topRec[LSET_CONTROL_BIN];
-    local propMap = lsetList[1];  
     local itemCount = propMap[PM_ItemCount];
     local totalCount = lsetMap[M_TotalCount];
     
     propMap[PM_ItemCount] = itemCount + 1; -- number of valid items goes up
     lsetMap[M_TotalCount] = totalCount + 1; -- Total number of items goes up
- 
-    local NewlsetList = list();
-    list.append( NewlsetList, propMap );
-    list.append( NewlsetList, lsetMap );
-    topRec[LSET_CTRL_BIN] = NewlsetList;
   end
+  topRec[LSET_CTRL_BIN] = lsetList;
  
   GP=F and trace("[EXIT]: <%s:%s>Storing Record() with New Value(%s): Map(%s)",
                  MOD, meth, tostring( newValue ), tostring( lsetMap ) );
@@ -1289,7 +1301,7 @@ local function localInsert( topRec, lsetMap, newValue, stats )
 end -- localInsert
 
 -- ======================================================================
--- rehashSet( topRec, lsetBinName, lsetMap )
+-- rehashSet( topRec, lsetBinName, lsetList )
 -- ======================================================================
 -- When we start in "compact" StoreState (SS_COMPACT), we eventually have
 -- to switch to "regular" state when we get enough values.  So, at some
@@ -1300,12 +1312,15 @@ end -- localInsert
 -- Parms:
 -- (*) topRec
 -- (*) lsetBinName
--- (*) lsetMap
+-- (*) lsetList
 -- ======================================================================
-local function rehashSet( topRec, lsetBinName, lsetMap )
+local function rehashSet( topRec, lsetBinName, lsetList )
   local meth = "rehashSet()";
   GP=F and trace("[ENTER]:<%s:%s> !!!! REHASH !!!! ", MOD, meth );
   GP=F and trace("[ENTER]:<%s:%s> !!!! REHASH !!!! ", MOD, meth );
+
+  local propMap = lsetList[1];  
+  local lsetMap = lsetList[2];
 
   -- Get the list, make a copy, then iterate thru it, re-inserting each one.
   local singleBinName = getBinName( 0 );
@@ -1329,7 +1344,7 @@ local function rehashSet( topRec, lsetBinName, lsetMap )
   end -- for each new bin
 
   for i = 1, list.size(listCopy), 1 do
-    localInsert( topRec, lsetMap, listCopy[i], 0 ); -- do NOT update counts.
+    localInsert( topRec, lsetList, listCopy[i], 0 ); -- do NOT update counts.
   end
 
   GP=F and trace("[EXIT]: <%s:%s>", MOD, meth );
@@ -1437,27 +1452,6 @@ local function validateRecBinAndMap( topRec, userBinName, mustExist )
     end
   end
 end -- validateRecBinAndMap()
-
-
--- ======================================================================
--- validateTopRec( topRec, lsetMap )
--- ======================================================================
--- Validate that the top record looks valid:
--- Get the LSET bin from the rec and check for magic
--- Return: True (good) or False (bad).
--- NOTE: >>>>   Currently not used.  <<<<<
--- ======================================================================
-local function  validateTopRec( topRec, lsetMap )
-  local ldtList = topRec[ LSET_CONTROL_BIN ];
-  local propMap = ldtList[1]; 
-  local lsetMap = ldtList[2]; 
-
-  if propMap[PM_Magic] == MAGIC then
-    return "good"
-  else
-    return "bad"
-  end
-end -- validateTopRec()
 
 -- ======================================================================
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
@@ -1608,26 +1602,24 @@ local function localLSetInsert( topRec, lsetBinName, newValue, createSpec )
   -- Validate the topRec, the bin and the map.  If anything is weird, then
   -- this will kick out with a long jump error() call.
   validateRecBinAndMap( topRec, lsetBinName, false );
+  local lsetList;
+  local propMap;
+  local lsetMap;
 
   -- Check that the Set Structure is already there, otherwise, error
   if( topRec[LSET_CONTROL_BIN] == nil ) then
     warn("[WARNING]: <%s:%s> LSET CONTROL BIN does not Exist:Creating",
          MOD, meth );
           
-    local lsetList = initializeLSetMap( topRec, lsetBinName );
-    local propMap     = lsetList[1]; 
-    local lsetMap = lsetList[2]; 
+    lsetList = initializeLSetMap( topRec, lsetBinName );
+    propMap     = lsetList[1]; 
+    lsetMap = lsetList[2]; 
     topRec[LSET_CONTROL_BIN] = lsetList; -- store in the record
     
     -- If the user has passed in some settings that override our defaults
     -- (createSpce) then apply them now.
     if createSpec ~= nil then 
       adjustLSetMap( lsetMap, createSpec );
-      -- Changes to the map need to be re-appended to topRec  
-   	  local NewlsetList = list();
-      list.append( NewlsetList, propMap );
-      list.append( NewlsetList, lsetMap );
-      topRec[LSET_CTRL_BIN] = NewlsetList;
     end
          
     -- initializeLSetMap always sets lsetMap[M_StoreState] to SS_COMPACT
@@ -1635,35 +1627,35 @@ local function localLSetInsert( topRec, lsetBinName, newValue, createSpec )
     setupNewBin( topRec, 0 ); -- set up Bin ZERO
     
   else
-    local lsetList = topRec[LSET_CONTROL_BIN]; -- The main lset map
-    local propMap = lsetList[1];
-    local lsetMap  = lsetList[2];
+    lsetList = topRec[LSET_CONTROL_BIN]; -- The main lset control structure
+    propMap = lsetList[1];
+    lsetMap  = lsetList[2];
   end
 
   -- When we're in "Compact" mode, before each insert, look to see if 
   -- it's time to rehash our single bin into all bins.
-  local lsetList = topRec[LSET_CONTROL_BIN]; -- The main lset map
-  local propMap = lsetList[1];
-  local lsetMap  = lsetList[2];
+  -- These should already be set
+  -- lsetList = topRec[LSET_CONTROL_BIN]; -- The main lset map
+  -- propMap = lsetList[1];
+  -- lsetMap  = lsetList[2];
+
   local totalCount = lsetMap[M_TotalCount];
   
   if lsetMap[M_StoreState] == SS_COMPACT and
       totalCount >= lsetMap[M_ThreshHold]
   then
-    rehashSet( topRec, lsetBinName, lsetMap );
-          -- Changes to the map need to be re-appended to topRec  
-   	local NewlsetList = list();
-    list.append( NewlsetList, propMap );
-    list.append( NewlsetList, lsetMap );
-    topRec[LSET_CTRL_BIN] = NewlsetList;
+    rehashSet( topRec, lsetBinName, lsetList );
   end
 
   -- Call our local multi-purpose insert() to do the job.(Update Stats)
-  localInsert( topRec, lsetMap, newValue, 1 );
+  localInsert( topRec, lsetList, newValue, 1 );
 
-  -- This is already taken care of in localInsert
-  -- So its not needed any-more   
-  -- topRec[LSET_CONTROL_BIN] = lsetMap;
+  -- NOTE: the update of the TOP RECORD (LSET_CONTROL_BIN) has already
+  -- been taken care of in localInsert, so we don't need to do it here.
+  -- topRec[LSET_CONTROL_BIN] = lsetList;
+  -- Also -- in Lua -- all data (like the maps and lists) are inked by
+  -- reference -- so they do not need to be "re-updated".  However, the
+  -- record itself, must have the object re-assigned to the BIN.
   
   -- All done, store the record
   local rc = -99; -- Use Odd starting Num: so that we know it got changed
@@ -1921,18 +1913,22 @@ local function localLSetDelete( topRec, lsetBinName, deleteValue,
   -- not collapse it.  Later, if we see that there are a LOT of nil entries,
   -- we can RESET the set and remove all of the "gas".
   rc = scanList(resultList,lsetList,binList,deleteValue,FV_DELETE,nil,nil);
-  -- If we found something, then we need to update the bin and the record.
-  if rc == 0 and list.size( resultList ) > 0 then
+  if( rc == ERR_NOT_FOUND ) then
+    -- We'll jump out with a NOT FOUND error
+    warn("[WARNING]<%s:%s> Object(%s) not found", MOD, meth, 
+      tostring(deleteValue));
+    error('Delete Error on Update Record: Record Not Found');
+  elseif( rc == 0 and list.size( resultList ) > 0 ) then
     -- We found something -- and marked it nil -- so update the record
     topRec[binName] = binList;
     rc = aerospike:update( topRec );
     if( rc < 0 ) then
-      error('Delete Error on Update Record');
+      warn("[ERROR]<%s:%s> Error(%d) aerospike:update(toprec)",MOD,meth,rc);
+      error('Delete Error on Update TOP Record');
     end
-  elseif rc == 0 and list.size( resultList ) == 0 then 
-	-- This item does not exist
-	-- return a not-found error  
-    error('Record not found');
+  else
+    warn("[WARNING]<%s:%s> Unexpected Error(%d) from scanList()",MOD,meth,rc);
+    error('Internal Error during lset_delete');
   end
 
   GP=F and trace("[EXIT]: <%s:%s>: Delete RC(%d) ResultList(%s)",
@@ -2006,6 +2002,63 @@ function lset_config( topRec, lsetBinName )
 
   return config;
 end -- function lset_config()
+
+-- ========================================================================
+-- lset_dump()
+-- ========================================================================
+-- Dump the full contents of the Large Set, with Separate Hash Groups
+-- shown in the result.
+-- Return a LIST of lists -- with Each List marked with it's Hash Name.
+-- ========================================================================
+function lset_dump( topRec, binName )
+  local meth = "lset_dump()";
+  GP=F and trace("[ENTER]<%s:%s> ", MOD, meth)
+
+  local lsetList = topRec[LSET_CONTROL_BIN];
+  local propMap = lsetList[1]; 
+  local lsetMap = lsetList[2];
+
+  local resultList = list(); -- list of BIN LISTS
+  local listCount = 0;
+  local transform = nil;
+  local unTransform = nil;
+  local retValue = nil;
+
+  -- Check once for the transform/untransform functions -- so we don't need
+  -- to do it inside the loop.
+  if lsetMap[M_Transform] ~= nil then
+    transform = functionTable[lsetMap[M_Transform]];
+  end
+
+  if lsetMap[M_UnTransform] ~= nil then
+    unTransform = functionTable[lsetMap[M_UnTransform]];
+  end
+
+  -- Loop through all the modulo n lset-record bins 
+  local distrib = lsetMap[M_Modulo];
+
+  GP=F and trace(" Number of Lset bins to parse: %d ", distrib)
+
+  local tempList;
+  local binList;
+  for j = 0, (distrib - 1), 1 do
+	local binName = getBinName( j );
+    tempList = topRec[binName];
+    binList = list();
+    list.append( binList, binName );
+    if( tempList == nil or list.size( tempList ) == 0 ) then
+      list.append( binList, "EMPTY LIST")
+    else
+      listAppend( binList, tempList );
+    end
+    info("[DEBUG]<%s:%s> BIN(%s) TList(%s) B List(%s)", MOD, meth, binName,
+      tostring(tempList), tostring(binList));
+  end -- end for distrib list for-loop 
+
+  GP=F and trace("[EXIT]<%s:%s>ResultList(%s)",MOD,meth,tostring(resultList));
+
+  return resultList; 
+end -- lset_dump();
 
 -- ========================================================================
 -- ========================================================================
