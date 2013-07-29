@@ -1,8 +1,8 @@
 -- Large Ordered List (llist.lua)
--- Last Update July 26,  2013: tjl
+-- Last Update July 29,  2013: tjl
 --
 -- Keep this MOD value in sync with version above
-local MOD = "llist_2013_07_26.g"; -- module name used for tracing.  
+local MOD = "llist_2013_07_29.a"; -- module name used for tracing.  
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -223,16 +223,24 @@ local insertParentNode;
 --     than 2.  This will take a little more thinking -- and the ability
 --     to predict the future.
 -- ======================================================================
+-- Aerospike Server Functions:
 -- ======================================================================
--- ======================================================================
--- Aerospike SubRecord Calls:
+-- Aerospike Record Functions:
+-- aerospike:create( topRec )
+-- aerospike:update( topRec )
+-- aerospike:remove( rec )  ==> Works on Records and Subrecords
+--
+-- Aerospike SubRecord Functions:
 -- newRec = aerospike:create_subrec( topRec )
---  !!!!!!!!!!!!!!!!!!!!!!!  Remember that open takes a STRING, not a digest
--- newRec = aerospike:open_subrec( topRec, childRecDigestString )
--- status = aerospike:update_subrec( topRec, childRec )
--- status = aerospike:close_subrec( topRec, childRec )
--- status = aerospike:remove_subrec( topRec, childRec )
+-- rec    = aerospike:open_subrec( topRec, digestString )
+-- status = aerospike:update_subrec( childRec )
+-- status = aerospike:close_subrec( childRec )
+--
+-- Record Functions:
 -- digest = record.digest( childRec )
+-- status = record.set_type( topRec, recType )
+-- status = record.set_flags( topRec, binName, binFlags )
+--
 -- ======================================================================
 -- For additional Documentation, please see llist_design.lua
 -- ======================================================================
@@ -5033,7 +5041,7 @@ local function ldt_remove( topRec, binName )
   local esrDigestString = tostring(esrDigest);
   local esrRec = aerospike:open_subrec( topRec, esrDigestString );
   GP=F and info("[STATUS]<%s:%s> About to Call Aerospike REMOVE", MOD, meth );
-  rc = aerospike:remove_subrec( esrRec );
+  rc = aerospike:remove( esrRec );
   if( rc < 0 ) then
     warn("[ESR DELETE ERROR]: Can't Delete: Bin(%s)", MOD, meth, binName);
     error("[ESR DELETE ERROR] Cannot Delete Subrec");

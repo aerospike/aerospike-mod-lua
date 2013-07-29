@@ -1,8 +1,8 @@
 -- Large Stack Object (LSO or LSTACK) Operations
--- lstack.lua:  July 25, 2013 (Happy Birthday Jamie!!)
+-- lstack.lua:  July 29, 2013
 --
 -- Module Marker: Keep this in sync with the stated version
-local MOD="lstack_2013_07_25.d"; -- the module name used for tracing
+local MOD="lstack_2013_07_29.d"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -308,12 +308,20 @@ local F=false; -- Set F (flag) to true to turn ON global print
 --     filter, the filter returns nil, and thus it would not be added
 --     to the result list.
 -- ======================================================================
--- Aerospike SubRecord Calls:
+-- Aerospike Server Functions:
+-- ======================================================================
+-- Aerospike Record Functions:
+-- aerospike:create( topRec )
+-- aerospike:update( topRec )
+-- aerospike:remove( rec )  ==> Works on Records and Subrecords
+--
+-- Aerospike SubRecord Functions:
 -- newRec = aerospike:create_subrec( topRec )
--- newRec = aerospike:open_subrec( topRec, childRecDigest)
+-- rec    = aerospike:open_subrec( topRec, childRecDigest)
 -- status = aerospike:update_subrec( childRec )
 -- status = aerospike:close_subrec( childRec )
--- status = aerospike:delete_subrec( topRec, childRec ) (not yet ready)
+--
+-- Record Functions:
 -- digest = record.digest( childRec )
 -- status = record.set_type( topRec, recType )
 -- status = record.set_flags( topRec, binName, binFlags )
@@ -4510,7 +4518,7 @@ local function ldt_remove( topRec, binName )
   local esrDigest = propMap[PM_EsrDigest];
   local esrDigestString = tostring(esrDigest);
   local esrRec = aerospike:open_subrec( topRec, esrDigestString );
-  rc = aerospike:delete( esrRec );
+  rc = aerospike:remove( esrRec );
   if( rc < 0 ) then
     warn("[ESR DELETE ERROR]: Can't Delete: Bin(%s)", MOD, meth, binName);
     error("[ESR DELETE ERROR] Cannot Delete Subrec");
@@ -4560,7 +4568,7 @@ end -- ldt_remove()
 --   res = -1: Some sort of error
 -- ========================================================================
 function lstack_remove( topRec, lsoBinName )
-  return ldt_remove( topRec, binName );
+  return ldt_remove( topRec, lsoBinName );
 end -- lstack_remove()
 
 -- ========================================================================
