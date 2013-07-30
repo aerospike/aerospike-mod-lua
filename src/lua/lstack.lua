@@ -2,7 +2,7 @@
 -- lstack.lua:  July 29, 2013
 --
 -- Module Marker: Keep this in sync with the stated version
-local MOD="lstack_2013_07_29.d"; -- the module name used for tracing
+local MOD="lstack_2013_07_29.g"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -311,15 +311,17 @@ local F=false; -- Set F (flag) to true to turn ON global print
 -- Aerospike Server Functions:
 -- ======================================================================
 -- Aerospike Record Functions:
--- aerospike:create( topRec )
--- aerospike:update( topRec )
--- aerospike:remove( rec )  ==> Works on Records and Subrecords
+-- status = aerospike:create( topRec )
+-- status = aerospike:update( topRec )
+-- status = aerospike:remove( rec ) (not currently used)
+--
 --
 -- Aerospike SubRecord Functions:
 -- newRec = aerospike:create_subrec( topRec )
 -- rec    = aerospike:open_subrec( topRec, childRecDigest)
 -- status = aerospike:update_subrec( childRec )
 -- status = aerospike:close_subrec( childRec )
+-- status = aerospike:remove_subrec( subRec )  
 --
 -- Record Functions:
 -- digest = record.digest( childRec )
@@ -870,7 +872,7 @@ local function updateSubrec( srcList, subrec, digest )
   end
   local digestString = tostring( digest );
 
-  aerospike:update_subrec( subrec );
+  rc = aerospike:update_subrec( subrec );
   dirtyMap[digestString] = true;
 
   GP=F and trace("[EXIT]<%s:%s>Rec(%s) Dig(%s) rc(%s)",
@@ -1170,7 +1172,10 @@ local function createAndInitESR(src,topRec, lsoList )
   GP=F and trace("[ENTER]: <%s:%s>", MOD, meth );
 
   local rc = 0;
+
+  -- Remember to add this to the SRC after it is initialized.
   local esrRec    = aerospike:create_subrec( topRec );
+
   if( esrRec == nil ) then
     warn("[ERROR]<%s:%s> Problems Creating ESR", MOD, meth );
     error("[Create_ESR] Error: createAndInitESR()");
@@ -1205,6 +1210,9 @@ local function createAndInitESR(src,topRec, lsoList )
 
   GP=F and trace("[EXIT]: <%s:%s> Leaving with ESR Digest(%s)",
     MOD, meth, tostring(esrDigest));
+
+  -- Now that it's initialized, add the ESR to the SRC.
+  addSubrecToContext( src, esrRec );
 
   rc = aerospike:update_subrec( esrRec );
   if( rc == nil or rc == 0 ) then
@@ -2453,6 +2461,8 @@ local function   warmListChunkCreate( src, topRec, lsoList )
 
   -- Create the Aerospike Record, initialize the bins: Ctrl, List
   -- Note: All Field Names start with UPPER CASE.
+  --
+  -- Remember to add the newLdrChunkRecord to the SRC
   local newLdrChunkRecord = aerospike:create_subrec( topRec );
   local ldrPropMap = map();
   local ldrMap = map();
@@ -2462,6 +2472,9 @@ local function   warmListChunkCreate( src, topRec, lsoList )
   local binName    = lsoPropMap[PM_BinName];
 
   initializeLdrMap(src,topRec,newLdrChunkRecord,ldrPropMap,ldrMap,lsoList );
+
+  -- Now that it's initialized, add the SUBREC to the SRC.
+  addSubrecToContext( src, newLdrChunkRecord );
 
   -- Assign Prop, Control info and List info to the LDR bins
   newLdrChunkRecord[SUBREC_PROP_BIN] = ldrPropMap;
@@ -2770,7 +2783,13 @@ local function releaseStorage( topRec, lsoList, digestList )
       for i = 1, listSize, 1 do
         digestString = tostring( digestList[i] );
         local subrec = aerospike:open_subrec( topRec, digestString );
-        rc = aerospike:remove( subrec );
+        rc = aerospike:remove_subrec( subrec );
+        if( rc == nil or rc == 0 ) then
+          GP=F and trace("[STATUS]<%s:%s> Successful CREC REMOVE", MOD, meth );
+        else
+          warn("[SUB DELETE ERROR] RC(%d) Bin(%s)", MOD, meth, rc, binName);
+          error("[SUB DELETE ERROR] Cannot Delete Subrec");
+        end
       end
     end
 
@@ -2992,12 +3011,16 @@ local function coldDirHeadCreate( src, topRec, lsoList, spaceEstimate )
     -- if present, and have it point BACK to this new one.
     --
     -- Note: All Field Names start with UPPER CASE.
+    -- Remember to add the newColdHeadRec to the SRC.
     local newColdHeadRec = aerospike:create_subrec( topRec );
     local newColdHeadMap     = map();
     local newColdHeadPropMap = map();
     initializeColdDirMap(topRec, newColdHeadRec, newColdHeadPropMap,
                          newColdHeadMap, lsoList);
 
+    -- Now that it's initialized, add the newColdHeadRec to the SRC.
+    addSubrecToContext( src, newColdHeadRec );
+                           
     -- Update our global counts ==> One more Cold Dir Record.
     lsoMap[M_ColdDirRecCount] = coldDirRecCount + 1;
 
@@ -4518,9 +4541,11 @@ local function ldt_remove( topRec, binName )
   local esrDigest = propMap[PM_EsrDigest];
   local esrDigestString = tostring(esrDigest);
   local esrRec = aerospike:open_subrec( topRec, esrDigestString );
-  rc = aerospike:remove( esrRec );
-  if( rc < 0 ) then
-    warn("[ESR DELETE ERROR]: Can't Delete: Bin(%s)", MOD, meth, binName);
+  rc = aerospike:remove_subrec( esrRec );
+  if( rc == nil or rc == 0 ) then
+    GP=F and trace("[STATUS]<%s:%s> Successful CREC REMOVE", MOD, meth );
+  else
+    warn("[ESR DELETE ERROR] RC(%d) Bin(%s)", MOD, meth, rc, binName);
     error("[ESR DELETE ERROR] Cannot Delete Subrec");
   end
 
@@ -4621,9 +4646,13 @@ function lstack_delete_subrecs( topRec, lsoBinName )
         MOD, meth, digestString );
       subrec = aerospike:open_subrec( topRec, digestString );
       if( subrec ~= nil ) then
-        rc = aerospike:remove( subrec );
-        GP=F and trace("[REMOVE RESULTS]<%s:%s> rc(%s)", MOD, meth,
-          tostring( rc ));
+        rc = aerospike:remove_subrec( subrec );
+        if( rc == nil or rc == 0 ) then
+          GP=F and trace("[STATUS]<%s:%s> Successful CREC REMOVE", MOD, meth );
+        else
+          warn("[SUB DELETE ERROR] RC(%d) Bin(%s)", MOD, meth, rc, binName);
+          error("[SUB DELETE ERROR] Cannot Delete Subrec");
+        end
       else
         warn("[ERROR]<%s:%s> Can't open Subrec: Digest(%s)", MOD, meth,
           digestString );

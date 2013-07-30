@@ -227,6 +227,7 @@ static const luaL_reg class_table[] = {
     {"remove",           mod_lua_aerospike_rec_remove},
     {"log",              mod_lua_aerospike_log},
     {"get_current_time", mod_lua_aerospike_get_current_time},
+    {"remove_subrec",    mod_lua_aerospike_crec_remove},
     {"create_subrec",    mod_lua_aerospike_crec_create},
     {"close_subrec",     mod_lua_aerospike_crec_close},
     {"open_subrec",      mod_lua_aerospike_crec_open},

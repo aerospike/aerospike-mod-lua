@@ -2,7 +2,7 @@
 -- Last Update July 29,  2013: tjl
 --
 -- Keep this MOD value in sync with version above
-local MOD = "llist_2013_07_29.a"; -- module name used for tracing.  
+local MOD = "llist_2013_07_29.d"; -- module name used for tracing.  
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -226,15 +226,16 @@ local insertParentNode;
 -- Aerospike Server Functions:
 -- ======================================================================
 -- Aerospike Record Functions:
--- aerospike:create( topRec )
--- aerospike:update( topRec )
--- aerospike:remove( rec )  ==> Works on Records and Subrecords
+-- status = aerospike:create( topRec )
+-- status = aerospike:update( topRec )
+-- status = aerospike:remove( rec ) (not currently used)
 --
 -- Aerospike SubRecord Functions:
 -- newRec = aerospike:create_subrec( topRec )
 -- rec    = aerospike:open_subrec( topRec, digestString )
 -- status = aerospike:update_subrec( childRec )
 -- status = aerospike:close_subrec( childRec )
+-- status = aerospike:remove_subrec( subRec ) 
 --
 -- Record Functions:
 -- digest = record.digest( childRec )
@@ -2063,6 +2064,7 @@ local function createAndInitESR( src, topRec, ldtList )
     MOD, meth, ldtSummaryString(ldtList));
 
   local rc = 0;
+  -- Remember to add this to the SRC
   local esrRec       = aerospike:create_subrec( topRec );
   if( esrRec == nil ) then
     warn("[ERROR]<%s:%s> Problems Creating ESR", MOD, meth );
@@ -2098,6 +2100,9 @@ local function createAndInitESR( src, topRec, ldtList )
 
   GP=F and trace("[EXIT]: <%s:%s> Leaving with ESR Digest(%s)",
     MOD, meth, tostring(esrDigest));
+
+  -- Now that it's initialized, add the ESR to the SRC.
+  addSubrecToContext( src, esrRec );
 
   rc = aerospike:update_subrec( esrRec );
   if( rc == nil or rc == 0) then
@@ -3112,6 +3117,7 @@ local function createNodeRec( src, topRec, ldtList )
   local propMap = ldtList[1];
   local ldtMap  = ldtList[2];
 
+  -- Remember to add this to the SRC
   local nodeRec = aerospike:create_subrec( topRec );
   if( nodeRec == nil ) then
     warn("[ERROR]<%s:%s> Problems Creating Subrec", MOD, meth );
@@ -3525,6 +3531,7 @@ local function createLeafRec( src, topRec, ldtList, firstValue )
   local propMap = ldtList[1];
   local ldtMap  = ldtList[2];
 
+  -- Remember to add this to the SRC
   local leafRec = aerospike:create_subrec( topRec );
   if( leafRec == nil ) then
     warn("[ERROR]<%s:%s> Problems Creating Subrec", MOD, meth );
@@ -5041,9 +5048,11 @@ local function ldt_remove( topRec, binName )
   local esrDigestString = tostring(esrDigest);
   local esrRec = aerospike:open_subrec( topRec, esrDigestString );
   GP=F and info("[STATUS]<%s:%s> About to Call Aerospike REMOVE", MOD, meth );
-  rc = aerospike:remove( esrRec );
-  if( rc < 0 ) then
-    warn("[ESR DELETE ERROR]: Can't Delete: Bin(%s)", MOD, meth, binName);
+  rc = aerospike:remove_subrec( esrRec );
+  if( rc == nil or rc == 0 ) then
+    GP=F and trace("[STATUS]<%s:%s> Successful CREC REMOVE", MOD, meth );
+  else
+    warn("[ESR DELETE ERROR] RC(%d) Bin(%s)", MOD, meth, rc, binName);
     error("[ESR DELETE ERROR] Cannot Delete Subrec");
   end
 
