@@ -1,8 +1,8 @@
 -- Large Ordered List (llist.lua)
--- Last Update July 29,  2013: tjl
+-- Last Update July 30,  2013: tjl
 --
 -- Keep this MOD value in sync with version above
-local MOD = "llist_2013_07_29.d"; -- module name used for tracing.  
+local MOD = "llist_2013_07_30.c"; -- module name used for tracing.  
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -4446,7 +4446,7 @@ local function listDelete( objectList, key, position )
   -- (*) A list of size 1:  Just return a new (empty) list.
   -- (*) We're deleting the FIRST element, so just use RIGHT LIST.
   -- (*) We're deleting the LAST element, so just use LEFT LIST
-  if( listSize > 1 ) then
+  if( listSize == 1 ) then
     resultList = list();
   elseif( position == 1 ) then
     resultList = list.drop( objectList, 1 );
@@ -4500,7 +4500,8 @@ local function leafDelete( src, sp, topRec, ldtList, key )
   local objectList = leafRec[LSR_LIST_BIN];
   local position = sp.PositionList[leafLevel];
   
-  GP=F and trace("[DUMP]Before delete(%s) Key(%s)", tostring(objectList), tostring(key));
+  GP=F and trace("[DUMP]Before delete(%s) Key(%s) Position(%d)",
+    tostring(objectList), tostring(key), position);
 
   local resultList = listDelete( objectList, key, position )
   leafRec[LSR_LIST_BIN] = resultList;
