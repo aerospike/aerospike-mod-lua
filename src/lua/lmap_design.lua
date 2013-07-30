@@ -215,6 +215,34 @@
 --    ahead and call a lmapLdrListChunkCreate() and also insert the bin. If 
 --    it is non-empty, we go ahead and directly call listInsert().     
 -- 
+--    How does LMAP deletion work ?
+-- 
+-- a. In compact mode, deletion is similar to LSET functionality, we simply 
+--    pick-up the user-defined bin and delete the entry from the list of
+--    entries. We also update stats. DO NOT DELETE THE SUBREC FOR LMAP_DELETE. 
+
+-- b. In regular mode, the when an entry needs to be deleted, we first 
+--    determine whether the lmapbinname exists. If it does, we first hash
+--    the entry to point to a digest-list index. 
+-- 
+-- c. This digest-list can either be the digest pointing to the LDR entry
+--    or it can point to the list of entries, one of which contains the entry
+--    we want to delete. We wont be able to differentiate between the two. So
+--    we go thorugh the LDR list pointed-to by the digest, look for the item 
+--    and delete the item.  
+-- 
+-- c.1 How should the digest-list be updated for this delete. If there was only
+--     one entry in the LDR list and that item was removed, we remove the 
+--     digest-list entry. If the deleted entry was one among many, nothing 
+--     needs to be done with respect to the digest-list. 
+-- 
+-- d. Should we reset M_TopFull to false here ? Probably. If its set 
+--    to true, no harm in resetting it back to false. 
+-- 
+-- e. For all cases, we copy over the list, delete the entry and re-attach 
+--    the new list back to the digest-entry. Again, we must remember that 
+--    lmap deletion is DELINKING. DO NOT DELETE THE SUBREC FOR LMAP_DELETE.
+-- 
 ---- ======================================================================
 -- 
 -- Aerospike Large Map (LMAP) Operations :
