@@ -249,14 +249,15 @@
 -- 	  the first and only lmap-bin-name and return 0 if the element is found or
 --    return an error if the element is not found in the set or if the lmap bin
 --    name does not at all exist on the system. When the search-value is not 
---    specified, we return all the elemnts of the first and only bin. 
+--    specified, we return all the elemnets of the first and only bin. 
 -- 
 -- b. In regular mode search, we first check for the existence of the bin. If 
 --    it does, we first hash the search-entry to a matching digest-list index. 
 --    Then we look through the digest-list, find the ldr-list pointed to by the
 --    digest-entry. If the entry is found, we return 0, if not we return error. 
 --    When the search value is not specified, we return all the list-elemnts 
---    pointed-to by all the digest-list entries in their ldr-list. 
+--    pointed-to by all the digest-list entries in their ldr-list for the given
+--    lmapBinName. 
 -- 
 ---- ======================================================================
 -- 
