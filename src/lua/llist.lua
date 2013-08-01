@@ -1394,11 +1394,11 @@ local function validateBinName( binName )
     MOD, meth, tostring(binName));
 
   if binName == nil  then
-    error('Bin Name Validation Error: Null BinName');
+    error( ldte.ERR_NULL_BIN_NAME );
   elseif type( binName ) ~= "string"  then
-    error('Bin Name Validation Error: BinName must be a string');
+    error( ldte.ERR_BIN_NAME_NOT_STRING );
   elseif string.len( binName ) > 14 then
-    error('Bin Name Validation Error: Exceeds 14 characters');
+    error( ldte.ERR_BIN_NAME_TOO_LONG );
   end
   return 0;
 end -- validateBinName
@@ -1440,21 +1440,21 @@ local function validateRecBinAndMap( topRec, ldtBinName, mustExist )
     -- Check Top Record Existence.
     if( not aerospike:exists( topRec ) and mustExist == true ) then
       warn("[ERROR EXIT]:<%s:%s>:Missing Record. Exit", MOD, meth );
-      error('Base Record Does NOT exist');
+      error( ldte.ERR_TOP_REC_NOT_FOUND );
     end
 
     -- Control Bin Must Exist
     if( topRec[ldtBinName] == nil ) then
       warn("[ERROR EXIT]: <%s:%s> LDT BIN (%s) DOES NOT Exists",
             MOD, meth, tostring(ldtBinName) );
-      error('LDT BIN Does NOT exist');
+      error( ldte.ERR_BIN_DOES_NOT_EXIST );
     end
 
     -- check that our bin is (mostly) there
     if ( propMap[PM_Magic] ~= MAGIC ) then
       GP=F and warn("[ERROR EXIT]:<%s:%s>LDT BIN(%s) Corrupted (no magic)",
             MOD, meth, tostring( ldtBinName ) );
-      error('LDT BIN Is Corrupted (No Magic::1)');
+      error( ldte.ERR_BIN_DAMAGED );
     end
     -- Ok -- all done for the Must Exist case.
   else
@@ -1468,7 +1468,7 @@ local function validateRecBinAndMap( topRec, ldtBinName, mustExist )
       if ( propMap[PM_Magic] ~= MAGIC ) then
         GP=F and warn("[ERROR EXIT]:<%s:%s> LDT BIN(%s) Corrupted (no magic)",
               MOD, meth, tostring( ldtBinName ) );
-        error('LDT BIN Is Corrupted (No Magic::2)');
+        error( ldte.ERR_BIN_DAMAGED );
       end
     end -- if worth checking
   end -- else for must exist
@@ -1653,7 +1653,7 @@ local function showRecSummary( nodeRec, propMap )
   -- if( F == true ) then
   if( propMap == nil ) then
     warn("[ERROR]<%s:%s>: propMap value is NIL", MOD, meth );
-    error("[INTERNAL ERROR]: ShowRecSummary has NIL propMap");
+    error( ldte.ERR_SUBREC_DAMAGED );
   end
     GP=F and info("\n[SUBREC DEBUG]:: SRC Contents \n");
     local recType = propMap[PM_RecType];
@@ -1709,7 +1709,8 @@ local function addSubrecToContext( src, nodeRec )
   GP=F and trace("[ENTER]<%s:%s>", MOD, meth );
 
   if( src == nil ) then
-    error("[BAD SUB REC CONTEXT] src is nil");
+    warn("[ERROR]<%s:%s> SubRec Pool is nil", MOD, meth );
+    error( ldte.ERR_SUBREC_POOL_DAMAGED );
   end
 
   local digest = record.digest( nodeRec );
@@ -1749,7 +1750,7 @@ local function openSubrec( src, topRec, digestString )
     if( itemCount >= G_OPEN_SR_LIMIT ) then
       warn("[ERROR]<%s:%s> SRC Count(%d) Exceeded Limit(%d)", MOD, meth,
         itemCount, G_OPEN_SR_LIMIT );
-      error("[SUBREC OPEN LIMIT]: Exceeded Open Subrec Limit");
+      error( ldte.ERR_TOO_MANY_OPEN_SUBRECS );
     end
 
     src.ItemCount = itemCount + 1;
@@ -1760,7 +1761,7 @@ local function openSubrec( src, topRec, digestString )
     if( rec == nil ) then
       warn("[ERROR]<%s:%s> Subrec Open Failure: Digest(%s)", MOD, meth,
         digestString );
-      error("[SUBREC OPEN FAILURE]: Couldn't open Subrec");
+      error( ldte.ERR_SUBREC_OPEN );
     end
   else
     GP=F and trace("[FOUND REC]: <%s:%s> : Rec(%s)", MOD, meth, tostring(rec));
@@ -2068,7 +2069,7 @@ local function createAndInitESR( src, topRec, ldtList )
   local esrRec       = aerospike:create_subrec( topRec );
   if( esrRec == nil ) then
     warn("[ERROR]<%s:%s> Problems Creating ESR", MOD, meth );
-    error("[Create_ESR] Error: createAndInitESR()");
+    error( ldte.ERR_SUBREC_CREATE );
   end
 
   local esrDigest = record.digest( esrRec );
@@ -2111,7 +2112,7 @@ local function createAndInitESR( src, topRec, ldtList )
       GP=F and trace("[ESR CLOSE]: <%s:%s> ESR Close postponed", MOD, meth );
   else
     warn("[ERROR]<%s:%s>Problems Updating ESR rc(%s)",MOD,meth,tostring(rc));
-    error("[ESR CREATE] Error Creating System Subrecord");
+    error( ldte.ERR_SUBREC_UPDATE );
   end
 
   -- After the ESR is all buttoned up -- add it to the SubRec Context.
@@ -2453,7 +2454,7 @@ local function adjustPagePointers( src, topRec, newLeftLeaf, rightLeaf )
     if( oldLeftLeaf == nil ) then
       warn("[ERROR]<%s:%s> oldLeftLeaf NIL from openSubrec: digest(%s)",
         MOD, meth, oldLeftLeafDigestString );
-      error("[SUBREC ERROR]: Can't open Old Left Leaf in adjustPagePtrs");
+      error( ldte.ERR_SUBREC_OPEN );
     end
     local oldLeftLeafMap = oldLeftLeaf[LSR_CTRL_BIN];
     oldLeftLeafMap[LF_NextPage] = newLeftLeafDigest;
@@ -2567,7 +2568,7 @@ updateSearchPath(sp, propMap, ldtMap, nodeRec, position, keyCount)
   else
       warn("[ERROR]<%s:%s> Bad Node Type (%s) in UpdateSearchPath", 
         MOD, meth, tostring( recType ));
-      error("[BAD NODE TYPE IN UpdateSearchPath");
+      error( ldte.ERR_INTERNAL );
   end
   GP=F and trace("[HasRoom COMPARE]<%s:%s>KeyCount(%d) NodeListMax(%d)",
     MOD, meth, keyCount, nodeMax );
@@ -2765,10 +2766,12 @@ treeSearch( src, topRec, sp, ldtList, searchKey )
       GP=F and info("[DEBUG]<%s:%s> UPPER NODE Search", MOD, meth );
       position = searchKeyList( ldtMap, keyList, searchKey );
       if( position < 0 ) then
-        error("treeSearch() error during searchKeyList()");
+        warn("[ERROR]<%s:%s> searchKeyList Problem", MOD, meth );
+        error( ldte.ERR_INTERNAL );
       end
       if( position == 0 ) then
-        error("treeSearch() POSITION ZERO from searchKeyList()");
+        warn("[ERROR]<%s:%s> searchKeyList Problem:Position ZERO", MOD, meth );
+        error( ldte.ERR_INTERNAL );
       end
       updateSearchPath(sp,propMap,ldtMap,nodeRec,position,keyCount );
 
@@ -2953,7 +2956,8 @@ local function leafInsert( topRec, leafRec, ldtMap, newKey, newValue, position)
   end
 
   if( position <= 0 ) then
-    error("[ERROR:LeafInsert] Search Path Position is wrong");
+    warn("[ERROR]<%s:%s> Search Path Position is wrong", MOD, meth );
+    error( ldte.ERR_INTERNAL );
   end
 
   -- Move values around, if necessary, to put newValue in a "position"
@@ -3121,7 +3125,7 @@ local function createNodeRec( src, topRec, ldtList )
   local nodeRec = aerospike:create_subrec( topRec );
   if( nodeRec == nil ) then
     warn("[ERROR]<%s:%s> Problems Creating Subrec", MOD, meth );
-    error("Create_SubRec() Error: createNodeRec()");
+    error( ldte.ERR_SUBREC_CREATE );
   end
 
   local rc = initializeNode( topRec, nodeRec, ldtList );
@@ -3130,7 +3134,7 @@ local function createNodeRec( src, topRec, ldtList )
     rc = aerospike:update_subrec( nodeRec );
   else
     warn("[ERROR]<%s:%s> Problems initializing Node(%d)", MOD, meth, rc );
-    error("Create_SubRec() Error: initializeNode()");
+    error( ldte.ERR_INTERNAL );
   end
 
   -- Must wait until subRec is initialized before it can be added to SRC.
@@ -3245,7 +3249,7 @@ local function splitRootInsert( src, topRec, sp, ldtList, key, digest )
   else
     -- We got some sort of goofy error.
     warn("[ERROR]<%s:%s> Compare Error(%d)", MOD, meth, compareResult );
-    error('COMPARE ERROR in SplitRoot');
+    error( ldte.ERR_INTERNAL );
   end
 
   -- Populate the new nodes with their Key and Digest Lists
@@ -3398,7 +3402,7 @@ local function splitNodeInsert( src, topRec, sp, ldtList, key, digest, level )
     else
       -- We got some sort of goofy error.
       warn("[ERROR]<%s:%s> Compare Error(%d)", MOD, meth, compareResult );
-      error('COMPARE ERROR in SplitRoot');
+      error( ldte.ERR_INTERNAL );
     end
 
     -- Populate the new nodes with their Key and Digest Lists
@@ -3473,7 +3477,7 @@ function insertParentNode(src, topRec, sp, ldtList, key, digest, level)
     if( nodeRec == nil ) then
       warn("[ERROR]<%s:%s> Nil NodeRec from SearchPath. Level(%s)",
         MOD, meth, tostring(level));
-      error("[INTERNAL ERROR]: NIL Node Record from SearchPath");
+      error( ldte.ERR_INTERNAL );
     end
     listMax    = ldtMap[R_NodeListMax];
     keyList    = nodeRec[NSR_KEY_LIST_BIN];
@@ -3495,8 +3499,8 @@ function insertParentNode(src, topRec, sp, ldtList, key, digest, level)
       end
     else
       -- Bummer.  Errors.
-      warn("[ERROR]<%s:%s> Errors in NodeInsert", MOD, meth );
-      error("[NODE INSERT ERROR]: Problems inserting into Parent Node");
+      warn("[ERROR]<%s:%s> Parent Node Errors in NodeInsert", MOD, meth );
+      error( ldte.ERR_INTERNAL );
     end
   else
     -- Complex node split and propagate up to parent.  Special case is if
@@ -3535,7 +3539,7 @@ local function createLeafRec( src, topRec, ldtList, firstValue )
   local leafRec = aerospike:create_subrec( topRec );
   if( leafRec == nil ) then
     warn("[ERROR]<%s:%s> Problems Creating Subrec", MOD, meth );
-    error("Create_SubRec() Error: createLeafRec()");
+    error( ldte.ERR_SUBREC_CREATE );
   end
 
   local rc = initializeLeaf( topRec, ldtList, leafRec, firstValue );
@@ -3544,7 +3548,7 @@ local function createLeafRec( src, topRec, ldtList, firstValue )
     rc = aerospike:update_subrec( leafRec );
   else
     warn("[ERROR]<%s:%s> Problems initializing Leaf(%d)", MOD, meth, rc );
-    error("Create_SubRec() Error: initializeLeaf()");
+    error( ldte.ERR_INTERNAL );
   end
 
   -- Must wait until subRec is initialized before it can be added to SRC.
@@ -3648,7 +3652,7 @@ splitLeafInsert( src, topRec, sp, ldtList, newKey, newValue )
   else
     -- We got some sort of goofy error.
     warn("[ERROR]<%s:%s> Compare Error(%d)", MOD, meth, compareResult );
-    error('COMPARE ERROR in SplitLeaf');
+    error( ldte.ERR_INTERNAL );
   end
 
   aerospike:update_subrec( leftLeafRec );
@@ -3798,7 +3802,7 @@ local function treeInsert( src, topRec, ldtList, value, stats )
     if( status == ST_FOUND and ldtMap[R_KeyUnique] == true ) then
       warn("[User ERROR]<%s:%s> Unique Key(%s) Violation",
         MOD, meth, tostring(value ));
-      error('[Error]: Unique Key Violation');
+      error( ldte.ERR_UNIQUE_KEY );
     end
     local leafLevel = sp.LevelCount;
 
@@ -3830,7 +3834,7 @@ local function treeInsert( src, topRec, ldtList, value, stats )
     warn("[ERROR]<%s:%s>Insert Error::Ldt(%s) value(%s) stats(%s) rc(%s)",
     MOD, meth, ldtSummaryString(ldtList), tostring(value), tostring(stats),
     tostring(rc));
-    error("[INSERT ERROR]:: Internal Error on insert");
+    error( ldte.ERR_INSERT );
   end
 
   GP=F and trace("[EXIT]<%s:%s>LdtSummary(%s) value(%s) rc(%s)",
@@ -4274,7 +4278,7 @@ local function getNextLeaf( src, topRec, leafRec  )
     nextLeaf = openSubrec( src, topRec, nextLeafDigestString )
     if( nextLeaf == nil ) then
       warn("[ERROR]<%s:%s> Can't Open Leaf(%s)",MOD,meth,nextLeafDigestString);
-      error("[ERROR]Open Leaf Subrec Problems");
+      error( ldte.ERR_SUBREC_OPEN );
     end
   end
 
@@ -4315,7 +4319,7 @@ local function convertList(src, topRec, ldtBinName, ldtList )
   if compactList == nil then
     warn("[INTERNAL ERROR]:<%s:%s> Rehash can't use Empty Bin (%s) list",
       MOD, meth, tostring(singleBinName));
-    error('BAD COMPACT LIST for Rehash');
+    error( ldte.ERR_INTERNAL );
   end
 
   ldtMap[R_StoreState] = SS_REGULAR; -- now in "regular" (modulo) mode
@@ -4377,7 +4381,7 @@ treeScan(src, resultList, topRec, sp, ldtList, key, func, fargs )
     if( scan_B < 0 ) then
       warn("[ERROR]<%s:%s> Problems in ScanLeaf() A(%s) B(%s)",
         MOD, meth, tostring( scan_A ), tostring( scan_B ) );
-      error("[SCAN LEAF ERROR]: treeScan()");
+      error( ldte.ERR_INTERNAL );
     end
       
     if( scan_A == SCAN_CONTINUE ) then
@@ -4420,7 +4424,7 @@ local function listDelete( objectList, key, position )
   if( position < 1 or position > listSize ) then
     warn("[DELETE ERROR]<%s:%s> Bad position(%d) for delete: key(%s)",
       MOD, meth, position, tostring(key));
-    error("[INTERNAL ERROR]: Bad position value for Delete");
+    error( ldte.ERR_DELETE );
   end
 
   -- Move elements in the list to "cover" the item at Position.
@@ -4568,7 +4572,7 @@ local function treeDelete( src, topRec, ldtList, key )
       if( rc < 0 ) then
         warn("[ERROR]<%s:%s> Problems in closeAllSubrecs() SRC(%s)",
           MOD, meth, tostring( src ));
-        error("[SUB REC ERROR]:: Problems closing subrecs in llist_delete");
+        error( ldte.ERR_SUBREC_CLOSE );
       end
     end
   else
@@ -4643,7 +4647,7 @@ function llist_create( topRec, ldtBinName, argList )
   if topRec[ldtBinName] ~= nil  then
     warn("[ERROR EXIT]: <%s:%s> LDT BIN(%s) Already Exists",
       MOD, meth, tostring(ldtBinName) );
-    error('LDT_BIN already exists');
+    error( ldte.ERR_BIN_ALREADY_EXISTS );
   end
 
   -- Create and initialize the LDT MAP -- the main LDT structure
@@ -4772,7 +4776,7 @@ local function localLListInsert( topRec, ldtBinName, newValue, createSpec )
   if( rc < 0 ) then
     warn("[ERROR]<%s:%s> Problems in closeAllSubrecs() SRC(%s)",
       MOD, meth, tostring( src ));
-    error("[SUB REC ERROR]:: Problems closing subrecs in localLListInsert");
+    error( ldte.ERR_SUBREC_CLOSE );
   end
 
   -- All done, store the record (either CREATE or UPDATE)
@@ -4865,7 +4869,8 @@ local function localLListSearch( topRec, ldtBinName, key, func, fargs )
   -- Close ALL of the subrecs that might have been opened
   rc = closeAllSubrecs( src );
   if( rc < 0 ) then
-    error("SUB REC ERROR:: Problems closing subrecs in search");
+    warn("[ERROR]<%s:%s> Problem closing subrec in search", MOD, meth );
+    error( ldte.ERR_SUBREC_CLOSE );
   end
 
   GP=F and trace("[EXIT]: <%s:%s>: Search Key(%s) Returns (%s)",
@@ -4996,7 +5001,8 @@ function llist_delete( topRec, binName, key )
     -- Close ALL of the subrecs that might have been opened
     rc = closeAllSubrecs( src );
     if( rc < 0 ) then
-      error("SUB REC ERROR:: Problems closing subrecs in delete");
+      warn("[ERROR]<%s:%s> Problems closing subrecs in delete", MOD, meth );
+      error( ldte.ERR_SUBREC_CLOSE );
     end
 
     -- All done, store the record
@@ -5054,7 +5060,7 @@ local function ldt_remove( topRec, binName )
     GP=F and trace("[STATUS]<%s:%s> Successful CREC REMOVE", MOD, meth );
   else
     warn("[ESR DELETE ERROR] RC(%d) Bin(%s)", MOD, meth, rc, binName);
-    error("[ESR DELETE ERROR] Cannot Delete Subrec");
+    error( ldte.ERR_SUBREC_DELETE );
   end
 
   topRec[binName] = nil;
@@ -5065,7 +5071,7 @@ local function ldt_remove( topRec, binName )
   if( recPropMap == nil or recPropMap[RPM_Magic] ~= MAGIC ) then
     warn("[INTERNAL ERROR]<%s:%s> Prop Map for LDT Hidden Bin invalid",
       MOD, meth );
-    error("[INTERNAL ERROR]: Invalid Record LDT Control Bin");
+    error( ldte.ERR_BIN_DAMAGED );
   end
   local ldtCount = recPropMap[RPM_LdtCount];
   if( ldtCount <= 1 ) then

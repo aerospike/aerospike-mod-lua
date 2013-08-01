@@ -2,7 +2,7 @@
 -- lstack.lua:  July 29, 2013
 --
 -- Module Marker: Keep this in sync with the stated version
-local MOD="lstack_2013_07_29.g"; -- the module name used for tracing
+local MOD="lstack_2013_07_29.h"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -751,7 +751,8 @@ local function addSubrecToContext( srcList, subrec )
   GP=F and trace("[ENTER]<%s:%s> src(%s)", MOD, meth, tostring( srcList));
 
   if( srcList == nil ) then
-    error("[BAD SUB REC CONTEXT] src is nil");
+    warn("[ERROR]<%s:%s> Bad Subrec Context: SRC is NIL", MOD, meth );
+    error( ldte.ERR_INTERNAL );
   end
 
   local recMap = srcList[1];
@@ -788,7 +789,7 @@ local function openSubrec( srcList, topRec, digestString )
     if( itemCount >= G_OPEN_SR_LIMIT ) then
       warn("[ERROR]<%s:%s> SRC Count(%d) Exceeded Limit(%d)", MOD, meth,
         itemCount, G_OPEN_SR_LIMIT );
-      error("[SUBREC OPEN LIMIT]: Exceeded Open Subrec Limit");
+      error( ldte.ERR_TOO_MANY_OPEN_SUBRECS );
     end
 
     recMap.ItemCount = itemCount + 1;
@@ -800,7 +801,7 @@ local function openSubrec( srcList, topRec, digestString )
     if( subrec == nil ) then
       warn("[ERROR]<%s:%s> Subrec Open Failure: Digest(%s)", MOD, meth,
         digestString );
-      error("[SUBREC OPEN FAILURE]: Couldn't open Subrec");
+      error( ldte.ERR_SUBREC_OPEN );
     end
   else
     GP=F and trace("[FOUND REC]<%s:%s>Rec(%s)", MOD, meth, tostring(subrec));
@@ -834,7 +835,7 @@ local function closeSubrec( srcList, digestString )
   if( subrec == nil ) then
     warn("[INTERNAL ERROR]<%s:%s> Rec not found for Digest(%s)", MOD, meth,
       digestString );
-    error("[INTERNAL ERROR]: Rec not found ");
+    error( ldte.ERR_INTERNAL );
   end
 
   info("[STATUS]<%s:%s> Closing Rec: Digest(%s)", MOD, meth, digestString);
@@ -949,7 +950,7 @@ end -- closeAllSubrecs()
 local function listAppend( baseList, additionalList )
   if( baseList == nil ) then
     warn("[INTERNAL ERROR] Null baselist in listAppend()" );
-    error("[INTERNAL ERROR] Null baselist in listAppend()" );
+    error( ldte.ERR_INTERNAL );
   end
   local listSize = list.size( additionalList );
   for i = 1, listSize, 1 do
@@ -1179,7 +1180,7 @@ local function createAndInitESR(src,topRec, lsoList )
 
   if( esrRec == nil ) then
     warn("[ERROR]<%s:%s> Problems Creating ESR", MOD, meth );
-    error("[Create_ESR] Error: createAndInitESR()");
+    error( ldte.ERR_SUBREC_CREATE );
   end
 
   local esrDigest = record.digest( esrRec);
@@ -1220,7 +1221,7 @@ local function createAndInitESR(src,topRec, lsoList )
       aerospike:close_subrec( esrRec );
   else
     warn("[ERROR]<%s:%s>Problems Updating ESR rc(%s)",MOD,meth,tostring(rc));
-    error("[ESR CREATE] Error Creating System Subrecord");
+    error( ldte.ERR_SUBREC_UPDATE );
   end
 
   return esrDigest;
@@ -2721,8 +2722,8 @@ local function warmListInsert( src, topRec, lsoList, entryList )
     MOD, meth, tostring( entryList ));
   local countWritten = ldrInsert( topWarmChunk, lsoMap, 1, entryList );
   if( countWritten == -1 ) then
-    warn("[ERROR]: <%s:%s>: Internal Error in Chunk Insert", MOD, meth);
-    error('Internal Error on insert(1)');
+    warn("[ERROR]: <%s:%s>: Internal Error in Chunk Insert(1)", MOD, meth);
+    error( ldte.ERR_INTERNAL );
   end
   local itemsLeft = totalEntryCount - countWritten;
   if itemsLeft > 0 then
@@ -2741,13 +2742,13 @@ local function warmListInsert( src, topRec, lsoList, entryList )
     countWritten =
         ldrInsert( topWarmChunk, lsoMap, countWritten+1, entryList );
     if( countWritten == -1 ) then
-      warn("[ERROR]: <%s:%s>: Internal Error in Chunk Insert", MOD, meth);
-      error('Internal Error on insert(2)');
+      warn("[ERROR]: <%s:%s>: Internal Error in Chunk Insert(2)", MOD, meth);
+      error( ldte.ERR_INTERNAL );
     end
     if countWritten ~= itemsLeft then
       warn("[ERROR!!]: <%s:%s> Second Warm Chunk Write: CW(%d) IL(%d) ",
         MOD, meth, countWritten, itemsLeft );
-      error('Internal Error on insert(3)');
+      error( ldte.ERR_INTERNAL );
     end
   end
 
@@ -2818,7 +2819,7 @@ local function releaseStorage( topRec, lsoList, digestList )
           GP=F and trace("[STATUS]<%s:%s> Successful CREC REMOVE", MOD, meth );
         else
           warn("[SUB DELETE ERROR] RC(%d) Bin(%s)", MOD, meth, rc, binName);
-          error("[SUB DELETE ERROR] Cannot Delete Subrec");
+          error( ldte.ERR_SUBREC_DELETE );
         end
       end
     end
@@ -2928,7 +2929,7 @@ local function coldDirHeadCreate( src, topRec, lsoList, spaceEstimate )
     if( coldDirRec == nil ) then
       warn("[INTERNAL ERROR]<%s:%s> Can't open Cold Head(%s)", MOD, meth,
         coldDirDigestString );
-      error("[INTERNAL ERROR]ColdDirHeadCreate: Open Head ERROR", MOD, meth );
+      error( ldte.ERR_SUBREC_OPEN );
     end
     coldDirList = coldDirRec[COLD_DIR_LIST_BIN];
     if( spaceEstimate >= lsoMap[M_ColdListMax] ) then
@@ -3080,7 +3081,7 @@ local function coldDirHeadCreate( src, topRec, lsoList, spaceEstimate )
       if( oldColdHeadRec == nil ) then
         warn("[ERROR]<%s:%s> oldColdHead NIL from openSubrec: digest(%s)",
           MOD, meth, oldColdHeadDigestString );
-        error("[SUBREC ERROR]: Can't open Old ColdHead in CreateColdHead");
+        error( ldte.ERR_SUBREC_OPEN );
       end
       local oldColdHeadMap = oldColdHeadRec[COLD_DIR_CTRL_BIN];
       oldColdHeadMap[CDM_PrevDirRec] = newColdHeadDigest;
@@ -3292,7 +3293,7 @@ local function coldListInsert( src, topRec, lsoList, digestList )
       coldDirRecInsert(lsoList, coldHeadRec, digestListIndex, digestList);
     if( digestsWritten == -1 ) then
       warn("[ERROR]: <%s:%s>: Internal Error in Cold Dir Insert", MOD, meth);
-      error('ERROR in Cold List Insert(1)');
+      error( ldte.ERR_INSERT );
     end
     digestsLeft = digestsLeft - digestsWritten;
     digestListIndex = digestListIndex + digestsWritten;
@@ -3557,11 +3558,11 @@ local function validateBinName( binName )
       MOD, meth, tostring(binName));
 
   if binName == nil  then
-    error('Bin Name Validation Error: Null BinName');
+    error( ldte.ERR_NULL_BIN_NAME );
   elseif type( binName ) ~= "string"  then
-    error('Bin Name Validation Error: BinName must be a string');
+    error( ldte.ERR_BIN_NAME_NOT_STRING );
   elseif string.len( binName ) > 14 then
-    error('Bin Name Validation Error: Exceeds 14 characters');
+    error( ldte.ERR_BIN_NAME_TOO_LONG );
   end
 end -- validateBinName
 
@@ -3594,14 +3595,14 @@ local function validateRecBinAndMap( topRec, lsoBinName, mustExist )
     -- Check Top Record Existence.
     if( not aerospike:exists( topRec ) and mustExist == true ) then
       warn("[ERROR EXIT]:<%s:%s>:Missing Record. Exit", MOD, meth );
-      error('Base Record Does NOT exist');
+      error( ldte.ERR_TOP_REC_NOT_FOUND );
     end
 
     -- Control Bin Must Exist
     if( topRec[lsoBinName] == nil ) then
       warn("[ERROR EXIT]: <%s:%s> LSO BIN (%s) DOES NOT Exists",
             MOD, meth, tostring(lsoBinName) );
-      error('LSO BIN Does NOT exist');
+      error( ldte.ERR_BIN_DOES_NOT_EXIST );
     end
 
     -- check that our bin is (mostly) there
@@ -3613,7 +3614,7 @@ local function validateRecBinAndMap( topRec, lsoBinName, mustExist )
     if propMap[PM_Magic] ~= MAGIC then
       GP=F and warn("[ERROR EXIT]:<%s:%s>LSO BIN(%s) Corrupted (no magic)",
             MOD, meth, tostring( lsoBinName ) );
-      error('LSO BIN Is Corrupted (No Magic::1)');
+      error( ldte.ERR_BIN_DAMAGED );
     end
     -- Ok -- all done for the Must Exist case.
   else
@@ -3626,9 +3627,9 @@ local function validateRecBinAndMap( topRec, lsoBinName, mustExist )
       local propMap = lsoList[1];
       local lsoMap  = lsoList[2];
       if propMap[PM_Magic] ~= MAGIC then
-        GP=F and warn("[ERROR EXIT]:<%s:%s> LSO BIN(%s) Corrupted (no magic)",
+        GP=F and warn("[ERROR EXIT]:<%s:%s> LSO BIN(%s) Corrupted (no magic)2",
               MOD, meth, tostring( lsoBinName ) );
-        error('LSO BIN Is Corrupted (No Magic::2)');
+        error( ldte.ERR_BIN_DAMAGED );
       end
     end -- if worth checking
   end -- else for must exist
@@ -3666,7 +3667,9 @@ local function buildSubRecList( topRec, lsoList, position )
   -- here.  Otherwise, drop down into the FULL MONTY
   --
   if( position < 0 ) then
-    error("[BUILD SUBREC LIST ERROR] Can't have negative position");
+    warn("[ERROR]<%s:%s> BUILD SUBREC LIST ERROR: Bad Position(%d)",
+      MOD, meth, position );
+    error( ldte.ERR_INTERNAL );
   end
 
   -- Call buildSearchPath() to give us a searchPath object that shows us
@@ -3930,8 +3933,9 @@ local function locatePosition( topRec, lsoList, sp, position )
       -- to isolate the Cold List part.
     end
   else
-      info("[NOTICE]<%s:%s> MUST IMPLEMENT BINARY MODE!!", MOD, meth );
-      error("[INCOMPLETE CODE] Binary Mode Not Implemented");
+      warn("[NOTICE]<%s:%s> MUST IMPLEMENT BINARY MODE!!", MOD, meth );
+      warn("[INCOMPLETE CODE] Binary Mode Not Implemented");
+      error( ldte.ERR_INTERNAL );
   end
   -- TODO:
   -- (*) Track Warm and Cold List Capacity
@@ -4576,7 +4580,7 @@ local function ldt_remove( topRec, binName )
     GP=F and trace("[STATUS]<%s:%s> Successful CREC REMOVE", MOD, meth );
   else
     warn("[ESR DELETE ERROR] RC(%d) Bin(%s)", MOD, meth, rc, binName);
-    error("[ESR DELETE ERROR] Cannot Delete Subrec");
+    error( ldte.ERR_SUBREC_DELETE );
   end
 
   topRec[binName] = nil;
@@ -4587,7 +4591,7 @@ local function ldt_remove( topRec, binName )
   if( recPropMap == nil or recPropMap[RPM_Magic] ~= MAGIC ) then
     warn("[INTERNAL ERROR]<%s:%s> Prop Map for LDT Hidden Bin invalid",
     MOD, meth );
-    error("[INTERNAL ERROR]: Invalid Record LDT Control Bin");
+    error( ldte.ERR_INTERNAL );
   end
   local ldtCount = recPropMap[RPM_LdtCount];
   if( ldtCount <= 1 ) then
@@ -4681,7 +4685,7 @@ function lstack_delete_subrecs( topRec, lsoBinName )
           GP=F and trace("[STATUS]<%s:%s> Successful CREC REMOVE", MOD, meth );
         else
           warn("[SUB DELETE ERROR] RC(%d) Bin(%s)", MOD, meth, rc, binName);
-          error("[SUB DELETE ERROR] Cannot Delete Subrec");
+          error( ldte.ERR_SUBREC_DELETE );
         end
       else
         warn("[ERROR]<%s:%s> Can't open Subrec: Digest(%s)", MOD, meth,
@@ -4719,7 +4723,7 @@ function lstack_set_storage_limit( topRec, lsoBinName, newLimit )
   if( type( newLimit ) ~= "number" or newLimit <= 0 ) then
     warn("[PARAMETER ERROR]<%s:%s> newLimit(%s) must be a positive number",
       MOD, meth, tostring( newLimit ));
-    error("[PARAMETER ERROR] newLimit must be a positive number");
+    error( ldte.ERR_INPUT_PARM );
   end
 
   -- Validate the lsoBinName before moving forward

@@ -36,7 +36,9 @@ ERR_SUBREC_POOL_DAMAGED  ="1420:LDT-Sub Record Pool is Damaged",
 ERR_SUBREC_DAMAGED       ="1421:LDT-Sub Record is Damaged",
 ERR_SUBREC_OPEN          ="1422:LDT-Sub Record Open Error",
 ERR_SUBREC_UPDATE        ="1423:LDT-Sub Record Update Error",
-ERR_SUBREC_CLOSE         ="1424:LDT-Sub Record Close Error"
+ERR_SUBREC_CREATE        ="1424:LDT-Sub Record Create Error"
+ERR_SUBREC_DELETE        ="1425:LDT-Sub Record Delete Error"
+ERR_SUBREC_CLOSE         ="1426:LDT-Sub Record Close Error"
 
 }
 
