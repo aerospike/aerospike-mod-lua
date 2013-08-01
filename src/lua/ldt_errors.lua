@@ -3,11 +3,11 @@
 -- ===================
 
 -- Remember when we were here last
-local MOD="2013_08_01.a"
+local MOD="2013_08_01.c"
 
 -- These errors align with the errors found in:
 -- client/aerospike/src/include/aerospike/as_status.h
--- as_status.h::AEROSPIKE_ERR_INTERNAL == ldt_errors.lua::ERR_INTERNAL
+-- as_status.h::AEROSPIKE_ERR_LDT_INTERNAL == ldt_errors.lua::ERR_INTERNAL
 local exports = {
 
 ERR_INTERNAL             ="1400:LDT-Internal Error",

@@ -1,8 +1,8 @@
 -- AS Large Set (LSET) Operations
--- Last Update July 26, 2013: TJL
+-- Last Update July 31, 2013: TJL
 --
 -- Keep this in sync with the version above.
-local MOD="lset_2013_07_26.j"; -- the module name used for tracing
+local MOD="lset_2013_07_31.i"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -26,9 +26,16 @@ local F=true; -- Set F (flag) to true to turn ON global print
 -- ===========================================
 -- || GLOBAL VALUES -- Local to this module ||
 -- ===========================================
--- set up our "outside" links
+-- set up our "outside" links.
+-- We use this to get our Hash Functions
 local  CRC32 = require('CRC32');
+-- We use this to get access to all of the Functions
 local functionTable = require('UdfFunctionTable');
+-- We import all of our error codes from "ldt_errors.lua" and we access
+-- them by prefixing them with "ldte.XXXX", so for example, an internal error
+-- return looks like this:
+-- error( ldte.ERR_INTERNAL );
+local ldte = require('ldt_errors');
 
 -- This flavor of LDT
 local LDT_LSET   = "LSET";
@@ -63,6 +70,10 @@ local SS_REGULAR ='R'; -- Using "Regular Storage" (regular) mode
 -- KeyType (KT) values
 local KT_ATOMIC  ='A'; -- the set value is just atomic (number or string)
 local KT_COMPLEX ='C'; -- the set value is complex. Use Function to get key.
+
+-- HashType (HT) values
+local HT_STATIC  ='S'; -- Use a FIXED set of bins for hash lists
+local HT_DYNAMIC ='D'; -- Use a DYNAMIC set of bins for hash lists
 
 -- Key Compare Function for Complex Objects
 -- By default, a complex object will have a "KEY" field, which the
@@ -156,17 +167,18 @@ local PM_SelfDigest            = 'D'; -- (Subrec): Digest of THIS Record
 -- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 -- Fields unique to lset & lmap 
 local M_StoreMode              = 'M'; -- SM_LIST or SM_BINARY
-local M_StoreLimit             = 'S'; -- Used for Eviction (eventually)
+local M_StoreLimit             = 'L'; -- Used for Eviction (eventually)
 local M_Transform              = 't'; -- Transform object to Binary form
 local M_UnTransform            = 'u'; -- UnTransform object from Binary form
 local M_KeyCompare             = 'k'; -- User Supplied Key Compare Function
 local M_StoreState             = 'S'; -- Store State (Compect or List)
+local M_HashType               = 'h'; -- Hash Type (static or dynamic)
 local M_BinaryStoreSize        = 'B'; -- Size of Object when in Binary form
 local M_KeyType                = 'K'; -- Key Type: Atomic or Complex
 local M_TotalCount             = 'C'; -- Total number of slots used
 local M_Modulo 				   = 'm'; -- Modulo used for Hash Function
 local M_ThreshHold             = 'H'; -- Threshold: Compact->Regular state
-local M_KeyFunction            = 'K'; -- User Supplied Key Extract Function
+local M_KeyFunction            = 'F'; -- User Supplied Key Extract Function
 -- ------------------------------------------------------------------------
 -- Maintain the LSET letter Mapping here, so that we never have a name
 -- collision: Obviously -- only one name can be associated with a character.
@@ -178,7 +190,7 @@ local M_KeyFunction            = 'K'; -- User Supplied Key Extract Function
 -- C:M_TotalCount             c:                         2:
 -- D:                         d:                         3:
 -- E:                         e:                         4:
--- F:                         f:                         5:
+-- F:M_KeyFunction            f:                         5:
 -- G:                         g:                         6:
 -- H:M_Threshold              h:                         7:
 -- I:                         i:                         8:
@@ -264,7 +276,7 @@ local function packageStandardList( lsetMap )
   lsetMap[M_KeyType] = KT_ATOMIC; -- Atomic Keys
   lsetMap[M_BinName] = LSET_CONTROL_BIN;
   lsetMap[M_Modulo]= DEFAULT_DISTRIB;
-  lsetMap[M_ThreshHold] = DEFAULT_THRESHHOLD; -- Rehash after this many have been inserted
+  lsetMap[M_ThreshHold] = DEFAULT_THRESHHOLD; -- Rehash after this many inserts
  
 end -- packageStandardList()
 
@@ -282,7 +294,7 @@ local function packageTestModeNumber( lsetMap )
   lsetMap[M_KeyType] = KT_ATOMIC; -- Atomic Keys
   lsetMap[M_BinName] = LSET_CONTROL_BIN;
   lsetMap[M_Modulo] = DEFAULT_DISTRIB;
-  lsetMap[M_ThreshHold] = DEFAULT_THRESHHOLD; -- Rehash after this many have been inserted
+  lsetMap[M_ThreshHold] = DEFAULT_THRESHHOLD; -- Rehash after this many inserts
  
 end -- packageTestModeList()
 
@@ -302,7 +314,7 @@ local function packageTestModeObject( lsetMap )
   lsetMap[M_KeyFunction] = "keyExtract"; -- Defined in UdfFunctionTable
   lsetMap[M_BinName] = LSET_CONTROL_BIN;
   lsetMap[M_Modulo] = DEFAULT_DISTRIB;
-  lsetMap[M_ThreshHold] = DEFAULT_THRESHHOLD; -- Rehash after this many have been inserted
+  lsetMap[M_ThreshHold] = DEFAULT_THRESHHOLD; -- Rehash after this many inserts
  
 end -- packageTestModeList()
 
@@ -321,7 +333,7 @@ local function packageTestModeList( lsetMap )
   lsetMap[M_KeyType] = KT_COMPLEX; -- Complex Object (need key function)
   lsetMap[M_BinName] = LSET_CONTROL_BIN;
   lsetMap[M_Modulo] = DEFAULT_DISTRIB;
-  lsetMap[M_ThreshHold] = DEFAULT_THRESHHOLD; -- Rehash after this many have been inserted
+  lsetMap[M_ThreshHold] = DEFAULT_THRESHHOLD; -- Rehash after this many inserts
  
 end -- packageTestModeList()
 
@@ -339,7 +351,7 @@ local function packageTestModeBinary( lsetMap )
   lsetMap[M_KeyType] = KT_COMPLEX; -- Complex Object (need key function)
   lsetMap[M_BinName] = LSET_CONTROL_BIN;
   lsetMap[M_Modulo] = DEFAULT_DISTRIB;
-  lsetMap[M_ThreshHold] = DEFAULT_THRESHHOLD; -- Rehash after this many have been inserted
+  lsetMap[M_ThreshHold] = DEFAULT_THRESHHOLD; -- Rehash after this many inserts
 
 end -- packageTestModeBinary( lsetMap )
 
@@ -361,7 +373,7 @@ local function packageDebugModeObject( lsetMap )
   lsetMap[M_KeyFunction] = "keyExtract"; -- Defined in UdfFunctionTable
   lsetMap[M_BinName] = LSET_CONTROL_BIN;
   lsetMap[M_Modulo] = DEFAULT_DISTRIB;
-  lsetMap[M_ThreshHold] = 4; -- Rehash after this many have been inserted
+  lsetMap[M_ThreshHold] = 4; -- Rehash after this many inserts
 
 end -- packageDebugModeObject()
 
@@ -382,7 +394,7 @@ local function packageDebugModeList( lsetMap )
   lsetMap[M_KeyType] = KT_ATOMIC; -- Atomic Keys
   lsetMap[M_BinName] = LSET_CONTROL_BIN;
   lsetMap[M_Modulo] = DEFAULT_DISTRIB;
-  lsetMap[M_ThreshHold] = 4; -- Rehash after this many have been inserted
+  lsetMap[M_ThreshHold] = 4; -- Rehash after this many inserts
 
 end -- packageDebugModeList()
 
@@ -402,7 +414,7 @@ local function packageDebugModeBinary( lsetMap )
   lsetMap[M_KeyType] = KT_COMPLEX; -- special function for list compare.
   lsetMap[M_BinName] = LSET_CONTROL_BIN;
   lsetMap[M_Modulo] = DEFAULT_DISTRIB;
-  lsetMap[M_ThreshHold] = 4; -- Rehash after this many have been inserted
+  lsetMap[M_ThreshHold] = 4; -- Rehash after this many inserts
 
 end -- packageDebugModeBinary( lsetMap )
 
@@ -425,7 +437,7 @@ local function packageDebugModeNumber( lsetMap )
   lsetMap[M_KeyType] = KT_ATOMIC; -- Simple Number (atomic) compare
   lsetMap[M_BinName] = LSET_CONTROL_BIN;
   lsetMap[M_Modulo] = DEFAULT_DISTRIB;
-  lsetMap[M_ThreshHold] = 4; -- Rehash after this many have been inserted
+  lsetMap[M_ThreshHold] = 4; -- Rehash after this many inserts
 
   GP=F and trace("[EXIT]: <%s:%s>:: CtrlMap(%s)",
     MOD, meth, tostring( lsetMap ));
@@ -449,7 +461,7 @@ local function packageStumbleUpon( lsetMap )
   lsetMap[M_KeyType] = KT_ATOMIC; -- Atomic Keys (a number)
   lsetMap[M_BinName] = LSET_CONTROL_BIN;
   lsetMap[M_Modulo] = DEFAULT_DISTRIB;
-  lsetMap[M_ThreshHold] = 100; -- Rehash after this many have been inserted
+  lsetMap[M_ThreshHold] = 100; -- Rehash after this many inserts
   
 end -- packageStumbleUpon( lsetMap )
 
@@ -573,6 +585,7 @@ local function lsetSummary( lsetList )
   
   -- General LSO Parms:
   resultMap.StoreMode            = lsetMap[M_StoreMode];
+  resultMap.StoreState           = lsetMap[M_StoreState];
   resultMap.StoreLimit           = lsetMap[M_StoreLimit];
   resultMap.Transform            = lsetMap[M_Transform];
   resultMap.UnTransform          = lsetMap[M_UnTransform];
@@ -644,20 +657,21 @@ local function initializeLSetMap(topRec, lsetBinName )
   lsetMap[M_LdrByteEntrySize]=  0;  -- Byte size of a fixed size Byte Entry
   lsetMap[M_LdrByteCountMax] =   0; -- Max # of Data Chunk Bytes (binary mode)
 
-  lsetMap[M_Transform]         = nil; -- applies only to complex lmap
-  lsetMap[M_UnTransform]         = nil; -- applies only to complex lmap
-  lsetMap[M_KeyCompare]         = nil; -- applies only to complex lmap
-  lsetMap[M_StoreState]  = SS_COMPACT; -- SM_LIST or SM_BINARY:
-  lsetMap[M_BinaryStoreSize] = nil; 
-  lsetMap[M_KeyType] = KT_ATOMIC; -- assume "atomic" values for now.
+  lsetMap[M_Transform]        = nil; -- applies only to complex lmap
+  lsetMap[M_UnTransform]      = nil; -- applies only to complex lmap
+  lsetMap[M_KeyCompare]       = nil; -- applies only to complex lmap
+  lsetMap[M_StoreState]       = SS_COMPACT; -- SM_LIST or SM_BINARY:
+  lsetMap[M_HashType]         = HT_STATIC; -- Static or Dynamic
+  lsetMap[M_BinaryStoreSize]  = nil; 
+  lsetMap[M_KeyType]          = KT_ATOMIC; -- assume "atomic" values for now.
   lsetMap[M_TotalCount] = 0; -- Count of both valid and deleted elements
   lsetMap[M_Modulo] = DEFAULT_DISTRIB;
-  lsetMap[M_ThreshHold] = 101; -- Rehash after this many have been inserted
+  lsetMap[M_ThreshHold] = 101; -- Rehash after this many inserts
 
   -- Put our new maps in a list, in the record, then store the record.
   list.append( lsetList, propMap );
   list.append( lsetList, lsetMap );
-  topRec[LSET_CTRL_BIN]            = lsetList;
+  topRec[LSET_CONTROL_BIN]            = lsetList;
 
   GP=F and info("[DEBUG]: <%s:%s> : LSET Summary after Init(%s)",
       MOD, meth , lsetSummaryString(lsetList));
@@ -782,25 +796,24 @@ local function computeSetBin( newValue, lsetMap )
   -- Check StoreState:  If we're in single bin mode, it's easy. Everything
   -- goes to Bin ZERO.
   local binNumber  = 0;
+  local key = newValue; -- assume atomic, change if complex.
   if lsetMap[M_StoreState] == SS_COMPACT then
     return 0
   else
-    if( lsetMap[M_KeyType] == KT_ATOMIC ) then
-      local key = newValue;
-    else
-      local key = getKeyValue( lsetMap, newValue );
+    if( lsetMap[M_KeyType] == KT_COMPLEX ) then
+      key = getKeyValue( lsetMap, newValue );
     end
 
     -- There are really only TWO primitive types that we can handle,
     -- and that is NUMBER and STRING.  Anything else is just wrong!!
     if type(key) == "number" then
-      binNumber  = numberHash( newValue, lsetMap[M_Modulo] );
+      binNumber  = numberHash( key, lsetMap[M_Modulo] );
     elseif type(key) == "string" then
-      binNumber  = stringHash( newValue, lsetMap[M_Modulo] );
+      binNumber  = stringHash( key, lsetMap[M_Modulo] );
     else
       warn("[INTERNAL ERROR]<%s:%s>Hash(%s) requires type number or string!",
         MOD, meth, type(key) );
-      error("Object or Key MUST be Number or String");
+      error( ldte.ERR_INTERNAL );
     end
   end
   GP=F and trace("[EXIT]: <%s:%s> Val(%s) BinNumber (%d) ",
@@ -819,7 +832,7 @@ end -- computeSetBin()
 local function listAppend( baseList, additionalList )
   if( baseList == nil ) then
     warn("[INTERNAL ERROR] Null baselist in listAppend()" );
-    error("[INTERNAL ERROR] Null baselist in listAppend()" );
+    error( ldte.ERR_INTERNAL );
   end
   local listSize = list.size( additionalList );
   for i = 1, listSize, 1 do
@@ -938,8 +951,7 @@ end -- unTransformComplexCompare()
 local function simpleScanList(resultList, lsetList, binList, value, flag ) 
   local meth = "simpleScanList()";
   GP=F and trace("[ENTER]: <%s:%s> Looking for V(%s), ListSize(%d) List(%s)",
-                 MOD, meth, tostring(value), list.size(binList),
-                 tostring(binList))
+     MOD, meth, tostring(value), list.size(binList), tostring(binList))
                  
   local propMap = lsetList[1]; 
   local lsetMap = lsetList[2];
@@ -964,13 +976,15 @@ local function simpleScanList(resultList, lsetList, binList, value, flag )
                    MOD, meth, i, tostring(value), tostring(binList[i]));
     -- a value that does not exist, will have a nil binList 
     -- so we'll skip this if-loop for it completely                  
-    if binList[i] ~= nil and binList[i] ~= FV_EMPTY then
+--  if binList[i] ~= nil and binList[i] ~= FV_EMPTY then
+    if binList[i] ~= nil then
       resultValue = unTransformSimpleCompare(unTransform, binList[i], value);
       if resultValue ~= nil then
         GP=F and trace("[EARLY EXIT]: <%s:%s> Found(%s)",
           MOD, meth, tostring(resultValue));
         if( flag == FV_DELETE ) then
-          binList[i] = FV_EMPTY; -- the value is NO MORE
+--        binList[i] = FV_EMPTY; -- the value is NO MORE
+          binList[i] = nil; -- the value is NO MORE
           -- Decrement ItemCount (valid entries) but TotalCount stays the same
           local itemCount = propMap[PM_ItemCount];
           propMap[PM_ItemCount] = itemCount - 1;
@@ -1049,13 +1063,15 @@ local function complexScanList(resultList, lsetList, objList, value, flag )
   for i = 1, list.size( objList ), 1 do
     GP=F and trace("[DEBUG]<%s:%s> It(%d) Comparing KEY(%s) with DataVal(%s)",
                    MOD, meth, i, tostring(key), tostring(objList[i]));
-    if objList[i] ~= nil and objList[i] ~= FV_EMPTY then
+--  if objList[i] ~= nil and objList[i] ~= FV_EMPTY then
+    if objList[i] ~= nil then
       resultValue = unTransformComplexCompare(unTransform, objList[i], key);
       if resultValue ~= nil then
         GP=F and trace("[EARLY EXIT]: <%s:%s> Found(%s)",
           MOD, meth, tostring(resultValue));
         if( flag == FV_DELETE ) then
-          objList[i] = FV_EMPTY; -- the value is NO MORE
+--        objList[i] = FV_EMPTY; -- the value is NO MORE
+          objList[i] = nil; -- the value is NO MORE
           -- Decrement ItemCount (valid entries) but TotalCount stays the same
           local itemCount = propMap[PM_ItemCount];
           propMap[PM_ItemCount] = itemCount - 1;
@@ -1129,7 +1145,8 @@ local function simpleScanListAll(topRec, resultList, lsetList)
 	if topRec[binName] ~= nil then
 		local objList = topRec[binName];
 		for i = 1, list.size( objList ), 1 do
-			if objList[i] ~= nil and objList[i] ~= FV_EMPTY then
+--          if objList[i] ~= nil and objList[i] ~= FV_EMPTY then
+			if objList[i] ~= nil then
 				retValue = objList[i]; 
 				if unTransform ~= nil then
 					retValue = unTransform( objList[i] );
@@ -1192,7 +1209,8 @@ local function complexScanListAll(topRec, resultList, lsetList)
 	local resultValue = nil;
     if topRec[binName] ~= nil then
 		for i = 1, list.size( binList ), 1 do
-			if binList[i] ~= nil and binList[i] ~= FV_EMPTY then
+--			if binList[i] ~= nil and binList[i] ~= FV_EMPTY then
+			if binList[i] ~= nil then
 				retValue = binList[i]; 
 				if unTransform ~= nil then
 					retValue = unTransform( binList[i] );
@@ -1234,7 +1252,7 @@ local function scanList( resultList, lsetList, binList, searchValue, flag,
   local propMap = lsetList[1]; 
   local lsetMap = lsetList[2];
   
-  GP=F and trace("[DEBUG]:<%s:%s> KeyType(%s) A(%s) C(%s)",
+  GP=F and trace("[DEBUG]:<%s:%s> KeyType(%s) Atomic=(%s) Complex=(%s)",
               MOD, meth, tostring(lsetMap[M_KeyType]), tostring(KT_ATOMIC),
               tostring(KT_COMPLEX) );
 
@@ -1275,7 +1293,7 @@ local function localInsert( topRec, lsetList, newValue, stats )
   if binList == nil then
     GP=F and warn("[INTERNAL ERROR]:<%s:%s> binList is nil: binName(%s)",
                  MOD, meth, tostring( binName ) );
-    error('Insert: INTERNAL ERROR: Nil Bin');
+    error( ldte.ERR_INSERT );
   else
     GP=F and trace("[INTERNAL DUMP]:<%s:%s> binList is NOT nil: binName(%s)",
                  MOD, meth, tostring( binName ) );
@@ -1292,8 +1310,13 @@ local function localInsert( topRec, lsetList, newValue, stats )
     
     propMap[PM_ItemCount] = itemCount + 1; -- number of valid items goes up
     lsetMap[M_TotalCount] = totalCount + 1; -- Total number of items goes up
+    GP=F and trace("[STATUS]<%s:%s>Updating Stats TC(%d) IC(%d)", MOD, meth,
+      lsetMap[M_TotalCount], propMap[PM_ItemCount] );
+  else
+    GP=F and trace("[STATUS]<%s:%s>NOT updating stats (%d)", MOD, meth, stats);
   end
-  topRec[LSET_CTRL_BIN] = lsetList;
+
+  topRec[LSET_CONTROL_BIN] = lsetList;
  
   GP=F and trace("[EXIT]: <%s:%s>Storing Record() with New Value(%s): Map(%s)",
                  MOD, meth, tostring( newValue ), tostring( lsetMap ) );
@@ -1328,7 +1351,7 @@ local function rehashSet( topRec, lsetBinName, lsetList )
   if singleBinList == nil then
     warn("[INTERNAL ERROR]:<%s:%s> Rehash can't use Empty Bin (%s) list",
          MOD, meth, tostring(singleBinName));
-    error('BAD BIN 0 LIST for Rehash');
+    error( ldte.ERR_INSERT );
   end
   local listCopy = list.take( singleBinList, list.size( singleBinList ));
   topRec[singleBinName] = nil; -- this will be reset shortly.
@@ -1364,11 +1387,11 @@ local function validateBinName( binName )
     MOD, meth, tostring(binName));
 
   if binName == nil  then
-    error('Bin Name Validation Error: Null BinName');
+    error( ldte.ERR_NULL_BIN_NAME );
   elseif type( binName ) ~= "string"  then
-    error('Bin Name Validation Error: BinName must be a string');
+    error( ldte.ERR_BIN_NAME_NOT_STRING );
   elseif string.len( binName ) > 14 then
-    error('Bin Name Validation Error: Exceeds 14 characters');
+    error( ldte.ERR_BIN_NAME_TOO_LONG );
   end
 end -- validateBinName
 
@@ -1414,14 +1437,14 @@ local function validateRecBinAndMap( topRec, userBinName, mustExist )
     -- Check Top Record Existence.
     if( not aerospike:exists( topRec ) and mustExist == true ) then
       warn("[ERROR EXIT]:<%s:%s>:Missing Record. Exit", MOD, meth );
-      error('Base Record Does NOT exist');
+      error( ldte.ERR_TOP_REC_NOT_FOUND );
     end
       
     -- Control Bin Must Exist, in this case, lsetList is what we check
     if( topRec[LSET_CONTROL_BIN] == nil ) then
       warn("[ERROR EXIT]: <%s:%s> LSET_BIN (%s) DOES NOT Exists",
             MOD, meth, tostring(LSET_CONTROL_BIN) );
-      error('LSET_BIN Does NOT exist');
+      error( ldte.ERR_BIN_DOES_NOT_EXIST );
     end
 
     -- check that our bin is (mostly) there
@@ -1429,10 +1452,10 @@ local function validateRecBinAndMap( topRec, userBinName, mustExist )
     local propMap = lsetList[1];
     local lsetMap  = lsetList[2];
     
-    if( propMap[PM_Magic] ~= MAGIC ) or propMap[PM_LdtType] ~= LDT_TYPE_LSET then
+    if(propMap[PM_Magic] ~= MAGIC) or propMap[PM_LdtType] ~= LDT_TYPE_LSET then
       GP=F and warn("[ERROR EXIT]:<%s:%s>LSET_BIN(%s) Corrupted:No magic:1",
             MOD, meth, LSET_CONTROL_BIN );
-      error('LSET_BIN Is Corrupted (No Magic)');
+      error( ldte.ERR_BIN_DAMAGED );
     end
   else
     -- OTHERWISE, we're just checking that nothing looks bad, but nothing
@@ -1447,7 +1470,7 @@ local function validateRecBinAndMap( topRec, userBinName, mustExist )
        if( propMap[PM_Magic] ~= MAGIC ) or propMap[PM_LdtType] ~= LDT_TYPE_LSET then
         GP=F and warn("[ERROR EXIT]:<%s:%s>LSET_BIN<%s:%s>Corrupted:No magic:2",
               MOD, meth, LSET_CONTROL_BIN, tostring( lsetMap ));
-        error('LSET_BIN Is Corrupted (No Magic::2)');
+        error( ldte.ERR_BIN_DAMAGED );
       end
     end
   end
@@ -1495,7 +1518,7 @@ function lset_create( topRec, lsetBinName, createSpec )
   if( topRec[LSET_CONTROL_BIN] ~= nil ) then
     GP=F and warn("[ERROR EXIT]: <%s:%s> LSET CONTROL BIN Already Exists",
                    MOD, meth );
-    error('LSET CONTROL BIN already exists');
+    error( ldte.ERR_BIN_ALREADY_EXISTS );
   end
   -- NOTE: Do NOT call validateRecBinAndMap().  Not needed here.
   
@@ -1517,10 +1540,10 @@ function lset_create( topRec, lsetBinName, createSpec )
   if createSpec ~= nil then 
     adjustLSetMap( lsetMap, createSpec );
     -- Changes to the map need to be re-appended to topRec  
-    local NewlsetList = list();
-    list.append( NewlsetList, propMap );
-    list.append( NewlsetList, lsetMap );
-    topRec[LSET_CTRL_BIN] = NewlsetList;
+--     local NewlsetList = list();
+--     list.append( NewlsetList, propMap );
+--     list.append( NewlsetList, lsetMap );
+--     topRec[LSET_CONTROL_BIN] = NewlsetList;
   end
 
   GP=F and trace("[DEBUG]: <%s:%s> : CTRL Map after Adjust(%s)",
@@ -1640,10 +1663,15 @@ local function localLSetInsert( topRec, lsetBinName, newValue, createSpec )
   -- lsetMap  = lsetList[2];
 
   local totalCount = lsetMap[M_TotalCount];
+  local itemCount = propMap[PM_ItemCount];
   
+  GP=F and trace("[DEBUG]<%s:%s>Store State(%s) Total Count(%d) ItemCount(%d)",
+    MOD, meth, tostring(lsetMap[M_StoreState]), totalCount, itemCount );
+
   if lsetMap[M_StoreState] == SS_COMPACT and
       totalCount >= lsetMap[M_ThreshHold]
   then
+    GP=F and trace("[DEBUG]<%s:%s> CALLING REHASH BEFORE INSERT", MOD, meth);
     rehashSet( topRec, lsetBinName, lsetList );
   end
 
@@ -1879,6 +1907,12 @@ end -- lset_search_then_filter()
 -- ======================================================================
 -- Find an element (i.e. search) and then remove it from the list.
 -- Return the element if found, return nil if not found.
+-- Parms:
+-- (*) topRec:
+-- (*) lsetBinName:
+-- (*) deleteValue:
+-- (*) filter: the NAME of the filter function (which we'll find in FuncTable)
+-- (*) fargs: Arguments to feed to the filter
 -- ======================================================================
 local function localLSetDelete( topRec, lsetBinName, deleteValue,
         filter, fargs)
@@ -1894,11 +1928,12 @@ local function localLSetDelete( topRec, lsetBinName, deleteValue,
   -- this will kick out with a long jump error() call.
   validateRecBinAndMap( topRec, lsetBinName, true );
 
+
   -- Check that the Set Structure is already there, otherwise, error
   if( topRec[LSET_CONTROL_BIN] == nil ) then
     GP=F and trace("[ERROR EXIT]: <%s:%s> LSetCtrlBin does not Exist",
                    MOD, meth );
-    error('LSetCtrlBin does not exist');
+    error( ldte.ERR_BIN_DOES_NOT_EXIST );
   end
 
   -- Find the appropriate bin for the Search value
@@ -1906,6 +1941,9 @@ local function localLSetDelete( topRec, lsetBinName, deleteValue,
   local propMap = lsetList[1]; 
   local lsetMap = lsetList[2];
   local binNumber = computeSetBin( deleteValue, lsetMap );
+
+  GP=F and trace("[DEBUG]<%s:%s> LSET Summary(%s)", MOD, meth,
+    lsetSummaryString( lsetList ));
 
   local binName = getBinName( binNumber );
   local binList = topRec[binName];
@@ -1917,18 +1955,18 @@ local function localLSetDelete( topRec, lsetBinName, deleteValue,
     -- We'll jump out with a NOT FOUND error
     warn("[WARNING]<%s:%s> Object(%s) not found", MOD, meth, 
       tostring(deleteValue));
-    error('Delete Error on Update Record: Record Not Found');
+    error( ldte.ERR_NOT_FOUND );
   elseif( rc == 0 and list.size( resultList ) > 0 ) then
     -- We found something -- and marked it nil -- so update the record
     topRec[binName] = binList;
     rc = aerospike:update( topRec );
     if( rc < 0 ) then
       warn("[ERROR]<%s:%s> Error(%d) aerospike:update(toprec)",MOD,meth,rc);
-      error('Delete Error on Update TOP Record');
+      error( ldte.ERR_DELETE );
     end
   else
     warn("[WARNING]<%s:%s> Unexpected Error(%d) from scanList()",MOD,meth,rc);
-    error('Internal Error during lset_delete');
+    error( ldte.ERR_DELETE );
   end
 
   GP=F and trace("[EXIT]: <%s:%s>: Delete RC(%d) ResultList(%s)",

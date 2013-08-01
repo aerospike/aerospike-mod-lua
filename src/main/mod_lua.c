@@ -259,7 +259,7 @@ static int cache_add_file(context * ctx, const char * filename) {
     char    key[CACHE_ENTRY_KEY_MAX]    = "";
     char    gen[CACHE_ENTRY_GEN_MAX]    = "";
     memcpy(key, filename, CACHE_ENTRY_KEY_MAX);
-    *(rindex(key, '.')) = '\0';
+//    *(rindex(key, '.')) = '\0'; // key is lua file name
     cache_init(ctx, key, gen);
     return 0;
 }

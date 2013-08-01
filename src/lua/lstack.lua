@@ -442,6 +442,7 @@ local PackageTestModeBinary      = "TestModeBinary";
 -- (*) A List Value (a 5 part tuple)
 -- (*) Special, packed (compressed) Binary storage
 local PackageProdListValBinStore = "ProdListValBinStore";
+local PackageDebugModeObject       = "DebugModeObject";
 local PackageDebugModeList       = "DebugModeList";
 local PackageDebugModeBinary     = "DebugModeBinary";
 
@@ -1441,6 +1442,33 @@ local function packageProdListValBinStore( lsoMap )
 end -- packageProdListValBinStore()
 
 -- ======================================================================
+-- Package = "DebugModeObject"
+-- Test the LSTACK in DEBUG MODE (using very small numbers to force it to
+-- make LOTS of warm and close objects with very few inserted items), and
+-- use LIST MODE.
+-- ======================================================================
+local function packageDebugModeObject( lsoMap )
+  -- General LSO Parms:
+  lsoMap[M_StoreMode]        = SM_LIST;
+  lsoMap[M_Transform]        = nil;
+  lsoMap[M_UnTransform]      = nil;
+  lsoMap[M_StoreLimit]       = 5000; -- 5000 entries
+  -- LSO Data Record (LDR) Chunk Settings: Passed into "Chunk Create"
+  lsoMap[M_LdrEntryCountMax] = 4; -- Max # of items in an LDR (List Mode)
+  lsoMap[M_LdrByteEntrySize] = 0;  -- Byte size of a fixed size Byte Entry
+  lsoMap[M_LdrByteCountMax]  = 0; -- Max # of BYTES in an LDR (binary mode)
+  -- Hot Entry List Settings: List of User Entries
+  lsoMap[M_HotListMax]       = 4; -- Max # for the List, when we transfer
+  lsoMap[M_HotListTransfer]  = 2; -- How much to Transfer at a time
+  -- Warm Digest List Settings: List of Digests of LSO Data Records
+  lsoMap[M_WarmListMax]      = 4; -- # of Warm Data Record Chunks
+  lsoMap[M_WarmListTransfer] = 2; -- # of Warm Data Record Chunks
+  -- Cold Directory List Settings: List of Directory Pages
+  lsoMap[M_ColdListMax]      = 4; -- # of list entries in a Cold dir node
+  lsoMap[M_ColdDirRecMax]    = 2; -- Max# of Cold DIRECTORY Records
+end -- packageDebugModeObject()
+
+-- ======================================================================
 -- Package = "DebugModeList"
 -- Test the LSTACK in DEBUG MODE (using very small numbers to force it to
 -- make LOTS of warm and close objects with very few inserted items), and
@@ -1543,6 +1571,8 @@ local function adjustLsoList( lsoList, argListMap )
             packageTestModeBinary( lsoMap );
         elseif value == PackageProdListValBinStore then
             packageProdListValBinStore( lsoMap );
+        elseif value == PackageDebugModeObject then
+            packageDebugModeObject( lsoMap );
         elseif value == PackageDebugModeList then
             packageDebugModeList( lsoMap );
         elseif value == PackageDebugModeBinary then

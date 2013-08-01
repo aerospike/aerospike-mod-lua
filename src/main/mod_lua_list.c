@@ -201,6 +201,8 @@ static int mod_lua_list_newindex(lua_State * l) {
             as_val * val = mod_lua_takeval(l, 3);
             if ( val ) {
                 as_list_set(list, idx - 1, val); 
+            } else {
+            	as_list_set(list, idx - 1, &as_nil ); // @TOBY @LDT
             }
         }
     }
