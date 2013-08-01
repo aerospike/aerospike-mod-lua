@@ -2778,7 +2778,7 @@ local function ldrDeleteList(topRec, ldrChunkRec,listIndex,entryList )
   GP=F and info("[DEBUG]: <%s:%s> TotalItems(%d) ListSize(%d)",
     MOD, meth, totalItemsToDelete, totalListSize );
     
-  if totalListSize > totalItemsToDelete then
+  if totalListSize < totalItemsToDelete then
     warn("[ERROR]: <%s:%s> INTERNAL ERROR: LDR list is shorter than deletion list(%s)",
       MOD, meth, tostring( ldrMap ));
     return 0; -- nothing written
@@ -2907,6 +2907,13 @@ local function localLMapDelete( topRec, lmapBinName, searchValue,
   	local digest_bin = computeSetBin( tostring(searchValue), lmapCtrlInfo );  	
     -- local digest_bin = index; 
 	-- Dont do an open_subrec, call our local function to handle this 
+	
+		  -- sanity check for absent entries 
+	  if  digestlist[digest_bin] == 0 then 
+	      warn("[ERROR]: <%s:%s>: Digest-List index is empty for this value %s ", MOD, meth, tostring(searchValue));
+	  	  return 0; 
+	  end 
+	
 	local stringDigest = tostring( digestlist[digest_bin] );
 	local src = createSubrecContext();
 	
@@ -2996,3 +3003,388 @@ function lmap_delete_then_filter( topRec, lmapBinName, searchValue,
                           filter, fargs )
 end -- lset_delete_then_filter()
 
+local function ldrSearchList(topRec, resultList, ldrChunkRec, listIndex, entryList )
+
+  local meth = "ldrSearchList()";
+  --GP=F and info("[ENTER]: <%s:%s> Index(%d) List(%s)",
+ --   MOD, meth, listIndex, tostring( entryList ) );
+
+  local lMapList = topRec[LMAP_CONTROL_BIN]; 
+  local propMap = lMapList[1]; 
+  local lmapCtrlInfo = lMapList[2];
+  local binName = propMap[PM_BinName];
+  local self_digest = record.digest( ldrChunkRec ); 
+
+  -- These 2 get assigned in lmapLdrListChunkCreate() to point to the ctrl-map. 
+  local ldrMap = ldrChunkRec[LDR_CTRL_BIN];
+  local ldrValueList = ldrChunkRec[LDR_LIST_BIN];
+  -- local chunkIndexStart = list.size( ldrValueList ) + 1;
+  local ldrByteArray = ldrChunkRec[LDR_BNRY_BIN]; -- might be nil
+
+  GP=F and info("[DEBUG]: <%s:%s> Chunk: CTRL(%s) List(%s)",
+    MOD, meth, tostring( ldrMap ), tostring( ldrValueList ));
+
+  -- Note: Since the index of Lua arrays start with 1, that makes our
+  -- math for lengths and space off by 1. So, we're often adding or
+  -- subtracting 1 to adjust.
+  
+  -- Code to return all the elements of the ldr-list array, iff 
+  -- entryList size is 0 
+  
+  if list.size( entryList ) == 0 then 
+  	-- return the entire list
+  	GP=F and info(" Search string is NULL, returning the entire LDR list"); 
+  	for i = 0, list.size( ldrValueList ), 1 do
+  		list.append(resultList, ldrValueList[i]);
+  	end
+  	return 0; 
+  end 
+  
+  local totalItemsToSearch = list.size( entryList ) + 1 - listIndex;
+  local totalListSize = list.size( ldrValueList );
+ -- local itemSlotsAvailable = (lmapCtrlInfo[M_LdrEntryCountMax] - chunkIndexStart) + 1;
+  
+  GP=F and info("[DEBUG]: <%s:%s> TotalItems(%d) ListSize(%d)",
+    MOD, meth, totalItemsToSearch, totalListSize );
+    
+  if totalListSize < totalItemsToSearch then
+  	-- TODO : Check with Toby about this condition 
+  	-- also applicable to deletes in regular mode 
+    warn("[ERROR]: <%s:%s> INTERNAL ERROR: LDR list is shorter than Search list(%s)",
+      MOD, meth, tostring( ldrMap ));
+    return 0; -- nothing written
+  end
+ 
+  -- Basically, crawl thru the list, copy-over all except our item to the new list
+  -- re-append back to ldrmap. Easy !
+  
+   GP=F and info("!!!![DEBUG]:<%s:%s>:ListMode:  Search target list %s !!!!!!!!!!",
+     MOD, meth, tostring( ldrValueList ) );
+  
+  -- This will also work if we search for more than 1 item in the ldr-list
+  for j = 0, list.size( entryList ), 1 do
+	  for i = 0, list.size( ldrValueList ), 1 do
+	      if(ldrValueList[i] == entryList[j]) then 
+	      	list.append(resultList, ldrValueList[i]); 
+	      end
+	  end -- for each remaining entry
+ 	  -- Nothing to be stored back in the LDR ctrl map 
+  end
+  
+  -- This is List Mode.  Easy.  Just append to the list.
+  GP=F and info("!!!![DEBUG]:<%s:%s>:Result List after Search OP %s!!!!!!!!!!",
+       MOD, meth, tostring( resultList ) );
+       
+  -- Nothing else to be done for search, no toprec/subrec updates etc 
+  return 0;  
+end 
+
+-- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- Scan a List, append all the items in the list to result. 
+-- This is SIMPLE SCAN, where we are assuming ATOMIC values.
+-- Parms:
+-- (*) objList: the list of values from the record
+-- Return: resultlist 
+-- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+local function simpleScanListAll(topRec, resultList, lMapList, binName) 
+
+  local meth = "simpleScanListAll()";
+  GP=F and trace("[ENTER]: <%s:%s> Appending all the elements of List ",
+                 MOD, meth)
+
+  local propMap = lMapList[1]; 
+  local lmapCtrlInfo = lMapList[2]; 
+  local listCount = 0;
+  local transform = nil;
+  local unTransform = nil;
+  local retValue = nil;
+
+  -- Check once for the transform/untransform functions -- so we don't need
+  -- to do it inside the loop.
+  if lmapCtrlInfo[M_Transform] ~= nil then
+    transform = functionTable[lmapCtrlInfo[M_Transform]];
+  end
+
+  if lmapCtrlInfo[M_UnTransform] ~= nil then
+    unTransform = functionTable[lmapCtrlInfo[M_UnTransform]];
+  end
+   
+    GP=F and trace(" Parsing through :%s ", tostring(binName))
+
+	if topRec[binName] ~= nil then
+		local objList = topRec[binName];
+		for i = 1, list.size( objList ), 1 do
+			if objList[i] ~= nil and objList[i] ~= FV_EMPTY then
+				retValue = objList[i]; 
+				if unTransform ~= nil then
+					retValue = unTransform( objList[i] );
+				end
+		        list.append( resultList, retValue);
+				listCount = listCount + 1; 
+			end -- end if not null and not empty
+		end -- end for each item in the list
+	end -- end of topRec null check 
+
+  GP=F and trace("[EXIT]: <%s:%s> Appending %d elements to ResultList ",
+                 MOD, meth, listCount)
+
+  return 0; 
+end -- simpleScanListAll
+
+-- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- Scan a List, append all the items in the list to result.
+--
+-- TODO :  
+-- This is COMPLEX SCAN, currently an exact copy of the simpleScanListAll().
+-- I need to first write an unTransformComplexCompare() which involves
+-- using the compare function, to write a new complexScanListAll()  
+--
+-- Parms:
+-- (*) binList: the list of values from the record
+-- Return: resultlist 
+-- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+local function complexScanListAll(topRec, resultList, lsetList, binName) 
+  local meth = "complexScanListAll()";
+  GP=F and trace("[ENTER]: <%s:%s> Appending all the elements of List ",
+                 MOD, meth)
+                 
+  local propMap = lMapList[1]; 
+  local lmapCtrlInfo = lMapList[2]; 
+  local listCount = 0;
+  local transform = nil;
+  local unTransform = nil;
+  local retValue = nil;
+  
+  if lmapCtrlInfo[M_Transform] ~= nil then
+    transform = functionTable[lmapCtrlInfo[M_Transform]];
+  end
+
+  if lmapCtrlInfo[M_UnTransform] ~= nil then
+    unTransform = functionTable[lmapCtrlInfo[M_UnTransform]];
+  end
+
+    GP=F and trace(" Parsing through :%s ", tostring(binName))
+	local binList = topRec[binName];
+	local resultValue = nil;
+    if topRec[binName] ~= nil then
+		for i = 1, list.size( binList ), 1 do
+			if binList[i] ~= nil and binList[i] ~= FV_EMPTY then
+				retValue = binList[i]; 
+				if unTransform ~= nil then
+					retValue = unTransform( binList[i] );
+				end
+		  	    list.append( resultList, retValue);
+				listCount = listCount + 1; 
+   			end -- end if not null and not empty
+  		end -- end for each item in the list
+    end -- end of topRec null check 
+
+ GP=F and trace("[EXIT]: <%s:%s> Appending %d elements to ResultList ",
+                 MOD, meth, listCount)
+
+  return 0; 
+end -- complexScanListAll
+
+local function localLMapSearchAll(resultList,topRec,lmapBinName,filter,fargs)
+  
+  local meth = "localLMapSearchAll()";
+  rc = 0; -- start out OK.
+  GP=F and info("[ENTER]: <%s:%s> Search for Value(%s)",
+                 MOD, meth, tostring( searchValue ) );
+                 
+  local lMapList = topRec[LMAP_CONTROL_BIN]; -- The main lmap
+  local propMap = lMapList[1]; 
+  local lmapCtrlInfo = lMapList[2]; 
+ -- local binNumber = computeSetBin( searchValue, lMapList );
+  local binName = lmapBinName;
+  
+  -- Validate the topRec, the bin and the map.  If anything is weird, then
+  -- this will kick out with a long jump error() call.
+  validateLmapParams( topRec, lmapBinName, true );
+
+  if lmapCtrlInfo[M_StoreState] == SS_COMPACT then 
+	  -- Find the appropriate bin for the Search value
+	  GP=F and info(" !!!!!! Compact Mode LMAP Search !!!!!");
+	  local binList = topRec[binName];
+	  
+	  if lmapCtrlInfo[M_KeyType] == KT_ATOMIC then
+		rc = simpleScanListAll(topRec, resultList, lMapList, binName) 
+	  else
+		rc = complexScanListAll(topRec, resultList, lMapList, binName)
+	  end
+	
+	  GP=F and info("[EXIT]: <%s:%s>: Search Returns (%s)",
+	                 MOD, meth, tostring(result));
+  else -- regular searchAll
+	  -- HACK : TODO : Fix this number to list conversion  
+	  local digestlist = lmapCtrlInfo[M_DigestList];
+	  local src = createSubrecContext();
+	
+	  -- for each digest in the digest-list, open that subrec, send it to our 
+	  -- routine, then get the list-back and keep appending and building the
+	  -- final resultList. 
+	  
+	  for i = 1, list.size( digestlist ), 1 do
+	  
+	      if digestlist[i] ~= 0 then 
+		  	  local stringDigest = tostring( digestlist[i] );
+	          local IndexLdrChunk = openSubrec( src, topRec, stringDigest );
+			  GP=F and info("[DEBUG]: <%s:%s> Calling ldrSearchList: List(%s)",
+			           MOD, meth, tostring( entryList ));
+			  
+			  -- temporary list having result per digest-entry LDR 
+			  local ldrlist = list(); 
+			  local entryList  = list(); 
+			  -- The magical function that is going to fix our deletion :)
+			  rc = ldrSearchList(topRec, ldrlist, IndexLdrChunk, 0, entryList );
+			  	
+			  if( rc == nil or rc == 0 ) then
+			  	GP=F and info("AllSearch returned SUCCESS %s", tostring(ldrlist));
+			  	for j = 1, list.size(ldrlist), 1 do 
+      				list.append( resultList, ldrlist[j] );
+    			end
+			  else
+			  	GP=F and info("Search returned FAILURE");
+			  end
+		  end 
+	  
+	  end -- end of digest-list for loop 
+  end -- end of else 
+  	  
+  return resultList;
+end 
+-- ======================================================================
+-- |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- || as Large Map Search
+-- |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- ======================================================================
+-- 
+-- Return the item if the item exists in the set.
+-- So, similar to insert -- take the new value and locate the right bin.
+-- Then, scan the bin's list for that item (linear scan).
+--
+-- ======================================================================
+local function localLMapSearch(resultList, topRec, lmapBinName, searchValue,
+                filter, fargs)
+
+  local meth = "localLMapSearch()";
+  rc = 0; -- start out OK.
+  GP=F and info("[ENTER]: <%s:%s> Search for Value(%s)",
+                 MOD, meth, tostring( searchValue ) );
+                 
+  local lMapList = topRec[LMAP_CONTROL_BIN]; -- The main lmap
+  local propMap = lMapList[1]; 
+  local lmapCtrlInfo = lMapList[2]; 
+ -- local binNumber = computeSetBin( searchValue, lMapList );
+  local binName = lmapBinName;
+  
+  -- Validate the topRec, the bin and the map.  If anything is weird, then
+  -- this will kick out with a long jump error() call.
+  validateLmapParams( topRec, lmapBinName, true );
+
+  if lmapCtrlInfo[M_StoreState] == SS_COMPACT then 
+	  -- Find the appropriate bin for the Search value
+	  GP=F and info(" !!!!!! Compact Mode LMAP Search !!!!!");
+	  local binList = topRec[binName];
+	  -- here binList is the target-list for a search. 
+
+	  rc = 
+	    scanList(topRec, resultList,lMapList,binList,searchValue,FV_SCAN,filter,fargs);
+	
+	  GP=F and info("[EXIT]: <%s:%s>: Search Returns (%s)",
+	                 MOD, meth, tostring(result));
+	                 
+  else
+  	  GP=F and info(" !!!!!! Regular Mode LMAP Search !!!!!");
+      local digestlist = lmapCtrlInfo[M_DigestList]; 
+  	
+  	  GP=F and info(" DigestList %s Size: %s", tostring(digestlist), tostring(list.size(digestlist)));
+  	
+  	  -- First obtain the hash for this entry
+  	  local digest_bin = computeSetBin( tostring(searchValue), lmapCtrlInfo );  	
+  	  
+      -- local digest_bin = index; 
+	  -- Dont do an open_subrec, call our local function to handle this
+	  
+	  -- sanity check for absent entries 
+	  if  digestlist[digest_bin] == 0 then 
+	      warn("[ERROR]: <%s:%s>: Digest-List index is empty for this value %s ", MOD, meth, tostring(searchValue));
+	  	  return resultList;
+	  end 
+	  
+	  local stringDigest = tostring( digestlist[digest_bin] );
+	  local src = createSubrecContext();
+	
+      -- GP=F and info(" Digest index : %d string-value: %s", digest_bin, stringdigest );
+	
+      local IndexLdrChunk = openSubrec( src, topRec, stringDigest );
+   	
+	  if IndexLdrChunk == nil then
+ 	  	-- sanity check 
+        warn("[ERROR]: <%s:%s>: IndexLdrChunk nil or empty", MOD, meth);
+        error('Internal Error on open_subrec(1)');
+      end
+    
+      local delChunkDigest = record.digest( IndexLdrChunk );
+    
+      GP=F and info("!!!!!!!!! Find match digest value: %s", tostring(delChunkDigest));
+    
+	  -- HACK : TODO : Fix this number to list conversion  
+      local entryList = list(); 
+      list.append(entryList, searchValue); 
+  
+      local totalEntryCount = list.size( entryList );
+      GP=F and info("[DEBUG]: <%s:%s> Calling ldrSearchList: List(%s)",
+           MOD, meth, tostring( entryList ));
+  
+      -- The magical function that is going to fix our deletion :)
+      rc = ldrSearchList(topRec, resultList, IndexLdrChunk, 1,entryList );
+  	
+  	  if( rc == nil or rc == 0 ) then
+  	  	 GP=F and info("Search returned SUCCESS");
+  	  else
+  	  	 GP=F and info("Search returned FAILURE");
+  	  end
+  	  
+  	  -- No need to update toprec, subrec or any such stats. Just return resultList
+  	  	
+  end -- end of regular mode else part
+
+  return resultList;
+end -- function localLMapSearch()
+
+
+-- ======================================================================
+-- lmap_search() -- with and without filter
+-- ======================================================================
+function lmap_search( topRec, lmapBinName, searchValue )
+  GP=F and info("\n\n >>>>>>>>> API[ lmap_search ] <<<<<<<<<< \n\n");
+  resultList = list();
+  -- if we dont have a searchValue, get all the list elements.
+  -- Note that this means an empty searchValue which is not 
+  -- the same as a nil or a NULL searchValue
+  if( searchValue == nil ) then
+    -- if no search value, use the faster SCAN (searchALL)
+    return localLMapSearchAll(resultList,topRec,lmapBinName,nil,nil)
+  else
+	return localLMapSearch(resultList,topRec,lmapBinName,searchValue,nil,nil)
+  end
+end -- lmap_search()
+
+-- ======================================================================
+function
+lmap_search_then_filter( topRec, lmapBinName, searchValue, filter, fargs )
+  GP=F and info("\n\n >>>>>>>>> API[ lmap_search_then_filter ] <<<<<<<<<< \n\n");
+  resultList = list();
+  -- if we dont have a searchValue, get all the list elements.
+  -- Note that this means an empty searchValue which is not 
+  -- the same as a nil or a NULL searchValue
+  if( searchValue == nil ) then
+    -- if no search value, use the faster SCAN (searchALL)
+	return localLMapSearchAll(resultList,topRec,lmapBinName,filter,fargs)
+  else
+  	return localLMapSearch(resultList,topRec,lmapBinName,searchValue,filter,fargs)
+  end
+end -- lmap_search_then_filter()
