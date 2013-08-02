@@ -1,8 +1,8 @@
 -- Large Stack Object (LSO or LSTACK) Operations
--- lstack.lua:  July 29, 2013
+-- lstack.lua:  August 01, 2013
 --
 -- Module Marker: Keep this in sync with the stated version
-local MOD="lstack_2013_07_29.h"; -- the module name used for tracing
+local MOD="lstack_2013_08_01.d"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -16,7 +16,7 @@ local G_LDT_VERSION = 1.1;
 -- in the server).
 -- ======================================================================
 local GP=true; -- Leave this ALWAYS true (but value seems not to matter)
-local F=false; -- Set F (flag) to true to turn ON global print
+local F=true; -- Set F (flag) to true to turn ON global print
 
 -- ======================================================================
 -- LSTACK TODO LIST:
@@ -443,6 +443,7 @@ local PackageTestModeBinary      = "TestModeBinary";
 -- (*) Special, packed (compressed) Binary storage
 local PackageProdListValBinStore = "ProdListValBinStore";
 local PackageDebugModeObject       = "DebugModeObject";
+local PackageDebugModeObjectPred   = "DebugModeObjectPred";
 local PackageDebugModeList       = "DebugModeList";
 local PackageDebugModeBinary     = "DebugModeBinary";
 
@@ -1469,6 +1470,35 @@ local function packageDebugModeObject( lsoMap )
   lsoMap[M_ColdDirRecMax]    = 2; -- Max# of Cold DIRECTORY Records
 end -- packageDebugModeObject()
 
+
+-- ======================================================================
+-- Package = "DebugModeObjectPred"
+-- Test the LSTACK in DEBUG MODE (using very small numbers to force it to
+-- make LOTS of warm and close objects with very few inserted items), and
+-- use LIST MODE.
+-- Test with Objects and the General Range Filter Predicate
+-- ======================================================================
+local function packageDebugModeObjectPred( lsoMap )
+  -- General LSO Parms:
+  lsoMap[M_StoreMode]        = SM_LIST;
+  lsoMap[M_Transform]        = nil;
+  lsoMap[M_UnTransform]      = nil;
+  lsoMap[M_StoreLimit]       = 5000; -- 5000 entries
+  -- LSO Data Record (LDR) Chunk Settings: Passed into "Chunk Create"
+  lsoMap[M_LdrEntryCountMax] = 4; -- Max # of items in an LDR (List Mode)
+  lsoMap[M_LdrByteEntrySize] = 0;  -- Byte size of a fixed size Byte Entry
+  lsoMap[M_LdrByteCountMax]  = 0; -- Max # of BYTES in an LDR (binary mode)
+  -- Hot Entry List Settings: List of User Entries
+  lsoMap[M_HotListMax]       = 4; -- Max # for the List, when we transfer
+  lsoMap[M_HotListTransfer]  = 2; -- How much to Transfer at a time
+  -- Warm Digest List Settings: List of Digests of LSO Data Records
+  lsoMap[M_WarmListMax]      = 4; -- # of Warm Data Record Chunks
+  lsoMap[M_WarmListTransfer] = 2; -- # of Warm Data Record Chunks
+  -- Cold Directory List Settings: List of Directory Pages
+  lsoMap[M_ColdListMax]      = 4; -- # of list entries in a Cold dir node
+  lsoMap[M_ColdDirRecMax]    = 2; -- Max# of Cold DIRECTORY Records
+end -- packageDebugModeObjectPred()
+
 -- ======================================================================
 -- Package = "DebugModeList"
 -- Test the LSTACK in DEBUG MODE (using very small numbers to force it to
@@ -1760,7 +1790,10 @@ local function readEntryList( resultList, lsoList, entryList, count,
       resultValue = readValue;
     end
 
-    list.append( resultList, readValue );
+    if( resultValue ~= nil ) then
+      list.append( resultList, readValue );
+    end
+
 --    GP=F and trace("[DEBUG]:<%s:%s>Appended Val(%s) to ResultList(%s)",
 --      MOD, meth, tostring( readValue ), tostring(resultList) );
     
