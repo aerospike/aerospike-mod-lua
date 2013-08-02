@@ -1,8 +1,8 @@
 -- Large Ordered List (llist.lua)
--- Last Update July 30,  2013: tjl
+-- Last Update August 02,  2013: tjl
 --
 -- Keep this MOD value in sync with version above
-local MOD = "llist_2013_07_30.c"; -- module name used for tracing.  
+local MOD = "llist_2013_08_02.c"; -- module name used for tracing.  
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -68,6 +68,24 @@ local F=true; -- Set F (flag) to true to turn ON global print
 -- and then later assign the function body to them.
 -- ======================================================================
 local insertParentNode;
+
+-- ++==================++
+-- || External Modules ||
+-- ++==================++
+-- Set up our "outside" links.
+-- Get addressability to the Function Table: Used for compress/transform,
+-- keyExtract, Filters, etc. 
+local functionTable = require('UdfFunctionTable');
+
+-- When we're ready, we'll move all of our common routines into ldt_common,
+-- which will help code maintenance and management.
+-- local LDTC = require('ldt_common');
+
+-- We import all of our error codes from "ldt_errors.lua" and we access
+-- them by prefixing them with "ldte.XXXX", so for example, an internal error
+-- return looks like this:
+-- error( ldte.ERR_INTERNAL );
+local ldte = require('ldt_errors');
 
 -- ======================================================================
 -- The Large Ordered List is a sorted list, organized according to a Key
@@ -682,10 +700,13 @@ initializeLList( topRec, ldtBinName, transFunc, untransFunc )
   list.append( ldtList, ldtMap ); -- ldtMap used here, not ldtList
   topRec[ldtBinName] = ldtList;
 
-  -- Set the type of this record to LDT (it might already be set by another
-  -- LDT in this same record).
-  record.set_type( topRec, RT_LDT ); -- LDT Type Rec
-
+  -- If the topRec already has an LDT CONTROL BIN (with a valid map in it),
+  -- then we know that the main LDT record type has already been set.
+  -- Otherwise, we should set it. This function will check, and if necessary,
+  -- set the control bin.
+  -- This method also sets this toprec as an LDT type record.
+  setLdtRecordType( topRec );
+  
   -- Set the BIN Flag type to show that this is an LDT Bin, with all of
   -- the special priviledges and restrictions that go with it.
   GP=F and trace("[DEBUG]:<%s:%s>About to call record.set_flags(Bin(%s)F(%s))",
@@ -2088,12 +2109,6 @@ local function createAndInitESR( src, topRec, ldtList )
   esrRec[SUBREC_PROP_BIN] = esrPropMap;
   -- NOTE: We have to make sure that the TopRec propMap also gets saved.
 
-  -- If the topRec already has an LDT CONTROL BIN (with a valid map in it),
-  -- then we know that the main LDT record type has already been set.
-  -- Otherwise, we should set it. This function will check, and if necessary,
-  -- set the control bin.
-  setLdtRecordType( topRec );
-  
   -- Set the record type as "ESR"
   trace("[TRACE]<%s:%s> SETTING RECORD TYPE(%s)", MOD, meth, tostring(RT_ESR));
   record.set_type( esrRec, RT_ESR );
@@ -5016,7 +5031,7 @@ end -- function llist_delete()
 
 
 -- ========================================================================
--- ld_remove() -- Remove the LDT entirely from the record.
+-- ldtRemove() -- Remove the LDT entirely from the record.
 -- NOTE: This could eventually be moved to COMMON, and be "ldt_remove()",
 -- since it will work the same way for all LDTs.
 -- Remove the ESR, Null out the topRec bin.
@@ -5033,8 +5048,8 @@ end -- function llist_delete()
 --   res = 0: all is well
 --   res = -1: Some sort of error
 -- ========================================================================
-local function ldt_remove( topRec, binName )
-  local meth = "ldt_remove()";
+local function ldtRemove( topRec, binName )
+  local meth = "ldtRemove()";
 
   GP=F and trace("[ENTER]: <%s:%s> binName(%s)",
     MOD, meth, tostring(binName));
@@ -5086,7 +5101,7 @@ local function ldt_remove( topRec, binName )
   GP=F and trace("[EXIT]: <%s:%s> : Done.  RC(%s)", MOD, meth, tostring(rc));
 
   return rc;
-end -- ldt_remove()
+end -- ldtRemove()
 
 
 -- ========================================================================
@@ -5108,8 +5123,9 @@ end -- ldt_remove()
 --   res = -1: Some sort of error
 -- ========================================================================
 function llist_remove( topRec, lsoBinName )
-  GP=F and info("\n\n >>>>>>>>> API[ LLIST REMOVE ] <<<<<<<<<< \n\n");
-  return ldt_remove( topRec, lsoBinName );
+  GP=F and info("\n\n >>>>>>>>> API[ LLIST REMOVE ](%s) <<<<<<<<<< \n\n",
+    lsoBinName );
+  return ldtRemove( topRec, lsoBinName );
 end
 
 

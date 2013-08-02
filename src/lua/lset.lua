@@ -1,8 +1,8 @@
 -- AS Large Set (LSET) Operations
--- Last Update August 1, 2013: TJL
+-- Last Update August 2, 2013: TJL
 --
 -- Keep this in sync with the version above.
-local MOD="lset_2013_08_01.n"; -- the module name used for tracing
+local MOD="lset_2013_08_02.c"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -1573,7 +1573,7 @@ function lset_create( topRec, lsetBinName, createSpec )
   local lsetMap = lsetList[2]; 
   
   -- Set the type of this record to LDT (it might already be set)
-  --record.set_type( topRec, RT_LDT ); -- LDT Type Rec
+  record.set_type( topRec, RT_LDT ); -- LDT Type Rec
   
   -- If the user has passed in some settings that override our defaults
   -- (createSpec) then apply them now.
@@ -1611,7 +1611,11 @@ function lset_create( topRec, lsetBinName, createSpec )
   end
 
   GP=F and trace("[EXIT]: <%s:%s> : Done.  RC(%d)", MOD, meth, rc );
-  return rc;
+  if( rc == nil or rc == 0 ) then
+      return 0;
+  else
+      error( ldte.ERR_CREATE );
+  end
 end -- lset_create()
 
 -- ======================================================================
@@ -1716,6 +1720,8 @@ local function localLSetInsert( topRec, lsetBinName, newValue, createSpec )
   end
 
   -- Call our local multi-purpose insert() to do the job.(Update Stats)
+  -- localInsert() will jump out with its own error call if something bad
+  -- happens so no return code (or checking) needed here.
   localInsert( topRec, lsetList, newValue, 1 );
 
   -- NOTE: the update of the TOP RECORD (LSET_CONTROL_BIN) has already
@@ -1736,7 +1742,11 @@ local function localLSetInsert( topRec, lsetBinName, newValue, createSpec )
   end
 
   GP=F and trace("[EXIT]: <%s:%s> : Done.  RC(%d)", MOD, meth, rc );
-  return rc
+  if( rc == nil or rc == 0 ) then
+      return 0;
+  else
+      error( ldte.ERR_INSERT );
+  end
 end -- function localLSetInsert()
 
 

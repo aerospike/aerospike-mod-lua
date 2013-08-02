@@ -1,8 +1,8 @@
 -- Large Stack Object (LSO or LSTACK) Operations
--- lstack.lua:  August 01, 2013
+-- lstack.lua:  August 02, 2013
 --
 -- Module Marker: Keep this in sync with the stated version
-local MOD="lstack_2013_08_01.h"; -- the module name used for tracing
+local MOD="lstack_2013_08_02.d"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -963,6 +963,56 @@ local function listAppend( baseList, additionalList )
 end -- listAppend()
 
 
+-- ======================================================================
+-- When we create the initial LDT Control Bin for the entire record (the
+-- first time ANY LDT is initialized in a record), we create a property
+-- map in it with various values.
+-- TODO: Move this to LDT_COMMON (7/21/2013)
+-- ======================================================================
+local function setLdtRecordType( topRec )
+  local meth = "setLdtRecordType()";
+  GP=F and trace("[ENTER]<%s:%s>", MOD, meth );
+
+  local rc = 0;
+  local recPropMap;
+
+  -- Check for existence of the main record control bin.  If that exists,
+  -- then we're already done.  Otherwise, we create the control bin, we
+  -- set the topRec record type (to LDT) and we praise the lord for yet
+  -- another miracle LDT birth.
+  if( topRec[REC_LDT_CTRL_BIN] == nil ) then
+    GP=F and trace("[DEBUG]<%s:%s>Creating Record LDT Map", MOD, meth );
+    record.set_type( topRec, RT_LDT );
+    recPropMap = map();
+    -- vinfo will be a 5 byte value, but it will be easier for us to store
+    -- 6 bytes -- and just leave the high order one at zero.
+    -- Initialize the VINFO value to all zeros.
+    local vinfo = bytes(6);
+    bytes.put_int16(vinfo, 1, 0 );
+    bytes.put_int16(vinfo, 3, 0 );
+    bytes.put_int16(vinfo, 5, 0 );
+    recPropMap[RPM_VInfo] = vinfo; 
+    recPropMap[RPM_LdtCount] = 1; -- this is the first one.
+    recPropMap[RPM_Magic] = MAGIC;
+  else
+    -- Not much to do -- increment the LDT count for this record.
+    recPropMap = topRec[REC_LDT_CTRL_BIN];
+    local ldtCount = recPropMap[RPM_LdtCount];
+    recPropMap[RPM_LdtCount] = ldtCount + 1;
+    GP=F and trace("[DEBUG]<%s:%s>Record LDT Map Exists: Bump LDT Count(%d)",
+      MOD, meth, ldtCount + 1 );
+  end
+  topRec[REC_LDT_CTRL_BIN] = recPropMap;
+
+  -- Now that we've changed the top rec, do the update to make sure the
+  -- changes are saved.
+  rc = aerospike:update( topRec );
+
+  GP=F and trace("[EXIT]<%s:%s> rc(%d)", MOD, meth, rc );
+  return rc;
+end -- setLdtRecordType()
+
+
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- <><><><> <Initialize Control Maps> <Initialize Control Maps> <><><><>
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
@@ -1061,9 +1111,12 @@ local function initializeLso( topRec, lsoBinName )
   GP=F and trace("[DEBUG]: <%s:%s> : Lso Summary after Init(%s)",
       MOD, meth , lsoSummaryString(lsoList));
 
-  -- Set the type of this record to LDT (it might already be set by another
-  -- LDT in this same record).
-  record.set_type( topRec, RT_LDT ); -- LDT Type Rec
+  -- If the topRec already has an LDT CONTROL BIN (with a valid map in it),
+  -- then we know that the main LDT record type has already been set.
+  -- Otherwise, we should set it. This function will check, and if necessary,
+  -- set the control bin.
+  -- This method will also call record.set_type().
+  setLdtRecordType( topRec );
 
   -- Set the BIN Flag type to show that this is an LDT Bin, with all of
   -- the special priviledges and restrictions that go with it.
@@ -1108,56 +1161,6 @@ ldtInitPropMap( propMap, esrDigest, selfDigest, topDigest, rtFlag, topPropMap )
   propMap[PM_SelfDigest]   = selfDigest;
 
 end -- ldtInitPropMap()
-
--- ======================================================================
--- When we create the initial LDT Control Bin for the entire record (the
--- first time ANY LDT is initialized in a record), we create a property
--- map in it with various values.
--- TODO: Move this to LDT_COMMON (7/21/2013)
--- ======================================================================
-local function setLdtRecordType( topRec )
-  local meth = "setLdtRecordType()";
-  GP=F and trace("[ENTER]<%s:%s>", MOD, meth );
-
-  local rc = 0;
-  local recPropMap;
-
-  -- Check for existence of the main record control bin.  If that exists,
-  -- then we're already done.  Otherwise, we create the control bin, we
-  -- set the topRec record type (to LDT) and we praise the lord for yet
-  -- another miracle LDT birth.
-  if( topRec[REC_LDT_CTRL_BIN] == nil ) then
-    GP=F and trace("[DEBUG]<%s:%s>Creating Record LDT Map", MOD, meth );
-    record.set_type( topRec, RT_LDT );
-    recPropMap = map();
-    -- vinfo will be a 5 byte value, but it will be easier for us to store
-    -- 6 bytes -- and just leave the high order one at zero.
-    -- Initialize the VINFO value to all zeros.
-    local vinfo = bytes(6);
-    bytes.put_int16(vinfo, 1, 0 );
-    bytes.put_int16(vinfo, 3, 0 );
-    bytes.put_int16(vinfo, 5, 0 );
-    recPropMap[RPM_VInfo] = vinfo; 
-    recPropMap[RPM_LdtCount] = 1; -- this is the first one.
-    recPropMap[RPM_Magic] = MAGIC;
-  else
-    -- Not much to do -- increment the LDT count for this record.
-    recPropMap = topRec[REC_LDT_CTRL_BIN];
-    local ldtCount = recPropMap[RPM_LdtCount];
-    recPropMap[RPM_LdtCount] = ldtCount + 1;
-    GP=F and trace("[DEBUG]<%s:%s>Record LDT Map Exists: Bump LDT Count(%d)",
-      MOD, meth, ldtCount + 1 );
-  end
-  topRec[REC_LDT_CTRL_BIN] = recPropMap;
-
-  -- Now that we've changed the top rec, do the update to make sure the
-  -- changes are saved.
-  rc = aerospike:update( topRec );
-
-  GP=F and trace("[EXIT]<%s:%s> rc(%d)", MOD, meth, rc );
-  return rc;
-end -- setLdtRecordType()
-
 -- ======================================================================
 -- Create and Init ESR
 -- ======================================================================
@@ -1171,7 +1174,7 @@ end -- setLdtRecordType()
 -- and read.  It must be the same for all LDT recs.
 --
 -- ======================================================================
-local function createAndInitESR(src,topRec, lsoList )
+local function createAndInitESR(src, topRec, lsoList )
   local meth = "createAndInitESR()";
   GP=F and trace("[ENTER]: <%s:%s>", MOD, meth );
 
@@ -1201,11 +1204,6 @@ local function createAndInitESR(src,topRec, lsoList )
   -- NOTE: We have to make sure that the TopRec propMap also gets saved.
   esrRec[SUBREC_PROP_BIN] = esrPropMap;
 
-  -- If the topRec already has an LDT CONTROL BIN (with a valid map in it),
-  -- then we know that the main LDT record type has already been set.
-  -- Otherwise, we should set it. This function will check, and if necessary,
-  -- set the control bin.
-  setLdtRecordType( topRec );
   
   -- Set the record type as "ESR"
   trace("[TRACE]<%s:%s> SETTING RECORD TYPE(%s)", MOD, meth, tostring(RT_ESR));
@@ -4575,8 +4573,8 @@ end -- lstack_subrec_list()
 
 
 -- ========================================================================
--- ld_remove() -- Remove the LDT entirely from the record.
--- NOTE: This could eventually be moved to COMMON, and be "ldt_remove()",
+-- ldtRemove() -- Remove the LDT entirely from the record.
+-- NOTE: This could eventually be moved to COMMON, and be "ldtRemove()",
 -- since it will work the same way for all LDTs.
 -- Remove the ESR, Null out the topRec bin.
 -- ========================================================================
@@ -4592,8 +4590,8 @@ end -- lstack_subrec_list()
 --   res = 0: all is well
 --   res = -1: Some sort of error
 -- ========================================================================
-local function ldt_remove( topRec, binName )
-  local meth = "ldt_remove()";
+local function ldtRemove( topRec, binName )
+  local meth = "ldtRemove()";
 
   GP=F and trace("[ENTER]<%s:%s> binName(%s)", MOD, meth, tostring(binName));
   local rc = 0; -- start off optimistic
@@ -4639,7 +4637,7 @@ local function ldt_remove( topRec, binName )
   rc = aerospike:update( topRec );
 
   return rc;
-end -- ldt_remove()
+end -- ldtRemove()
 
 
 -- ========================================================================
@@ -4661,8 +4659,12 @@ end -- ldt_remove()
 --   res = -1: Some sort of error
 -- ========================================================================
 function lstack_remove( topRec, lsoBinName )
-  return ldt_remove( topRec, lsoBinName );
+  return ldtRemove( topRec, lsoBinName );
 end -- lstack_remove()
+
+function ldt_remove( topRec, lsoBinName )
+  return ldtRemove( topRec, lsoBinName );
+end -- ldt_remove()
 
 -- ========================================================================
 -- lstack_delete_subrecs() -- Delete the entire lstack -- in pieces.
