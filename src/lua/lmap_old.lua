@@ -3027,6 +3027,19 @@ local function ldrSearchList(topRec, resultList, ldrChunkRec, listIndex, entryLi
   -- Note: Since the index of Lua arrays start with 1, that makes our
   -- math for lengths and space off by 1. So, we're often adding or
   -- subtracting 1 to adjust.
+  
+  -- Code to return all the elements of the ldr-list array, iff 
+  -- entryList size is 0 
+  
+  if list.size( entryList ) == 0 then 
+  	-- return the entire list
+  	GP=F and info(" Search string is NULL, returning the entire LDR list"); 
+  	for i = 0, list.size( ldrValueList ), 1 do
+  		list.append(resultList, ldrValueList[i]);
+  	end
+  	return 0; 
+  end 
+  
   local totalItemsToSearch = list.size( entryList ) + 1 - listIndex;
   local totalListSize = list.size( ldrValueList );
  -- local itemSlotsAvailable = (lmapCtrlInfo[M_LdrEntryCountMax] - chunkIndexStart) + 1;
@@ -3066,8 +3079,181 @@ local function ldrSearchList(topRec, resultList, ldrChunkRec, listIndex, entryLi
   return 0;  
 end 
 
+-- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- Scan a List, append all the items in the list to result. 
+-- This is SIMPLE SCAN, where we are assuming ATOMIC values.
+-- Parms:
+-- (*) objList: the list of values from the record
+-- Return: resultlist 
+-- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+local function simpleScanListAll(topRec, resultList, lMapList, binName) 
+
+  local meth = "simpleScanListAll()";
+  GP=F and trace("[ENTER]: <%s:%s> Appending all the elements of List ",
+                 MOD, meth)
+
+  local propMap = lMapList[1]; 
+  local lmapCtrlInfo = lMapList[2]; 
+  local listCount = 0;
+  local transform = nil;
+  local unTransform = nil;
+  local retValue = nil;
+
+  -- Check once for the transform/untransform functions -- so we don't need
+  -- to do it inside the loop.
+  if lmapCtrlInfo[M_Transform] ~= nil then
+    transform = functionTable[lmapCtrlInfo[M_Transform]];
+  end
+
+  if lmapCtrlInfo[M_UnTransform] ~= nil then
+    unTransform = functionTable[lmapCtrlInfo[M_UnTransform]];
+  end
+   
+    GP=F and trace(" Parsing through :%s ", tostring(binName))
+
+	if topRec[binName] ~= nil then
+		local objList = topRec[binName];
+		for i = 1, list.size( objList ), 1 do
+			if objList[i] ~= nil and objList[i] ~= FV_EMPTY then
+				retValue = objList[i]; 
+				if unTransform ~= nil then
+					retValue = unTransform( objList[i] );
+				end
+		        list.append( resultList, retValue);
+				listCount = listCount + 1; 
+			end -- end if not null and not empty
+		end -- end for each item in the list
+	end -- end of topRec null check 
+
+  GP=F and trace("[EXIT]: <%s:%s> Appending %d elements to ResultList ",
+                 MOD, meth, listCount)
+
+  return 0; 
+end -- simpleScanListAll
+
+-- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- Scan a List, append all the items in the list to result.
+--
+-- TODO :  
+-- This is COMPLEX SCAN, currently an exact copy of the simpleScanListAll().
+-- I need to first write an unTransformComplexCompare() which involves
+-- using the compare function, to write a new complexScanListAll()  
+--
+-- Parms:
+-- (*) binList: the list of values from the record
+-- Return: resultlist 
+-- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+local function complexScanListAll(topRec, resultList, lsetList, binName) 
+  local meth = "complexScanListAll()";
+  GP=F and trace("[ENTER]: <%s:%s> Appending all the elements of List ",
+                 MOD, meth)
+                 
+  local propMap = lMapList[1]; 
+  local lmapCtrlInfo = lMapList[2]; 
+  local listCount = 0;
+  local transform = nil;
+  local unTransform = nil;
+  local retValue = nil;
+  
+  if lmapCtrlInfo[M_Transform] ~= nil then
+    transform = functionTable[lmapCtrlInfo[M_Transform]];
+  end
+
+  if lmapCtrlInfo[M_UnTransform] ~= nil then
+    unTransform = functionTable[lmapCtrlInfo[M_UnTransform]];
+  end
+
+    GP=F and trace(" Parsing through :%s ", tostring(binName))
+	local binList = topRec[binName];
+	local resultValue = nil;
+    if topRec[binName] ~= nil then
+		for i = 1, list.size( binList ), 1 do
+			if binList[i] ~= nil and binList[i] ~= FV_EMPTY then
+				retValue = binList[i]; 
+				if unTransform ~= nil then
+					retValue = unTransform( binList[i] );
+				end
+		  	    list.append( resultList, retValue);
+				listCount = listCount + 1; 
+   			end -- end if not null and not empty
+  		end -- end for each item in the list
+    end -- end of topRec null check 
+
+ GP=F and trace("[EXIT]: <%s:%s> Appending %d elements to ResultList ",
+                 MOD, meth, listCount)
+
+  return 0; 
+end -- complexScanListAll
+
 local function localLMapSearchAll(resultList,topRec,lmapBinName,filter,fargs)
-	return 0; 
+  
+  local meth = "localLMapSearchAll()";
+  rc = 0; -- start out OK.
+  GP=F and info("[ENTER]: <%s:%s> Search for Value(%s)",
+                 MOD, meth, tostring( searchValue ) );
+                 
+  local lMapList = topRec[LMAP_CONTROL_BIN]; -- The main lmap
+  local propMap = lMapList[1]; 
+  local lmapCtrlInfo = lMapList[2]; 
+ -- local binNumber = computeSetBin( searchValue, lMapList );
+  local binName = lmapBinName;
+  
+  -- Validate the topRec, the bin and the map.  If anything is weird, then
+  -- this will kick out with a long jump error() call.
+  validateLmapParams( topRec, lmapBinName, true );
+
+  if lmapCtrlInfo[M_StoreState] == SS_COMPACT then 
+	  -- Find the appropriate bin for the Search value
+	  GP=F and info(" !!!!!! Compact Mode LMAP Search !!!!!");
+	  local binList = topRec[binName];
+	  
+	  if lmapCtrlInfo[M_KeyType] == KT_ATOMIC then
+		rc = simpleScanListAll(topRec, resultList, lMapList, binName) 
+	  else
+		rc = complexScanListAll(topRec, resultList, lMapList, binName)
+	  end
+	
+	  GP=F and info("[EXIT]: <%s:%s>: Search Returns (%s)",
+	                 MOD, meth, tostring(result));
+  else -- regular searchAll
+	  -- HACK : TODO : Fix this number to list conversion  
+	  local digestlist = lmapCtrlInfo[M_DigestList];
+	  local src = createSubrecContext();
+	
+	  -- for each digest in the digest-list, open that subrec, send it to our 
+	  -- routine, then get the list-back and keep appending and building the
+	  -- final resultList. 
+	  
+	  for i = 1, list.size( digestlist ), 1 do
+	  
+	      if digestlist[i] ~= 0 then 
+		  	  local stringDigest = tostring( digestlist[i] );
+	          local IndexLdrChunk = openSubrec( src, topRec, stringDigest );
+			  GP=F and info("[DEBUG]: <%s:%s> Calling ldrSearchList: List(%s)",
+			           MOD, meth, tostring( entryList ));
+			  
+			  -- temporary list having result per digest-entry LDR 
+			  local ldrlist = list(); 
+			  local entryList  = list(); 
+			  -- The magical function that is going to fix our deletion :)
+			  rc = ldrSearchList(topRec, ldrlist, IndexLdrChunk, 0, entryList );
+			  	
+			  if( rc == nil or rc == 0 ) then
+			  	GP=F and info("AllSearch returned SUCCESS %s", tostring(ldrlist));
+			  	for j = 1, list.size(ldrlist), 1 do 
+      				list.append( resultList, ldrlist[j] );
+    			end
+			  else
+			  	GP=F and info("Search returned FAILURE");
+			  end
+		  end 
+	  
+	  end -- end of digest-list for loop 
+  end -- end of else 
+  	  
+  return resultList;
 end 
 -- ======================================================================
 -- |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
@@ -3102,9 +3288,10 @@ local function localLMapSearch(resultList, topRec, lmapBinName, searchValue,
 	  -- Find the appropriate bin for the Search value
 	  GP=F and info(" !!!!!! Compact Mode LMAP Search !!!!!");
 	  local binList = topRec[binName];
-	  
+	  -- here binList is the target-list for a search. 
+
 	  rc = 
-	    scanList(resultList,lMapList,binList,searchValue,FV_SCAN,filter,fargs);
+	    scanList(topRec, resultList,lMapList,binList,searchValue,FV_SCAN,filter,fargs);
 	
 	  GP=F and info("[EXIT]: <%s:%s>: Search Returns (%s)",
 	                 MOD, meth, tostring(result));
