@@ -2,7 +2,7 @@
 -- lstack.lua:  August 01, 2013
 --
 -- Module Marker: Keep this in sync with the stated version
-local MOD="lstack_2013_08_01.d"; -- the module name used for tracing
+local MOD="lstack_2013_08_01.h"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -352,6 +352,7 @@ local G_STORE_LIMIT = 20000  -- Store no more than this.  User can override.
 local functionTable = require('UdfFunctionTable');
 -- Common LDT functions that are used by ALL of the LDTs.
 -- local LDTC = require('ldt_common');
+local ldte=require('ldt_errors');
 
 -- StoreMode (SM) values (which storage Mode are we using?)
 local SM_BINARY ='B'; -- Using a Transform function to compact values
