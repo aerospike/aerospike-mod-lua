@@ -1004,7 +1004,16 @@ local function simpleScanList(resultList, lsetList, binList, value, flag,
           return 0 -- show caller nothing got inserted (don't count it)
         end
         -- Found it -- return result (only for scan and delete, not insert)
-        list.append( resultList, resultValue );
+
+        local resultFiltered;
+
+        if filter ~= nil and fargs ~= nil then
+                resultFiltered = functionTable[func]( resultValue, fargs );
+        else
+                resultFiltered = resultValue;
+        end
+
+        list.append( resultList, resultFiltered );
         return 0; -- Found it. Return with success.
       end -- end if found it
     end -- end if not null and not empty
@@ -1102,8 +1111,16 @@ local function complexScanList(resultList, lsetList, objList, key, value, flag,
           return 0 -- show caller nothing got inserted (don't count it)
         end
         -- Found it -- return result (only for scan and delete, not insert)
-        list.append( resultList, resultValue );
-        return 0;
+        local resultFiltered;
+
+        if filter ~= nil and fargs ~= nil then
+                resultFiltered = functionTable[func]( resultValue, fargs );
+        else
+                resultFiltered = resultValue;
+        end
+
+        list.append( resultList, resultFiltered );
+        return 0; -- Found it. Return with success.
       end -- end if found it
     end -- end if value not nil or empty
   end -- for each list entry in this objList
@@ -1178,9 +1195,17 @@ local function simpleScanListAll(topRec, resultList, lsetList, filter, fargs)
 					retValue = unTransform( objList[i] );
 				end
 
-                -- APPLY FILTER HERE
+	                	-- APPLY FILTER HERE
+			        local resultFiltered;
+
+			        if filter ~= nil and fargs ~= nil then
+	                	resultFiltered = functionTable[func]( retValue, fargs );
+        			else
+                		resultFiltered = retValue;
+        			end
+
+        			list.append( resultList, resultFiltered );
                 
-		        list.append( resultList, retValue);
 				listCount = listCount + 1; 
    			end -- end if not null and not empty
   		end -- end for each item in the list
@@ -1248,10 +1273,15 @@ local function complexScanListAll(topRec, resultList, lsetList, filter, fargs)
 				if unTransform ~= nil then
 					retValue = unTransform( binList[i] );
 				end
+			        local resultFiltered;
 
-                -- APPLY FILTER HERE
-                
-		  	    list.append( resultList, retValue);
+			        if filter ~= nil and fargs ~= nil then
+	                	resultFiltered = functionTable[func]( retValue, fargs );
+        			else
+                		resultFiltered = retValue;
+        			end
+
+        			list.append( resultList, resultFiltered );
 				listCount = listCount + 1; 
    			end -- end if not null and not empty
   		end -- end for each item in the list
@@ -1889,9 +1919,9 @@ local function localLSetSearchAll(resultList, topRec, lsetBinName,
   
  
   if lsetMap[M_KeyType] == KT_ATOMIC then
-	rc = simpleScanListAll(topRec, resultList, lsetList) 
+	rc = simpleScanListAll(topRec, resultList, lsetList, filter, fargs) 
   else
-	rc = complexScanListAll(topRec, resultList, lsetList)
+	rc = complexScanListAll(topRec, resultList, lsetList, filter, fargs)
   end
 
   GP=F and trace("[EXIT]: <%s:%s>: Search Returns (%s) Size : %d",
