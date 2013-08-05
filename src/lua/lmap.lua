@@ -1170,12 +1170,6 @@ end
 function lmap_create( topRec, lmapBinName, createSpec )
   local meth = "lmap_create()";
   
-  if (aerospike:exists( topRec )) then
-     warn("[INTERNAL ERROR]:<%s:%s> TopRecord already exists ",  
-           MOD, meth);
-     error('Insertion failed because TopRecord already exists !!'); 
-  end
-  
   GP=F and info("[ENTER]: <%s:%s> Bin(%s) createSpec(%s)",
                  MOD, meth, tostring(lmapBinName), tostring(createSpec) );
                  
@@ -1814,10 +1808,6 @@ local function ldrInsertList(ldrChunkRec,lMapList,listIndex,insertList )
   GP=F and info("[DEBUG]:<%s:%s>:ListMode:Copying From(%d) to (%d) Amount(%d)",
     MOD, meth, listIndex, chunkIndexStart, newItemsStored );
     
- -- if tostring(ldrValueList) == nil or list.size( ldrValueList ) == 0 then 
- -- 	  ldrValueList = list();
- -- end
-  
   -- Special case of starting at ZERO -- since we're adding, not
   -- directly indexing the array at zero (Lua arrays start at 1).
   for i = 0, (newItemsStored - 1), 1 do
@@ -2182,6 +2172,12 @@ local function lmapLdrSubRecInsert( src, topRec, lmapBinName, lmapList, entryIte
   	warn("[ERROR]: <%s:%s>: Some items might not be inserted to lmap list-size : %d inserted-items : %d", 
   	      MOD, meth, list.size( entryList ),  itemsLeft);
   end 
+  
+  local itemCount = propMap[PM_ItemCount];
+  local totalCount = lmapCtrlInfo[M_TotalCount];
+  propMap[PM_ItemCount] = itemCount + countWritten; -- number of valid items goes up
+  lmapCtrlInfo[M_TotalCount] = totalCount + countWritten; -- Total number of items goes up
+  
   
   GP=F and info("[DEBUG]: <%s:%s> Chunk Summary before storage(%s)",
     MOD, meth, ldrChunkSummary( topLdrChunk ));
@@ -2572,7 +2568,6 @@ local function localInsert( topRec, lmapBinName, newValue, stats )
     local lmapCtrlInfo = lMapList[2];
     local itemCount = propMap[PM_ItemCount];
     local totalCount = lmapCtrlInfo[M_TotalCount];
-    
     propMap[PM_ItemCount] = itemCount + 1; -- number of valid items goes up
     lmapCtrlInfo[M_TotalCount] = totalCount + 1; -- Total number of items goes up
  
@@ -2930,7 +2925,8 @@ local function ldrDeleteList(topRec, lmapBinName, ldrChunkRec, listIndex, entryL
     		else
       			resultFiltered = ldrValueList[i];
     		end
-        	list.append( resultList, resultFiltered );
+                GP=F and info(" ValueList %s, result: %s", tostring(ldrValueList[i]), tostring(resultFiltered));
+        	list.append( newlist, resultFiltered );
 	      end
 	  end -- for each remaining entry
   	 -- Store our modifications back into the Chunk Record Bins
@@ -3558,7 +3554,7 @@ lmap_search_then_filter( topRec, lmapBinName, searchValue, filter, fargs )
 end -- lmap_search_then_filter()
 
 -- ========================================================================
--- ld_remove() -- Remove the LDT entirely from the record.
+-- ldt_remove() -- Remove the LDT entirely from the record.
 -- NOTE: This could eventually be moved to COMMON, and be "ldt_remove()",
 -- since it will work the same way for all LDTs.
 -- Remove the ESR, Null out the topRec bin.
@@ -3636,7 +3632,7 @@ local function ldt_remove( topRec, lmapBinName )
 end -- ldt_remove()
 
 -- ========================================================================
--- lstack_remove() -- Remove the LDT entirely from the record.
+-- lset_remove() -- Remove the LDT entirely from the record.
 -- NOTE: This could eventually be moved to COMMON, and be "ldt_remove()",
 -- since it will work the same way for all LDTs.
 -- Remove the ESR, Null out the topRec bin.
@@ -3688,7 +3684,7 @@ function lmap_size( topRec, lmapBinName )
   GP=F and trace("[ENTER1]: <%s:%s> ldtBinName(%s)",
   MOD, meth, tostring(lmapBinName));
 
-  GP=F and info("\n\n >>>>>>>>> API[ LLIST SIZE ] <<<<<<<<<< \n\n");
+  GP=F and info("\n\n >>>>>>>>> API[ LMAP SIZE ] <<<<<<<<<< \n\n");
 
   -- Validate the topRec, the bin and the map.  If anything is weird, then
   -- this will kick out with a long jump error() call.
@@ -3700,7 +3696,7 @@ function lmap_size( topRec, lmapBinName )
   local lmapCtrlInfo = lMapList[2]; 
   local itemCount = propMap[PM_ItemCount];
 
-  GP=F and trace("[EXIT]: <%s:%s> : size(%d)", MOD, meth, itemCount );
+  GP=F and info("[EXIT]: <%s:%s> : SIZE(%d)", MOD, meth, itemCount );
 
   return itemCount;
 end -- function lmap_size()
@@ -3728,3 +3724,25 @@ function lmap_config( topRec, lmapBinName )
   
   return config;
 end -- function lmap_config()
+
+
+-- ========================================================================
+-- lmap_dump()
+-- ========================================================================
+-- Dump the full contents of the Large Map, with Separate Hash Groups
+-- shown in the result.
+-- Return a LIST of lists -- with Each List marked with it's Hash Name.
+-- ========================================================================
+function lmap_dump( topRec, binName )
+  local meth = "lmap_dump()";
+  GP=F and trace("[ENTER]<%s:%s> ", MOD, meth)
+  GP=F and trace("[ENTER]<%s:%s> LLIST BIN(%s)",
+    MOD, meth, tostring(lmapBinName) );
+
+  resultList = list();
+  GP=F and info("\n\n  >>>>>>>> API[ DUMP ] <<<<<<<<<<<<<<<<<< \n");
+
+  return localLMapSearchAll(resultList,topRec,lmapBinName,nil,nil);
+
+end -- lmap_dump();
+

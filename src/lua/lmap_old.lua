@@ -781,6 +781,7 @@ local function validateLmapParams( topRec, lmapBinName, mustExist )
 
     -- check that our bin is (mostly) there
     local lMapList = topRec[lmapBinName] ; -- The main lsoMap structure
+
     -- Extract the property map and lso control map from the lso bin list.
     local propMap = lMapList[1];
     local lMapCtrlInfo  = lMapList[2];
@@ -2166,9 +2167,6 @@ local function lmapLdrSubRecInsert( src, topRec, lmapBinName, lmapList, entryIte
     MOD, meth, tostring( entryList ));
   
   -- Do an ldr insert from index 1 of entryList into topLdrChunk . 
-  -- In the case of lset, this is how we do the insert: 
-  --  scanList( nil, tmplsetList, binList, newValue, FV_INSERT, nil, nil );
-  -- For inserts, binList is just the value of topRec[binName]
     
   local countWritten = ldrInsert( topLdrChunk, lMapList, 1, entryList );
   GP=F and info(" !!!!!!! countWritten %d !!!", countWritten);
@@ -2317,7 +2315,7 @@ end -- applyTransform()
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 
-local function simpleScanList(topRec, resultList, lMapList, binList, value, flag ) 
+local function simpleScanList(topRec, resultList, lMapList, binList, value, flag, filter, fargs) 
   local meth = "simpleScanList()";
   GP=F and info("[ENTER]: <%s:%s> Looking for V(%s), ListSize(%d) List(%s)",
                  MOD, meth, tostring(value), list.size(binList),
@@ -2351,8 +2349,10 @@ local function simpleScanList(topRec, resultList, lMapList, binList, value, flag
     if binList[i] ~= nil and binList[i] ~= FV_EMPTY then
       resultValue = unTransformSimpleCompare(unTransform, binList[i], value);
       if resultValue ~= nil then
+
         GP=F and trace("[EARLY EXIT]: <%s:%s> Found(%s)",
           MOD, meth, tostring(resultValue));
+
         if( flag == FV_DELETE ) then
           binList[i] = FV_EMPTY; -- the value is NO MORE
           -- Decrement ItemCount (valid entries) but TotalCount stays the same
@@ -2362,8 +2362,21 @@ local function simpleScanList(topRec, resultList, lMapList, binList, value, flag
         elseif flag == FV_INSERT then
           return 0 -- show caller nothing got inserted (don't count it)
         end
+
         -- Found it -- return result (only for scan and delete, not insert)
-        list.append( resultList, resultValue );
+	-- After the transform, we can apply the filter, if it is present.  If
+        -- the value passes the filter (or if there is no filter), then add it
+        -- to the resultList.
+
+        local resultFiltered;
+
+	if filter ~= nil and fargs ~= nil then
+        	resultFiltered = functionTable[func]( resultValue, fargs );
+    	else
+      		resultFiltered = resultValue;
+    	end
+
+        list.append( resultList, resultFiltered );
         return 0; -- Found it. Return with success.
       end -- end if found it
     end -- end if not null and not empty
@@ -2405,7 +2418,8 @@ end -- simpleScanList
 -- For insert (FV_INSERT):
 -- Return 0 if found (and not inserted), otherwise 1 if inserted.
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
-local function complexScanList(topRec, lMapList, binList, value, flag ) 
+
+local function complexScanList(topRec, resultList, lMapList, binList, key, value, flag, filter, fargs) 
   local meth = "complexScanList()";
   local result = nil;
   local propMap = lMapList[1]; 
@@ -2442,7 +2456,16 @@ local function complexScanList(topRec, lMapList, binList, value, flag )
           return 0 -- show caller nothing got inserted (don't count it)
         end
         -- Found it -- return result
-        return resultValue;
+        local resultFiltered;
+
+        if filter ~= nil and fargs ~= nil then
+                resultFiltered = functionTable[func]( resultValue, fargs );
+        else
+                resultFiltered = resultValue;
+        end
+
+        list.append( resultList, resultFiltered );
+        return 0; -- Found it. Return with success.
       end -- end if found it
     end -- end if value not nil or empty
   end -- for each list entry in this binList
@@ -2485,7 +2508,7 @@ local function scanList( topRec, resultList, lMapList, binList, searchValue, fla
   local meth = "scanList()";
   local propMap = lMapList[1]; 
   local lmapCtrlInfo = lMapList[2];
- 
+
   GP=F and info("Ctrl Data is : %s List : %s", tostring(lmapCtrlInfo), tostring(binList)); 
  
  -- GP=F and info("[DEBUG]:<%s:%s> KeyType(%s) A(%s) C(%s)",
@@ -2494,9 +2517,10 @@ local function scanList( topRec, resultList, lMapList, binList, searchValue, fla
 
   -- Choices for KeyType are KT_ATOMIC or KT_COMPLEX
   if lmapCtrlInfo[M_KeyType] == KT_ATOMIC then
-    return simpleScanList(topRec, resultList, lMapList, binList, searchValue, flag ) 
+    return simpleScanList(topRec, resultList, lMapList, binList, searchValue, flag, filter, fargs ) 
   else
-    return complexScanList(topRec, resultList, lMapList, binList, searchValue, flag ) 
+    local key = getKeyValue( lMapList, searchValue ); 
+    return complexScanList(topRec, resultList, lMapList, binList, key, searchValue, flag, filter, fargs ) 
   end
 end
 
@@ -2839,7 +2863,7 @@ function lmap_create_and_insert( topRec, lmapBinName, newValue, createSpec )
 end -- lmap_create_and_insert()
 
 -- ======================================================================
--- ldrDeleteList( topLdrChunk, lMapList, listIndex,  insertList )
+-- ldrDeleteList( topLdrChunk, lMapList, listIndex,  insertList, filter, fargs )
 -- ======================================================================
 -- Insert (append) the LIST of values pointed to from the digest-list, 
 -- to this chunk's value list.  We start at the position "listIndex"
@@ -2854,7 +2878,7 @@ end -- lmap_create_and_insert()
 -- Return: Number of items written
 -- ======================================================================
 
-local function ldrDeleteList(topRec, lmapBinName, ldrChunkRec,listIndex,entryList )
+local function ldrDeleteList(topRec, lmapBinName, ldrChunkRec, listIndex, entryList, filter, fargs)
   local meth = "ldrDeleteList()";
   GP=F and info("[ENTER]: <%s:%s> Index(%d) List(%s)",
     MOD, meth, listIndex, tostring( entryList ) );
@@ -2900,7 +2924,13 @@ local function ldrDeleteList(topRec, lmapBinName, ldrChunkRec,listIndex,entryLis
 	  local newlist = list(); 
 	  for i = 0, list.size( ldrValueList ), 1 do
 	      if(ldrValueList[i] ~= entryList[j]) then 
-	      	list.append(newlist, ldrValueList[i]); 
+        	local resultFiltered;
+		if filter ~= nil and fargs ~= nil then
+        		resultFiltered = functionTable[func]( ldrValueList[i], fargs );
+    		else
+      			resultFiltered = ldrValueList[i];
+    		end
+        	list.append( resultList, resultFiltered );
 	      end
 	  end -- for each remaining entry
   	 -- Store our modifications back into the Chunk Record Bins
@@ -2985,7 +3015,7 @@ local function localLMapDelete( topRec, lmapBinName, searchValue,
 	  -- not collapse it.  Later, if we see that there are a LOT of nil entries,
 	  -- we can RESET the set and remove all of the "gas".
 	  
-	  rc = scanList(topRec, resultList,lMapList,binList,searchValue,FV_DELETE,nil,nil);
+	  rc = scanList(topRec, resultList,lMapList,binList,searchValue,FV_DELETE,filter,fargs);
 	  -- If we found something, then we need to update the bin and the record.
 	  if rc == 0 and list.size( resultList ) > 0 then
 	    -- We found something -- and marked it nil -- so update the record
@@ -3049,7 +3079,7 @@ local function localLMapDelete( topRec, lmapBinName, searchValue,
         MOD, meth, tostring( entryList ));
   
     -- The magical function that is going to fix our deletion :)
-    local num_deleted = ldrDeleteList(topRec, lmapBinName, IndexLdrChunk, 1,entryList );
+    local num_deleted = ldrDeleteList(topRec, lmapBinName, IndexLdrChunk, 1, entryList, filter, fargs);
     
     --GP=F and info(" !!!!!!! Num deleted %d !!!", num_deleted);
     if( num_deleted == -1 ) then
@@ -3109,7 +3139,7 @@ function lmap_delete_then_filter( topRec, lmapBinName, searchValue,
                           filter, fargs )
 end -- lset_delete_then_filter()
 
-local function ldrSearchList(topRec, lmapBinName, resultList, ldrChunkRec, listIndex, entryList )
+local function ldrSearchList(topRec, lmapBinName, resultList, ldrChunkRec, listIndex, entryList, filter, fargs)
 
   local meth = "ldrSearchList()";
   --GP=F and info("[ENTER]: <%s:%s> Index(%d) List(%s)",
@@ -3141,7 +3171,13 @@ local function ldrSearchList(topRec, lmapBinName, resultList, ldrChunkRec, listI
   	-- return the entire list
   	GP=F and info(" Search string is NULL, returning the entire LDR list"); 
   	for i = 0, list.size( ldrValueList ), 1 do
-  		list.append(resultList, ldrValueList[i]);
+        	local resultFiltered;
+		if filter ~= nil and fargs ~= nil then
+        		resultFiltered = functionTable[func]( ldrValueList[i], fargs );
+    		else
+      			resultFiltered = ldrValueList[i];
+    		end
+        	list.append( resultList, resultFiltered );
   	end
   	return 0; 
   end 
@@ -3171,7 +3207,14 @@ local function ldrSearchList(topRec, lmapBinName, resultList, ldrChunkRec, listI
   for j = 0, list.size( entryList ), 1 do
 	  for i = 0, list.size( ldrValueList ), 1 do
 	      if(ldrValueList[i] == entryList[j]) then 
-	      	list.append(resultList, ldrValueList[i]); 
+
+        	local resultFiltered;
+		if filter ~= nil and fargs ~= nil then
+        		resultFiltered = functionTable[func]( ldrValueList[i], fargs );
+    		else
+      			resultFiltered = ldrValueList[i];
+    		end
+        	list.append( resultList, resultFiltered );
 	      end
 	  end -- for each remaining entry
  	  -- Nothing to be stored back in the LDR ctrl map 
@@ -3193,7 +3236,7 @@ end
 -- Return: resultlist 
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
-local function simpleScanListAll(topRec, resultList, lMapList, binName) 
+local function simpleScanListAll(topRec, resultList, lMapList, binName, filter, fargs) 
 
   local meth = "simpleScanListAll()";
   GP=F and trace("[ENTER]: <%s:%s> Appending all the elements of List ",
@@ -3226,7 +3269,16 @@ local function simpleScanListAll(topRec, resultList, lMapList, binName)
 				if unTransform ~= nil then
 					retValue = unTransform( objList[i] );
 				end
-		        list.append( resultList, retValue);
+
+        			local resultFiltered;
+
+				if filter ~= nil and fargs ~= nil then
+        				resultFiltered = functionTable[func]( retValue, fargs );
+			    	else
+      					resultFiltered = retValue;
+    				end
+
+			        list.append( resultList, resultFiltered );
 				listCount = listCount + 1; 
 			end -- end if not null and not empty
 		end -- end for each item in the list
@@ -3251,7 +3303,7 @@ end -- simpleScanListAll
 -- Return: resultlist 
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
-local function complexScanListAll(topRec, resultList, lMapList, binName) 
+local function complexScanListAll(topRec, resultList, lMapList, binName, filter, fargs) 
   local meth = "complexScanListAll()";
   GP=F and trace("[ENTER]: <%s:%s> Appending all the elements of List ",
                  MOD, meth)
@@ -3281,7 +3333,15 @@ local function complexScanListAll(topRec, resultList, lMapList, binName)
 				if unTransform ~= nil then
 					retValue = unTransform( binList[i] );
 				end
-		  	    list.append( resultList, retValue);
+        			local resultFiltered;
+
+				if filter ~= nil and fargs ~= nil then
+        				resultFiltered = functionTable[func]( retValue, fargs );
+			    	else
+      					resultFiltered = retValue;
+    				end
+
+			        list.append( resultList, resultFiltered );
 				listCount = listCount + 1; 
    			end -- end if not null and not empty
   		end -- end for each item in the list
@@ -3316,9 +3376,9 @@ local function localLMapSearchAll(resultList,topRec,lmapBinName,filter,fargs)
 	  local binList = lmapCtrlInfo[M_CompactList];
 	  
 	  if lmapCtrlInfo[M_KeyType] == KT_ATOMIC then
-		rc = simpleScanListAll(topRec, resultList, lMapList, binName) 
+		rc = simpleScanListAll(topRec, resultList, lMapList, binName, filter, fargs) 
 	  else
-		rc = complexScanListAll(topRec, resultList, lMapList, binName)
+		rc = complexScanListAll(topRec, resultList, lMapList, binName, filter, fargs)
 	  end
 	
 	  GP=F and info("[EXIT]: <%s:%s>: Search Returns (%s)",
@@ -3344,13 +3404,14 @@ local function localLMapSearchAll(resultList,topRec,lmapBinName,filter,fargs)
 			  local ldrlist = list(); 
 			  local entryList  = list(); 
 			  -- The magical function that is going to fix our deletion :)
-			  rc = ldrSearchList(topRec, lmapBinName, ldrlist, IndexLdrChunk, 0, entryList );
+			  rc = ldrSearchList(topRec, lmapBinName, ldrlist, IndexLdrChunk, 0, entryList, filter, fargs );
 			  	
 			  if( rc == nil or rc == 0 ) then
 			  	GP=F and info("AllSearch returned SUCCESS %s", tostring(ldrlist));
 			  	for j = 1, list.size(ldrlist), 1 do 
-      				list.append( resultList, ldrlist[j] );
-    			end
+ 				  -- no need to filter here, results are already filtered in-routine
+        			  list.append( resultList, ldrlist[j] );
+    			        end
 			  else
 			  	GP=F and info("Search returned FAILURE");
 			  end
@@ -3447,7 +3508,7 @@ local function localLMapSearch(resultList, topRec, lmapBinName, searchValue,
            MOD, meth, tostring( entryList ));
   
       -- The magical function that is going to fix our deletion :)
-      rc = ldrSearchList(topRec, lmapBinName, resultList, IndexLdrChunk, 1,entryList );
+      rc = ldrSearchList(topRec, lmapBinName, resultList, IndexLdrChunk, 1,entryList, filter, fargs );
   	
   	  if( rc == nil or rc == 0 ) then
   	  	 GP=F and info("Search returned SUCCESS");
