@@ -1,8 +1,8 @@
 -- Large Ordered List (llist.lua)
--- Last Update August 04,  2013: tjl
+-- Last Update August 05,  2013: tjl
 --
 -- Keep this MOD value in sync with version above
-local MOD = "llist_2013_08_04.n"; -- module name used for tracing.  
+local MOD = "llist_2013_08_05.c"; -- module name used for tracing.  
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -812,19 +812,19 @@ local function packageTestModeNumber( ldtMap )
   ldtMap[R_StoreMode] = SM_LIST; -- Use List Mode
   ldtMap[R_BinaryStoreSize] = nil; -- Don't waste room if we're not using it
   ldtMap[R_KeyType] = KT_ATOMIC; -- Atomic Keys (A Number)
-  ldtMap[R_Threshold] = 2; -- Change to TREE Ops after this many inserts
+  ldtMap[R_Threshold] = 20; -- Change to TREE Ops after this many inserts
   ldtMap[R_KeyFunction] = nil; -- Special Attention Required.
  
   -- Top Node Tree Root Directory
-  ldtMap[R_RootListMax] = 100; -- Length of Key List (page list is KL + 1)
+  ldtMap[R_RootListMax] = 20; -- Length of Key List (page list is KL + 1)
   ldtMap[R_RootByteCountMax] = 0; -- Max bytes for key space in the root
   
   -- LLIST Inner Node Settings
-  ldtMap[R_NodeListMax] = 100;  -- Max # of items (key+digest)
+  ldtMap[R_NodeListMax] = 20;  -- Max # of items (key+digest)
   ldtMap[R_NodeByteCountMax] = 0; -- Max # of BYTES
 
   -- LLIST Tree Leaves (Data Pages)
-  ldtMap[R_LeafListMax] = 100;  -- Max # of items
+  ldtMap[R_LeafListMax] = 20;  -- Max # of items
   ldtMap[R_LeafByteCountMax] = 0; -- Max # of BYTES per data page
 
   return 0;
@@ -842,22 +842,22 @@ local function packageTestModeObjectDup( ldtMap )
   ldtMap[R_StoreMode] = SM_LIST; -- Use List Mode
   ldtMap[R_BinaryStoreSize] = nil; -- Don't waste room if we're not using it
   ldtMap[R_KeyType] = KT_COMPLEX; -- Atomic Keys (A Number)
-  ldtMap[R_Threshold] = 10; -- Change to TREE Ops after this many inserts
+  ldtMap[R_Threshold] = 20; -- Change to TREE Ops after this many inserts
   -- Use the special function that simply returns the value held in
   -- the object's map field "key".
   ldtMap[R_KeyFunction] = "keyExtract"; -- Special Attention Required.
   ldtMap[R_KeyUnique] = false; -- allow Duplicates
  
   -- Top Node Tree Root Directory
-  ldtMap[R_RootListMax] = 100; -- Length of Key List (page list is KL + 1)
+  ldtMap[R_RootListMax] = 20; -- Length of Key List (page list is KL + 1)
   ldtMap[R_RootByteCountMax] = 0; -- Max bytes for key space in the root
   
   -- LLIST Inner Node Settings
-  ldtMap[R_NodeListMax] = 100;  -- Max # of items (key+digest)
+  ldtMap[R_NodeListMax] = 20;  -- Max # of items (key+digest)
   ldtMap[R_NodeByteCountMax] = 0; -- Max # of BYTES
 
   -- LLIST Tree Leaves (Data Pages)
-  ldtMap[R_LeafListMax] = 100;  -- Max # of items
+  ldtMap[R_LeafListMax] = 20;  -- Max # of items
   ldtMap[R_LeafByteCountMax] = 0; -- Max # of BYTES per data page
 
   return 0;
@@ -3319,8 +3319,8 @@ local function splitRootInsert( src, topRec, sp, ldtList, key, digest )
   -- local splitKey = getKeyValue( ldtMap, keyList[splitPosition] );
   local splitKey = keyList[splitPosition];
 
-  GP=F and trace("[STATUS]<%s:%s> About to Take and Drop::Key(%s) Digest(%s)",
-    MOD, meth, tostring(keyList), tostring(digestList));
+  GP=F and trace("[STATUS]<%s:%s> Take and Drop::Pos(%d)Key(%s) Digest(%s)",
+    MOD, meth, splitPosition, tostring(keyList), tostring(digestList));
 
     -- Splitting a node works as follows.  The node is split into a left
     -- piece, a right piece, and a center value that is propagated up to
@@ -3351,7 +3351,7 @@ local function splitRootInsert( src, topRec, sp, ldtList, key, digest )
   local leftDigestList  = list.take( digestList, splitPosition );
   local rightDigestList = list.drop( digestList, splitPosition );
 
-  GP=F and trace("\n[DEBUG]<%s:%s>: LKey(%s) LDig(%s) SKey(%s) RKey(%s) RDig(%s)",
+  GP=F and trace("\n[DEBUG]<%s:%s>LKey(%s) LDig(%s) SKey(%s) RKey(%s) RDig(%s)",
     MOD, meth, tostring(leftKeyList), tostring(leftDigestList),
     tostring( splitKey ), tostring(rightKeyList), tostring(rightDigestList) );
 
@@ -3392,7 +3392,7 @@ local function splitRootInsert( src, topRec, sp, ldtList, key, digest )
   -- Replace the Root Information with just the split-key and the
   -- two new child node digests (much like first Tree Insert).
   local keyList = list();
-  list.append( keyList, key );
+  list.append( keyList, splitKey );
   local digestList = list();
   list.append( digestList, leftNodeDigest );
   list.append( digestList, rightNodeDigest );
@@ -4331,7 +4331,10 @@ treeScan(src, resultList, topRec, sp, ldtList, key, func, fargs )
     scan_A, scan_B  = scanLeaf(topRec, leafRec, startPosition, ldtMap,
                               resultList, key, func, fargs, flag)
 
-list.append(resultList, 999999 );
+-- Uncomment this line to see the "LEAF BOUNDARIES" in the data.
+-- It's purely for debugging
+-- list.append(resultList, 999999 );
+
     -- Look and see if there's more scanning needed. If so, we'll read
     -- the next leaf in the tree and scan another leaf.
     if( scan_B < 0 ) then
@@ -5127,11 +5130,10 @@ end -- ldtRemove()
 --   res = -1: Some sort of error
 -- ========================================================================
 function llist_remove( topRec, lsoBinName )
-  GP=F and info("\n\n >>>>>>>>> API[ LLIST REMOVE ](%s) <<<<<<<<<<(%s)\n",
+  GP=F and info("\n\n >>>>>>>>> API[ LLIST REMOVE ] Bin(%s) <<<<<<<<<<\n",
     lsoBinName );
   return ldtRemove( topRec, lsoBinName );
-end
-
+end -- llist_remove()
 
 -- ========================================================================
 -- llist_size() -- return the number of elements (item count) in the set.
