@@ -1905,7 +1905,7 @@ local function localLSetSearchAll(resultList, topRec, lsetBinName,
 
   local meth = "localLSetSearchAll()";
   rc = 0; -- start out OK.
-  GP=F and trace("[ENTER]<%s:%s> Null SV: return all . Name(%s)",
+  GP=F and info("[ENTER]<%s:%s> Null SV: return all . Name(%s)",
                  MOD, meth, tostring(lsetBinName) );
 
   -- Validate the topRec, the bin and the map.  If anything is weird, then
@@ -1924,7 +1924,7 @@ local function localLSetSearchAll(resultList, topRec, lsetBinName,
 	rc = complexScanListAll(topRec, resultList, lsetList, filter, fargs)
   end
 
-  GP=F and trace("[EXIT]: <%s:%s>: Search Returns (%s) Size : %d",
+  GP=F and info("[EXIT]: <%s:%s>: Search Returns (%s) Size : %d",
                  MOD, meth, tostring(resultList), list.size(resultList));
 
   return resultList; 
@@ -2130,6 +2130,7 @@ end -- function lset_config()
 function lset_dump( topRec, binName )
   local meth = "lset_dump()";
   GP=F and trace("[ENTER]<%s:%s> ", MOD, meth)
+  GP=F and info("\n\n >>>>>>>>> API[ LSET DUMP ] <<<<<<<<<< \n\n");
 
   local lsetList = topRec[LSET_CONTROL_BIN];
   local propMap = lsetList[1]; 
@@ -2174,9 +2175,75 @@ function lset_dump( topRec, binName )
 
   GP=F and trace("[EXIT]<%s:%s>ResultList(%s)",MOD,meth,tostring(resultList));
 
-  return resultList; 
+  return binList; 
 end -- lset_dump();
 
+-- ========================================================================
+-- ldt_remove() -- Remove the LDT entirely from the record.
+-- NOTE: This could eventually be moved to COMMON, and be "ldt_remove()",
+-- since it will work the same way for all LDTs.
+-- Remove the ESR, Null out the topRec bin.
+-- ========================================================================
+-- Release all of the storage associated with this LDT and remove the
+-- control structure of the bin.  If this is the LAST LDT in the record,
+-- then ALSO remove the HIDDEN LDT CONTROL BIN.
+--
+-- Question  -- Reset the record[binName] to NIL (does that work??)
+-- Parms:
+-- (1) topRec: the user-level record holding the LSO Bin
+-- (2) binName: The name of the LDT Bin
+-- Result:
+--   res = 0: all is well
+--   res = -1: Some sort of error
+-- ========================================================================
+local function ldt_remove( topRec, lsetBinName )
+  local meth = "ldt_remove()";
+
+  GP=F and trace("[ENTER]: <%s:%s> binName(%s)",
+    MOD, meth, tostring(lsetBinName));
+  local rc = 0; -- start off optimistic
+
+  -- Validate the topRec, the bin and the map.  If anything is weird, then
+  -- this will kick out with a long jump error() call.
+  validateRecBinAndMap( topRec, lsetBinName, true );
+
+  -- Extract the property map and lso control map from the lso bin list.
+
+  local lsetList = topRec[LSET_CONTROL_BIN]; -- The main lset map
+  local propMap = lsetList[1];
+  local lsetMap  = lsetList[2];
+  
+  -- Mark the enitre control-info structure nil 
+  topRec[LSET_CONTROL_BIN] = nil;
+
+  rc = aerospike:update( topRec );
+  GP=F and trace("[EXIT]: <%s:%s> : Done.  RC(%s)", MOD, meth, tostring(rc));
+
+  return rc;
+end -- ldt_remove()
+
+-- ========================================================================
+-- lset_remove() -- Remove the LDT entirely from the record.
+-- NOTE: This could eventually be moved to COMMON, and be "ldt_remove()",
+-- since it will work the same way for all LDTs.
+-- Remove the ESR, Null out the topRec bin.
+-- ========================================================================
+-- Release all of the storage associated with this LDT and remove the
+-- control structure of the bin.  If this is the LAST LDT in the record,
+-- then ALSO remove the HIDDEN LDT CONTROL BIN.
+--
+-- Question  -- Reset the record[lsoBinName] to NIL (does that work??)
+-- Parms:
+-- (1) topRec: the user-level record holding the LSO Bin
+-- (2) lsoBinName: The name of the LSO Bin
+-- Result:
+--   res = 0: all is well
+--   res = -1: Some sort of error
+-- ========================================================================
+function lset_remove( topRec, lmapBinName )
+  GP=F and info("\n\n >>>>>>>>> API[ LMAP REMOVE ] <<<<<<<<<< \n\n");
+  return ldt_remove( topRec, lmapBinName );
+end
 -- ========================================================================
 -- ========================================================================
 -- ========================================================================
