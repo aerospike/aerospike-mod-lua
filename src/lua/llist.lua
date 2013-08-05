@@ -1,8 +1,8 @@
 -- Large Ordered List (llist.lua)
--- Last Update August 02,  2013: tjl
+-- Last Update August 04,  2013: tjl
 --
 -- Keep this MOD value in sync with version above
-local MOD = "llist_2013_08_02.c"; -- module name used for tracing.  
+local MOD = "llist_2013_08_04.n"; -- module name used for tracing.  
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -321,16 +321,6 @@ local LSR_BINARY_BIN      = "LsrBinaryBin";
 -- Each LDT defines its type in string form.
 local LDT_TYPE_LLIST = "LLIST";
 
--- Flag values
-local FV_INSERT  = 'I'; -- flag to scanList to Insert the value (if not found)
-local FV_SCAN    = 'S'; -- Regular Scan (do nothing else)
-local FV_DELETE  = 'D'; -- flag to show scanList to Delete the value, if found
-
--- This is a stupid hack -- but until we can assign "nil" to a list entry,
--- we instead have to assign a "fake" entry to it.  Once we fix the server
--- list code (so that nil is a valid entry), we'll stop using this hack.
-local FV_EMPTY = "__empty__"; -- the value is NO MORE
-
 -- Switch from a single list to B+ Tree after this amount
 local DEFAULT_THRESHOLD = 100;
 
@@ -411,6 +401,7 @@ local RPM_SelfDigest           = 'D';  -- Digest of this record
 -- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 local PM_ItemCount             = 'I'; -- (Top): Count of all items in LDT
 local PM_Version               = 'V'; -- (Top): Code Version
+local PM_SubRecCount           = 'S'; -- (Top): # of subrecs in the LDT
 local PM_LdtType               = 'T'; -- (Top): Type: stack, set, map, list
 local PM_BinName               = 'B'; -- (Top): LDT Bin Name
 local PM_Magic                 = 'Z'; -- (All): Special Sauce
@@ -420,7 +411,7 @@ local PM_RecType               = 'R'; -- (All): Type of Rec:Top,Ldr,Esr,CDir
 local PM_LogInfo               = 'L'; -- (All): Log Info (currently unused)
 local PM_ParentDigest          = 'P'; -- (Subrec): Digest of TopRec
 local PM_SelfDigest            = 'D'; -- (Subrec): Digest of THIS Record
---
+
 -- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 -- Leaf and Node Fields (There is some overlap between nodes and leaves)
 -- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -574,6 +565,7 @@ local function ldtSummary( ldtList )
   resultMap.SUMMARY           = "LList Summary";
   resultMap.PropBinName       = propMap[PM_BinName];
   resultMap.PropItemCount     = propMap[PM_ItemCount];
+  resultMap.PropSubRecCount   = propMap[PM_SubRecCount];
   resultMap.PropVersion       = propMap[PM_Version];
   resultMap.PropLdtType       = propMap[PM_LdtType];
   resultMap.PropEsrDigest     = propMap[PM_EsrDigest];
@@ -620,6 +612,55 @@ local function ldtSummaryString( ldtList )
   return tostring( ldtSummary( ldtList ) );
 end -- ldtSummaryString()
 
+-- ======================================================================
+-- When we create the initial LDT Control Bin for the entire record (the
+-- first time ANY LDT is initialized in a record), we create a property
+-- map in it with various values.
+-- TODO: Move this to LDT_COMMON (7/21/2013)
+-- ======================================================================
+local function setLdtRecordType( topRec )
+  local meth = "setLdtRecordType()";
+  GP=F and trace("[ENTER]<%s:%s>", MOD, meth );
+
+  local rc = 0;
+  local recPropMap;
+
+  -- Check for existence of the main record control bin.  If that exists,
+  -- then we're already done.  Otherwise, we create the control bin, we
+  -- set the topRec record type (to LDT) and we praise the lord for yet
+  -- another miracle LDT birth.
+  if( topRec[REC_LDT_CTRL_BIN] == nil ) then
+    GP=F and trace("[DEBUG]<%s:%s>Creating Record LDT Map", MOD, meth );
+    record.set_type( topRec, RT_LDT );
+    recPropMap = map();
+    -- vinfo will be a 5 byte value, but it will be easier for us to store
+    -- 6 bytes -- and just leave the high order one at zero.
+    -- Initialize the VINFO value to all zeros.
+    local vinfo = bytes(6);
+    bytes.put_int16(vinfo, 1, 0 );
+    bytes.put_int16(vinfo, 3, 0 );
+    bytes.put_int16(vinfo, 5, 0 );
+    recPropMap[RPM_VInfo] = vinfo; -- to be replaced later - on the server side.
+    recPropMap[RPM_LdtCount] = 1; -- this is the first one.
+    recPropMap[RPM_Magic] = MAGIC;
+  else
+    -- Not much to do -- increment the LDT count for this record.
+    recPropMap = topRec[REC_LDT_CTRL_BIN];
+    local ldtCount = recPropMap[RPM_LdtCount];
+    recPropMap[RPM_LdtCount] = ldtCount + 1;
+    GP=F and trace("[DEBUG]<%s:%s>Record LDT Map Exists: Bump LDT Count(%d)",
+      MOD, meth, ldtCount + 1 );
+  end
+  topRec[REC_LDT_CTRL_BIN] = recPropMap;
+
+  -- Now that we've changed the top rec, do the update to make sure the
+  -- changes are saved.
+  rc = aerospike:update( topRec );
+
+  GP=F and trace("[EXIT]<%s:%s> rc(%s)", MOD, meth, tostring(rc) );
+  return rc;
+end -- setLdtRecordType()
+
 -- <><><><> <Initialize Control Maps> <Initialize Control Maps> <><><><>
 
 -- ======================================================================
@@ -652,6 +693,7 @@ initializeLList( topRec, ldtBinName, transFunc, untransFunc )
   -- look at the general property values more easily from the Server code.
   -- General LDT Parms(Same for all LDTs): Held in the Property Map
   propMap[PM_ItemCount] = 0; -- A count of all items in the stack
+  propMap[PM_SubRecCount] = 0; -- No Subrecs yet
   propMap[PM_Version]    = G_LDT_VERSION ; -- Current version of the code
   propMap[PM_LdtType]    = LDT_TYPE_LLIST; -- Validate the ldt type
   propMap[PM_Magic]      = MAGIC; -- Special Validation
@@ -871,6 +913,19 @@ local function packageTestModeList( ldtMap )
   ldtMap[R_Threshold] = 2; -- Change to TREE Operations after this many inserts
   ldtMap[R_KeyFunction] = nil; -- Special Attention Required.
   ldtMap[R_KeyUnique] = true; -- Assume Unique Objects
+ 
+  -- Top Node Tree Root Directory
+  ldtMap[R_RootListMax] = 100; -- Length of Key List (page list is KL + 1)
+  ldtMap[R_RootByteCountMax] = 0; -- Max bytes for key space in the root
+  
+  -- LLIST Inner Node Settings
+  ldtMap[R_NodeListMax] = 100;  -- Max # of items (key+digest)
+  ldtMap[R_NodeByteCountMax] = 0; -- Max # of BYTES
+
+  -- LLIST Tree Leaves (Data Pages)
+  ldtMap[R_LeafListMax] = 100;  -- Max # of items
+  ldtMap[R_LeafByteCountMax] = 0; -- Max # of BYTES per data page
+
   return 0;
  
 end -- packageTestModeList()
@@ -944,6 +999,9 @@ local function packageDebugModeObject( ldtMap )
 
   -- LLIST Tree Leaves (Data Pages)
   ldtMap[R_LeafListMax] = 4;  -- Max # of items
+
+  GP=F and trace("[EXIT]<%s:%s> : ldtMap(%s)",
+      MOD, meth , tostring(ldtMap));
 
   return 0;
 
@@ -1065,8 +1123,21 @@ local function packageDebugModeNumber( ldtMap )
   ldtMap[R_KeyFunction] = nil; -- Special Attention Required.
   ldtMap[R_KeyUnique] = true; -- Just Unique keys for now.
 
+  -- Top Node Tree Root Directory
+  ldtMap[R_RootListMax] = 4; -- Length of Key List (page list is KL + 1)
+  ldtMap[R_RootByteCountMax] = 0; -- Max bytes for key space in the root
+  
+  -- LLIST Inner Node Settings
+  ldtMap[R_NodeListMax] = 4;  -- Max # of items (key+digest)
+  ldtMap[R_NodeByteCountMax] = 0; -- Max # of BYTES
+
+  -- LLIST Tree Leaves (Data Pages)
+  ldtMap[R_LeafListMax] = 4;  -- Max # of items
+  ldtMap[R_LeafByteCountMax] = 0; -- Max # of BYTES per data page
+
   GP=F and trace("[EXIT]: <%s:%s>:: LdtMap(%s)",
     MOD, meth, tostring(ldtMap) );
+
   return 0;
 end -- packageDebugModeNumber( ldtMap )
 
@@ -1531,6 +1602,7 @@ local function printRoot( topRec, ldtList )
   local digestList = cMap[R_RootDigestList];
   local binName    = pMap[PM_BinName];
   -- if( F == true ) then
+    info("\n RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR");
     info("\n ROOT::Bin(%s)", binName );
     info("\n ROOT::PMAP(%s)", tostring( pMap ) );
     info("\n ROOT::CMAP(%s)", tostring( cMap ) );
@@ -1550,6 +1622,7 @@ local function printNode( nodeRec )
   local keyList     = nodeRec[NSR_KEY_LIST_BIN];
   local digestList  = nodeRec[NSR_DIGEST_BIN];
   -- if( F == true ) then
+    info("\n NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN");
     info("\n NODE::PMAP(%s)", tostring( pMap ) );
     info("\n NODE::CMAP(%s)", tostring( cMap ) );
     info("\n NODE::KeyList(%s)", tostring( keyList ) );
@@ -1567,6 +1640,7 @@ local function printLeaf( leafRec )
   local cMap     = leafRec[LSR_CTRL_BIN];
   local objList  = leafRec[LSR_LIST_BIN];
   -- if( F == true ) then
+    info("\n LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL");
     info("\n LEAF::PMAP(%s)", tostring( pMap ) );
     info("\n LEAF::CMAP(%s)", tostring( cMap ) );
     info("\n LEAF::ObjectList(%s)", tostring( objList ) );
@@ -1679,9 +1753,9 @@ local function showRecSummary( nodeRec, propMap )
     GP=F and info("\n[SUBREC DEBUG]:: SRC Contents \n");
     local recType = propMap[PM_RecType];
     if( recType == RT_LEAF ) then
-      GP=F and info("\n[Leaf Record Summary] %s \n", leafSummaryString( nodeRec ));
+      GP=F and info("\n[Leaf Record Summary] %s\n",leafSummaryString(nodeRec));
     elseif( recType == RT_NODE ) then
-      GP=F and info("\n[Node Record Summary] %s \n", nodeSummaryString( nodeRec ));
+      GP=F and info("\n[Node Record Summary] %s\n",nodeSummaryString(nodeRec));
     else
       GP=F and info("\n[OTHER Record TYPE] (%s)\n", tostring( recType ));
     end
@@ -2019,55 +2093,6 @@ initPropMap( propMap, esrDigest, selfDigest, topDigest, rtFlag, topPropMap )
 end -- initPropMap()
 
 -- ======================================================================
--- When we create the initial LDT Control Bin for the entire record (the
--- first time ANY LDT is initialized in a record), we create a property
--- map in it with various values.
--- TODO: Move this to LDT_COMMON (7/21/2013)
--- ======================================================================
-local function setLdtRecordType( topRec )
-  local meth = "setLdtRecordType()";
-  GP=F and trace("[ENTER]<%s:%s>", MOD, meth );
-
-  local rc = 0;
-  local recPropMap;
-
-  -- Check for existence of the main record control bin.  If that exists,
-  -- then we're already done.  Otherwise, we create the control bin, we
-  -- set the topRec record type (to LDT) and we praise the lord for yet
-  -- another miracle LDT birth.
-  if( topRec[REC_LDT_CTRL_BIN] == nil ) then
-    GP=F and trace("[DEBUG]<%s:%s>Creating Record LDT Map", MOD, meth );
-    record.set_type( topRec, RT_LDT );
-    recPropMap = map();
-    -- vinfo will be a 5 byte value, but it will be easier for us to store
-    -- 6 bytes -- and just leave the high order one at zero.
-    -- Initialize the VINFO value to all zeros.
-    local vinfo = bytes(6);
-    bytes.put_int16(vinfo, 1, 0 );
-    bytes.put_int16(vinfo, 3, 0 );
-    bytes.put_int16(vinfo, 5, 0 );
-    recPropMap[RPM_VInfo] = vinfo; -- to be replaced later - on the server side.
-    recPropMap[RPM_LdtCount] = 1; -- this is the first one.
-    recPropMap[RPM_Magic] = MAGIC;
-  else
-    -- Not much to do -- increment the LDT count for this record.
-    recPropMap = topRec[REC_LDT_CTRL_BIN];
-    local ldtCount = recPropMap[RPM_LdtCount];
-    recPropMap[RPM_LdtCount] = ldtCount + 1;
-    GP=F and trace("[DEBUG]<%s:%s>Record LDT Map Exists: Bump LDT Count(%d)",
-      MOD, meth, ldtCount + 1 );
-  end
-  topRec[REC_LDT_CTRL_BIN] = recPropMap;
-
-  -- Now that we've changed the top rec, do the update to make sure the
-  -- changes are saved.
-  rc = aerospike:update( topRec );
-
-  GP=F and trace("[EXIT]<%s:%s> rc(%s)", MOD, meth, tostring(rc) );
-  return rc;
-end -- setLdtRecordType()
-
--- ======================================================================
 -- Create and Init ESR
 -- ======================================================================
 -- The Existence SubRecord is the synchronization point for the lDTs that
@@ -2155,6 +2180,7 @@ end -- createAndInitESR()
 -- Search Key 111:  Position 2 :: Follow Child Ptr B
 -- Search Key 200:  Position 2 :: Follow Child Ptr B
 -- Search Key 222:  Position 2 :: Follow Child Ptr C
+-- Search Key 555:  Position 5 :: Follow Child Ptr E
 -- Parms:
 -- (*) ldtMap: Main control Map
 -- (*) keyList: The list of keys (from root or inner node)
@@ -2253,8 +2279,8 @@ end -- searchKeyList()
 local function searchObjectList( ldtMap, objectList, searchKey )
   local meth = "searchObjectList()";
   local keyType = ldtMap[R_KeyType];
-  GP=F and trace("[ENTER]<%s:%s>searchKey(%s) keyType(%s)",
-    MOD, meth, tostring(searchKey), tostring(keyType));
+  GP=F and trace("[ENTER]<%s:%s>searchKey(%s) keyType(%s) ObjList(%s)",
+    MOD, meth, tostring(searchKey), tostring(keyType), tostring(objectList));
 
   local resultMap = map();
   resultMap.Status = ERR_OK;
@@ -2288,8 +2314,8 @@ local function searchObjectList( ldtMap, objectList, searchKey )
       -- We want the child pointer that goes with THIS index (left ptr)
       GP=F and trace("[NOT FOUND LESS THAN]: <%s:%s> : SV(%s) V(%s) I(%d)",
         MOD, meth, tostring(searchKey), tostring( objectList[i] ), i );
-        resultMap.Position = i;
-        return resultMap;
+      resultMap.Position = i;
+      return resultMap;
     elseif compareResult == CR_EQUAL then
       -- Found it -- return the index of THIS value
       GP=F and trace("[FOUND KEY]: <%s:%s> :Key(%s) Value(%s) Index(%d)",
@@ -2338,9 +2364,9 @@ local function printTree( src, topRec, ldtBinName )
   local treeLevel = ldtMap[R_TreeLevel];
 
   info("\n ===========================================================\n");
-  info("\n <PT> <PT> <PT> <PT> <PT> B E G I N <PT> <PT> <PT> <PT> <PT>\n");
+  info("\n <PT>begin <PT> <PT>                          <PT> <PT> <PT>\n");
   info("\n <PT> <PT> <PT>       P R I N T   T R E E     <PT> <PT> <PT>\n");
-  info("\n <PT> <PT> <PT> <PT> <PT> B E G I N <PT> <PT> <PT> <PT> <PT>\n");
+  info("\n <PT> <PT> <PT> <PT>                          <PT> <PT> <PT>\n");
   info("\n ===========================================================\n");
 
   info("\n ======  ROOT SUMMARY ======\n(%s)", rootNodeSummary( ldtList ));
@@ -2606,6 +2632,120 @@ updateSearchPath(sp, propMap, ldtMap, nodeRec, position, keyCount)
 end -- updateSearchPath()
 
 -- ======================================================================
+-- scanList(): Scan a List
+-- ======================================================================
+-- Whether this list came from the Leaf or the Compact List, we'll search
+-- thru it and look for matching items -- applying the FILTER on all objects
+-- that match the key.
+--
+-- Parms:
+-- (*) objectList
+-- (*) startPosition:
+-- (*) ldtMap:
+-- (*) resultList:
+-- (*) searchKey:
+-- (*) func:
+-- (*) fargs:
+-- (*) flag:
+-- Return: A, B, where A is the instruction and B is the return code
+-- A: Instruction: 0 (stop), 1 (continue scanning)
+-- B: Error Code: B==0 ok.   B < 0 Error.
+-- ======================================================================
+local function listScan(objectList, startPosition, ldtMap, resultList,
+                          searchKey, func, fargs, flag)
+  local meth = "listScan()";
+  local rc = 0;
+  GP=F and trace("[ENTER]<%s:%s>StartPosition(%s) SearchKey(%s)",
+        MOD, meth, startPosition, tostring( searchKey));
+
+  -- Linear scan of the LIST (binary search will come later), for each
+  -- match, add to the resultList.
+  local compareResult = 0;
+  local uniqueKey = ldtMap[R_KeyUnique];
+  local scanStatus = SCAN_CONTINUE;
+
+  -- Later: Split the loop search into two -- atomic and map objects
+  local listSize = list.size( objectList );
+  -- We expect that the FIRST compare (at location "start") should be
+  -- equal, and then potentially some number of objects after that (assuming
+  -- it's NOT a unique key).  If unique, then we will just jump out on the
+  -- next compare.
+  local found = false;
+  GP=F and trace("[LIST SCAN]<%s:%s>Position(%d)", MOD, meth, startPosition);
+  for i = startPosition, listSize, 1 do
+    compareResult = objectCompare( ldtMap, searchKey, objectList[i] );
+    if compareResult == CR_ERROR then
+      warn("[WARNING]<%s:%s> Compare Error", MOD, meth );
+      return 0, CR_ERROR; -- error result.
+    end
+    if( compareResult == CR_EQUAL ) then
+      -- This one qualifies -- save it in result.
+      list.append( resultList, objectList[i] );
+      found = true; -- remember that we found something
+      GP=F and trace("[Scan:FOUND]<%s:%s>Pos(%d) Key(%s) Object(%s)",
+        MOD, meth, i, tostring(searchKey), tostring(objectList[i]));
+      if( uniqueKey == true and searchKey ~= nil ) then
+        scanStatus = SCAN_DONE;
+        break;
+      end
+    else
+      -- First non-equals means we're done.
+      GP=F and trace("[Scan:NON_MATCH]<%s:%s> Pos(%d) Key(%s) Object(%s)",
+        MOD, meth, i, tostring(searchKey), tostring(objectList[i]));
+      scanStatus = SCAN_DONE;
+      break;
+    end
+  end -- for each item from startPosition to end
+
+  local resultA = scanStatus;
+  local resultB = ERR_OK; -- if we got this far, we're ok.
+
+  GP=F and trace("[EXIT]<%s:%s> rc(%d) resultList(%s) A(%s) B(%s)", MOD, meth,
+    rc, tostring(resultList), tostring(resultA), tostring(resultB));
+  return resultA, resultB;
+end -- listScan()
+
+
+-- ======================================================================
+-- scanByteArray(): Scan a Byte Array, gathering up all of the the
+-- matching value(s) in the array.  Before an object can be compared,
+-- it must be UN-TRANSFORMED from a binary form to a live object.
+-- ======================================================================
+-- Parms:
+-- (*) byteArray: Packed array of bytes holding transformed objects
+-- (*) startPosition: logical ITEM offset (not byte offset)
+-- (*) ldtMap:
+-- (*) resultList:
+-- (*) searchKey:
+-- (*) func:
+-- (*) fargs:
+-- (*) flag:
+-- Return: A, B, where A is the instruction and B is the return code
+-- A: Instruction: 0 (stop), 1 (continue scanning)
+-- B: Error Code: B==0 ok.   B < 0 Error.
+-- ======================================================================
+local function scanByteArray(byteArray, startPosition, ldtMap, resultList,
+                          searchKey, func, fargs, flag)
+  local meth = "scanByteArray()";
+  local rc = 0;
+  GP=F and trace("[ENTER]<%s:%s>StartPosition(%s) SearchKey(%s)",
+        MOD, meth, startPosition, tostring( searchKey));
+
+  -- Linear scan of the ByteArray (binary search will come later), for each
+  -- match, add to the resultList.
+  local compareResult = 0;
+  local uniqueKey = ldtMap[R_KeyUnique];
+  local scanStatus = SCAN_CONTINUE;
+
+  -- >>>>>>>>>>>>>>>>>>>>>>>>> BINARY MODE <<<<<<<<<<<<<<<<<<<<<<<<<<<
+    -- Do the BINARY (COMPACT BYTE ARRAY) page mode search here -- eventually
+  GP=F and warn("[NOTICE!!]: <%s:%s> :BINARY MODE NOT YET IMPLEMENTED",
+        MOD, meth, tostring(newStorageValue), tostring( resultList));
+  return 0, ERR_GENERAL; -- TODO: Build this mode.
+
+end -- scanByteArray()
+
+-- ======================================================================
 -- scanLeaf(): Scan a Leaf Node, gathering up all of the the matching
 -- value(s) in the leaf node(s).
 -- ======================================================================
@@ -2656,59 +2796,28 @@ local function scanLeaf(topRec, leafRec, startPosition, ldtMap, resultList,
   local compareResult = 0;
   local uniqueKey = ldtMap[R_KeyUnique];
   local scanStatus = SCAN_CONTINUE;
+  local resultA = 0;
+  local resultB = 0;
 
-  -- >>>>>>>>>>>>>>>>>>>>>>>>> BINARY MODE <<<<<<<<<<<<<<<<<<<<<<<<<<<
-  if ldtMap[R_StoreMode] == SM_BINARY then
-    -- Do the BINARY (COMPACT BYTE ARRAY) page mode search here -- eventually
-    GP=F and warn("[NOTICE!!]: <%s:%s> :BINARY MODE NOT YET IMPLEMENTED",
-        MOD, meth, tostring(newStorageValue), tostring( resultList));
-    return 0, ERR_GENERAL; -- TODO: Build this mode.
+  if( ldtMap[R_StoreMode] == SM_BINARY ) then
+    -- >>>>>>>>>>>>>>>>>>>>>>>>> BINARY MODE <<<<<<<<<<<<<<<<<<<<<<<<<<<
+    GP=F and trace("[DEBUG]<%s:%s> BINARY MODE SCAN", MOD, meth );
+    local byteArray = leafRec[LSR_BINARY_BIN];
+    resultA, resultB = scanByteArray( byteArray, startPosition, ldtMap,
+                        resultList, searchKey, func, fargs, flag);
   else
-  -- >>>>>>>>>>>>>>>>>>>>>>>>>  LIST  MODE <<<<<<<<<<<<<<<<<<<<<<<<<<<
+    -- >>>>>>>>>>>>>>>>>>>>>>>>>  LIST  MODE <<<<<<<<<<<<<<<<<<<<<<<<<<<
+    GP=F and trace("[DEBUG]<%s:%s> LIST MODE SCAN", MOD, meth );
     -- Do the List page mode search here
     -- Later: Split the loop search into two -- atomic and map objects
     local objectList = leafRec[LSR_LIST_BIN];
-    local listSize = list.size( objectList );
-    -- local keyType = ldtMap[R_KeyType];
-    -- We expect that the FIRST compare (at location "start") should be
-    -- equal, and then potentially some number of objects after that (assuming
-    -- it's NOT a unique key).  If unique, then we will just jump out on the
-    -- next compare.
-    local found = false;
-    GP=F and trace("[LEAF SCAN]<%s:%s>Position(%d)", MOD, meth, startPosition);
-    for i = startPosition, listSize, 1 do
-      compareResult = objectCompare( ldtMap, searchKey, objectList[i] );
-      if compareResult == CR_ERROR then
-        warn("[WARNING]<%s:%s> Compare Error", MOD, meth );
-        return 0, CR_ERROR; -- error result.
-      end
-      if( compareResult == CR_EQUAL ) then
-        -- This one qualifies -- save it in result.
-        -- if( compareResult == CR_EQUAL ) then
-        list.append( resultList, objectList[i] );
-        found = true; -- remember that we found something
-        GP=F and trace("[Scan:FOUND]<%s:%s>Pos(%d) Key(%s) Object(%s)",
-          MOD, meth, i, tostring(searchKey), tostring(objectList[i]));
-        if( uniqueKey == true and searchKey ~= nil ) then
-          scanStatus = SCAN_DONE;
-          break;
-        end
-      else
-        -- First non-equals means we're done.
-        GP=F and trace("[Scan:NON_MATCH]<%s:%s> Pos(%d) Key(%s) Object(%s)",
-          MOD, meth, i, tostring(searchKey), tostring(objectList[i]));
-        scanStatus = SCAN_DONE;
-        break;
-      end
-    end -- for each item from startPosition to end
+    resultA, resultB = listScan(objectList, startPosition, ldtMap,
+                  resultList, searchKey, func, fargs, flag);
   end -- else list mode
 
-  local result_A = scanStatus;
-  local result_B = ERR_OK; -- if we got this far, we're ok.
-
   GP=F and trace("[EXIT]<%s:%s> rc(%d) resultList(%s) A(%s) B(%s)", MOD, meth,
-    rc, tostring(resultList), tostring(result_A), tostring(result_B));
-  return result_A, result_B;
+    rc, tostring(resultList), tostring(resultA), tostring(resultB));
+  return resultA, resultB;
 end -- scanLeaf()
 
 -- ======================================================================
@@ -2774,8 +2883,9 @@ treeSearch( src, topRec, sp, ldtList, searchKey )
     -- info("\n\n >> SEARCH Loop TOP  << !!!!!!!!!!!!!!!!!!!!!!!!!! \n\n");
     GP=F and info("[DEBUG]<%s:%s>Loop Iteration(%d) Lvls(%d)",
       MOD, meth, i, treeLevels);
-    GP=F and trace("[::] KeyList(%s) DigList(%s) ObjectList(%s)",
-      tostring(keyList), tostring(digestList), tostring(objectList));
+    GP=F and trace("[TREE SRCH] it(%d) Lvls(%d) KList(%s) DList(%s) OList(%s)",
+      i, treeLevels, tostring(keyList), tostring(digestList),
+      tostring(objectList));
     if( i < treeLevels ) then
       -- It's a root or node search -- so search the keys
       GP=F and info("[DEBUG]<%s:%s> UPPER NODE Search", MOD, meth );
@@ -2795,6 +2905,9 @@ treeSearch( src, topRec, sp, ldtList, searchKey )
       -- If the next level is a leaf, then populate our ObjectList and LeafMap.
       -- Remember to get the STRING version of the digest in order to
       -- call "open_subrec()" on it.
+      info("[DEBUG]Opening Digest Pos(%d) DList(%s) for NextLevel",
+        position, tostring( digestList ));
+
       digestString = tostring( digestList[position] );
       GP=F and info("[DEBUG]<%s:%s> Checking Next Level", MOD, meth );
       -- NOTE: we're looking at the NEXT level (tl - 1) and we must be LESS
@@ -2804,7 +2917,7 @@ treeSearch( src, topRec, sp, ldtList, searchKey )
         GP=F and info("[Opening NODE Subrec]<%s:%s> Digest(%s) Pos(%d)",
             MOD, meth, digestString, position );
         nodeRec = openSubrec( src, topRec, digestString );
-        GP=F and info("[Subrec Results]<%s:%s>nodeRec(%s)",
+        GP=F and info("[Open Inner Node Results]<%s:%s>nodeRec(%s)",
           MOD, meth, tostring(nodeRec));
         nodeMap = nodeRec[NSR_CTRL_BIN];
         propMap = nodeRec[SUBREC_PROP_BIN];
@@ -2818,7 +2931,7 @@ treeSearch( src, topRec, sp, ldtList, searchKey )
       else
         -- Next Node is a Leaf
         GP=F and info("[Opening Leaf]<%s:%s> Digest(%s) Pos(%d) TreeLevel(%d)",
-          MOD, meth, digestString, position, i);
+          MOD, meth, digestString, position, i+1);
         nodeRec = openSubrec( src, topRec, digestString );
         GP=F and info("[Open Leaf Results]<%s:%s>nodeRec(%s)",
           MOD,meth,tostring(nodeRec));
@@ -2835,7 +2948,7 @@ treeSearch( src, topRec, sp, ldtList, searchKey )
       resultMap = searchObjectList( ldtMap, objectList, searchKey );
       if( resultMap.Status == 0 ) then
         GP=F and info("[DEBUG]<%s:%s> LEAF Search Result::Pos(%d) Cnt(%d)",
-          MOD, meth, resultMap.Position, keyCount);
+          MOD, meth, resultMap.Position, objectCount);
         updateSearchPath( sp, propMap, ldtMap, nodeRec,
                   resultMap.Position, objectCount );
       else
@@ -2896,7 +3009,6 @@ end -- populateLeaf()
 -- ======================================================================
 local function listInsert( myList, newValue, position )
   local meth = "listInsert()";
-  rc = 0;
   GP=F and trace("[ENTER]<%s:%s>List(%s) size(%d) Value(%s) Position(%d)", MOD,
   meth, tostring(myList), list.size(myList), tostring(newValue), position );
   
@@ -2904,8 +3016,8 @@ local function listInsert( myList, newValue, position )
   if( position > listSize ) then
     -- Just append to the list
     list.append( myList, newValue );
-    GP=F and trace("[MYLIST APPEND]<%s:%s> Appended item(%s) to list(%s)", MOD, meth,
-      tostring(newValue), tostring(myList) );
+    GP=F and trace("[MYLIST APPEND]<%s:%s> Appended item(%s) to list(%s)",
+      MOD, meth, tostring(newValue), tostring(myList) );
   else
     -- Move elements in the list from "Position" to the end (end + 1)
     -- and then insert the new value at "Position".  We go back to front so
@@ -2923,8 +3035,8 @@ local function listInsert( myList, newValue, position )
     --          +---+---+---+---+
     -- Note that we can't index beyond the end, so that first move must be
     -- an append, not an index access list[end+1] = value.
-    GP=F and trace("[MYLIST TRANSFER]<%s:%s> listSize(%d) position(%d)", MOD, meth,
-      listSize, position );
+    GP=F and trace("[MYLIST TRANSFER]<%s:%s> listSize(%d) position(%d)",
+      MOD, meth, listSize, position );
     local endValue = myList[listSize];
     list.append( myList, endValue );
     for i = (listSize - 1), position, -1  do
@@ -2935,8 +3047,10 @@ local function listInsert( myList, newValue, position )
     -- info("[MYLIST FINAL]: mylist(%s)", tostring(mylist) );
   end
 
-  GP=F and trace("[EXIT]<%s:%s> rc(%s)", MOD, meth, tostring(rc) );
-  return rc;
+  GP=F and trace("[EXIT]<%s:%s> Appended(%s) to list(%s)", MOD, meth,
+    tostring(newValue), tostring(myList));
+
+  return 0;
 end -- listInsert()
 
 -- ======================================================================
@@ -2965,7 +3079,8 @@ local function leafInsert( topRec, leafRec, ldtMap, newKey, newValue, position)
   local leafMap =  leafRec[LSR_CTRL_BIN];
 
   if( position == 0 ) then
-    GP=F and trace("[INFO]<%s:%s>Position is ZERO:must Search for position", MOD, meth );
+    GP=F and trace("[INFO]<%s:%s>Position is ZERO:must Search for position",
+      MOD, meth );
     local resultMap = searchObjectList( ldtMap, objectList, newKey );
     position = resultMap.Position;
   end
@@ -3184,7 +3299,8 @@ local function splitRootInsert( src, topRec, sp, ldtList, key, digest )
     MOD, meth,tostring(topRec), tostring(src), tostring(sp), tostring(key),
     tostring(digest));
   
-  GP=F and trace("\n\n <><H><> !!! SPLIT ROOT !!! <><W><> \n");
+  GP=F and trace("\n\n <><H><> !!! SPLIT ROOT !!! Key(%s)<><W><> \n",
+    tostring( key ));
 
   -- Extract the property map and control map from the ldt bin list.
   local propMap = ldtList[1];
@@ -3256,10 +3372,10 @@ local function splitRootInsert( src, topRec, sp, ldtList, key, digest )
   -- and otherwise insert into the right node.
   local compareResult = keyCompare( key, splitKey );
   if( compareResult == CR_LESS_THAN ) then
-    -- We choose the LEFT Leaf -- but we must search for the location
+    -- We choose the LEFT Node -- but we must search for the location
     nodeInsert( leftKeyList, leftDigestList, key, digest, 0 );
   elseif( compareResult >= CR_EQUAL  ) then -- this works for EQ or GT
-    -- We choose the RIGHT (new) Leaf -- but we must search for the location
+    -- We choose the RIGHT (new) Node -- but we must search for the location
     nodeInsert( rightKeyList, rightDigestList, key, digest, 0 );
   else
     -- We got some sort of goofy error.
@@ -3409,10 +3525,10 @@ local function splitNodeInsert( src, topRec, sp, ldtList, key, digest, level )
     -- and otherwise insert into the right node.
     local compareResult = keyCompare( key, splitKey );
     if( compareResult == CR_LESS_THAN ) then
-      -- We choose the LEFT Leaf -- but we must search for the location
+      -- We choose the LEFT Node -- but we must search for the location
       nodeInsert( leftKeyList, leftDigestList, key, digest, 0 );
     elseif( compareResult >= CR_EQUAL  ) then -- this works for EQ or GT
-      -- We choose the RIGHT (new) Leaf -- but we must search for the location
+      -- We choose the RIGHT (new) Node -- but we must search for the location
       nodeInsert( rightKeyList, rightDigestList, key, digest, 0 );
     else
       -- We got some sort of goofy error.
@@ -3426,13 +3542,14 @@ local function splitNodeInsert( src, topRec, sp, ldtList, key, digest, level )
     aerospike:update_subrec( leftNodeRec );
     aerospike:update_subrec( rightNodeRec );
 
-    -- Update the parent node with the new leaf information.  It is the job
+    -- Update the parent node with the new Node information.  It is the job
     -- of this method to either split the parent or do a straight insert.
     
-    GP=F and trace("\n\n CALLING INSERT PARENT FROM SPLIT NODE \n\n");
+    GP=F and trace("\n\n CALLING INSERT PARENT FROM SPLIT NODE: Key(%s)\n",
+      tostring(splitKey));
 
     insertParentNode(src, topRec, sp, ldtList, splitKey,
-      leftLeafDigest, level - 1 );
+      leftNodeDigest, level - 1 );
   end -- else regular (non-root) node split
 
   GP=F and trace("[EXIT]<%s:%s> rc(%s)", MOD, meth, tostring(rc) );
@@ -3557,6 +3674,10 @@ local function createLeafRec( src, topRec, ldtList, firstValue )
     error( ldte.ERR_SUBREC_CREATE );
   end
 
+  -- Increase the Subrec Count
+  local subrecCount = propMap[PM_SubRecCount];
+  propMap[PM_SubRecCount] = subrecCount + 1;
+
   local rc = initializeLeaf( topRec, ldtList, leafRec, firstValue );
   if( rc >= 0 ) then
     GP=F and trace("[DEBUG]<%s:%s>Leaf Init OK", MOD, meth );
@@ -3600,12 +3721,49 @@ local function
 splitLeafInsert( src, topRec, sp, ldtList, newKey, newValue )
   local meth = "splitLeafInsert()";
   local rc = 0;
+
+  GP=F and info("\n\n <><><> !!! SPLIT LEAF !!! <><><> \n\n");
+
   GP=F and trace("[ENTER]<%s:%s> SP(%s) LDT(%s) Key(%s) Val(%s)",
     MOD, meth, tostring(sp), ldtSummaryString(ldtList),
     tostring(newKey), tostring(newValue));
 
-  GP=F and info("\n\n <><><> !!! SPLIT LEAF !!! <><><> \n\n");
-
+  -- Splitting a leaf works as follows.  It is slightly different than a
+  -- node split.  The leaf is split into a left piece and a right piece. 
+  --
+  -- The first element if the right leaf becomes the new key that gets
+  -- propagated up to the parent.  This is the main difference between a Leaf
+  -- split and a node split.  The leaf split is the COPY of the key, whereas
+  -- the node split moves the key up.
+  --               +---+---+
+  --  Key List     |111|888|
+  --               +---+---+
+  --  Digest List  A   B   C
+  --
+  -- +---+---+    +---+---+---+---+---+    +---+---+
+  -- | 50| 88|    |111|222|333|444|555|    |888|999|
+  -- +---+---+    +---+---+---+---+---+    +---+---+
+  -- Leaf A       Leaf B                   Leaf C
+  --
+  --                      +---+
+  -- New Parent Element   |333|
+  --                      +---+
+  --                     /     \
+  --              +---+---+   +---+---+---+
+  --              |111|222|   |333|444|555|
+  --              +---+---+   +---+---+---+
+  --              Leaf B1     Leaf B2
+  --
+  --               +---+---+---+
+  --  Key List     |111|333|888|
+  --               +---+---+---+
+  --  Digest List  A   B1  B2  C
+  --
+  -- +---+---+    +---+---+   +---+---+---+    +---+---+
+  -- | 50| 88|    |111|222|   |333|444|555|    |888|999|
+  -- +---+---+    +---+---+   +---+---+---+    +---+---+
+  -- Leaf A       Leaf B1     Leaf B2          Leaf C
+  --
   -- Extract the property map and control map from the ldt bin list.
   local propMap = ldtList[1];
   local ldtMap  = ldtList[2];
@@ -3636,8 +3794,8 @@ splitLeafInsert( src, topRec, sp, ldtList, newKey, newValue )
   local leftList  = list.take( objectList, splitPosition - 1 );
   local rightList = list.drop( objectList, splitPosition - 1 );
 
-  GP=F and trace("\n[DEBUG]<%s:%s>: LeftList(%s) SplitKey(%s) RightList(%s)", MOD, meth,
-    tostring(leftList), tostring(splitKey), tostring(rightList) );
+  GP=F and trace("\n[DEBUG]<%s:%s>: LeftList(%s) SplitKey(%s) RightList(%s)",
+    MOD, meth, tostring(leftList), tostring(splitKey), tostring(rightList) );
 
   local rightLeafRec = leafRec; -- our new name for the existing leaf
   local leftLeafRec = createLeafRec( src, topRec, ldtList, nil );
@@ -3675,7 +3833,8 @@ splitLeafInsert( src, topRec, sp, ldtList, newKey, newValue )
 
   -- Update the parent node with the new leaf information.  It is the job
   -- of this method to either split the parent or do a straight insert.
-  GP=F and trace("\n\n CALLING INSERT PARENT FROM SPLIT LEAF \n\n");
+  GP=F and trace("\n\n CALLING INSERT PARENT FROM SPLIT LEAF: Key(%s)\n",
+    tostring(splitKey));
   insertParentNode(src, topRec, sp, ldtList, splitKey,
     leftLeafDigest, leafLevel - 1 );
 
@@ -3974,256 +4133,12 @@ end -- unTransformComplexCompare()
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
-
--- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
--- Scan a List for an item.  Return the item if found.
--- This is COMPLEX SCAN, which means we are comparing the KEY field of the
--- map object in both the value and in the List.
--- We've added a delete flag that will allow us to remove the element if
--- we choose -- but for now, we are not collapsing the list.
--- Parms:
--- (*) resultList: we pass the results back in this list
--- (*) ldtList: The LDT Control structure
--- (*) objList: the list of values from the record
--- (*) value: the value we're searching for
--- (*) flag:
---     ==> if ==  FV_INSERT: insert the element IF NOT FOUND
---     ==> if ==  FV_SCAN: then return element if found, else return nil
---     ==> if ==  FV_DELETE:  then replace the found element with nil
--- Return:
--- For FV_SCAN and FV_DELETE:
---    nil if not found, Value if found.
---   (NOTE: Can't return 0 -- because that might be a valid value)
--- For insert (FV_INSERT):
--- Return 0 if found (and not inserted), otherwise 1 if inserted.
--- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
-local function complexScanList(resultList, ldtList, objList, value, flag ) 
-  local meth = "complexScanList()";
-  GP=F and trace("[ENTER]<%s:%s> ", MOD, meth );
-
-  GP=F and info("[HEY!!]<%s:%s> Must Change this to use RESULT MAP",MOD,meth );
-  GP=F and info("[HEY!!]<%s:%s> Must ALSO Change this Result List", MOD,meth );
-
-  local result = nil;
-  local rc = 0;
-  
-  -- Extract the property map and control map from the ldt bin list.
-  local propMap = ldtList[1];
-  local ldtMap  = ldtList[2];
-  local binName = propMap[PM_BinName];
-
-  local transform = nil;
-  local unTransform = nil;
-
-  if ldtMap[R_Transform] ~= nil then
-    transform = functionTable[ldtMap[R_Transform]];
-  end
-
-  if ldtMap[R_UnTransform] ~= nil then
-    unTransform = functionTable[ldtMap[R_UnTransform]];
-  end
-
-  local key = getKeyValue( ldtMap, value );
-
-  -- Scan the list for the item, return true if found,
-  -- Later, we may return a set of things 
-  local resultValue = nil;
-  for i = 1, list.size( objList ), 1 do
-    GP=F and trace("[DEBUG]: <%s:%s> It(%d) Comparing SV(%s) with BinV(%s)",
-                   MOD, meth, i, tostring(value), tostring(objList[i]));
-    if objList[i] ~= nil and objList[i] ~= FV_EMPTY then
-      resultValue =
-          unTransformComplexCompare(ldtMap, unTransform, objList[i], key);
-      if resultValue ~= nil then
-        GP=F and trace("[EARLY EXIT]: <%s:%s> Found(%s)",
-          MOD, meth, tostring(resultValue));
-        if( flag == FV_DELETE ) then
-          objList[i] = FV_EMPTY; -- the value is NO MORE
-          -- Decrement ItemCount (valid entries) but TotalCount stays the same
-          local itemCount = propMap[PM_temCount];
-          propMap[PM_ItemCount] = itemCount - 1;
-        elseif flag == FV_INSERT then
-          return 0 -- show caller nothing got inserted (don't count it)
-        end
-        -- Found it -- return result
-        return resultValue;
-      end -- end if found it
-    end -- end if value not nil or empty
-  end -- for each list entry in this objList
-
-  -- Didn't find it.  If FV_INSERT, then append the value to the list
-  if flag == FV_INSERT then
-    GP=F and trace("[DEBUG]: <%s:%s> INSERTING(%s)",
-                   MOD, meth, tostring(value));
-
-    -- apply the transform (if needed)
-    local storeValue = applyTransform( transform, value );
-    list.append( objList, storeValue );
-    return 1 -- show caller we did an insert
-  end
-
-  GP=F and trace("[LATE EXIT]: <%s:%s> Did NOT Find(%s)",
-    MOD, meth, tostring(value));
-  return nil;
-end -- complexScanList
-
--- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
--- Scan a List for an item.  Return the item if found.
--- This is SIMPLE SCAN, where we are assuming ATOMIC values.
--- We've added a delete flag that will allow us to remove the element if
--- we choose -- but for now, we are not collapsing the list.
--- Parms:
--- (*) objList: the list of values from the record
--- (*) value: the value we're searching for
--- (*) flag:
---     ==> if ==  FV_INSERT: insert the element IF NOT FOUND
---     ==> if ==  FV_SCAN: then return element if found, else return nil
---     ==> if ==  FV_DELETE:  then replace the found element with nil
--- Return:
--- For FV_SCAN and FV_DELETE:
---    nil if not found, Value if found.
---   (NOTE: Can't return 0 -- because that might be a valid value)
--- For FV_INSERT:
--- Return 0 if found (and not inserted), otherwise 1 if inserted.
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
-local function simpleScanList(resultList, ldtList, objList, newValue, flag,
-  filter, fargs ) 
-  local meth = "simpleScanList()";
-  GP=F and trace("[ENTER]<%s:%s> Looking for V(%s), ListSize(%d) List(%s)",
-                 MOD, meth, tostring(newValue), list.size(objList),
-                 tostring(objList))
-  local rc = 0;
 
-  GP=F and info("[HEY!!]<%s:%s> Must Change this to use RESULT MAP", MOD, meth );
-  GP=F and info("[HEY!!]<%s:%s> Must ALSO Change this Result List", MOD, meth );
-
-  -- Extract the property map and control map from the ldt bin list.
-  local propMap = ldtList[1];
-  local ldtMap  = ldtList[2];
-  local binName = propMap[PM_BinName];
-
-  -- Check once for the transform/untransform functions -- so we don't need
-  -- to do it inside the loop.
-  local transform = nil;
-  local unTransform = nil;
-  if ldtMap[R_Transform] ~= nil then
-    transform = functionTable[ldtMap[R_Transform]];
-  end
-
-  if ldtMap[R_UnTransform] ~= nil then
-    unTransform = functionTable[ldtMap[R_UnTransform]];
-  end
-
-  -- Scan the list for the item, return true if found,
-  -- Later, we may return a set of things 
-  local resultValue = nil;
-  for i = 1, list.size( objList ), 1 do
-    GP=F and trace("[DEBUG]: <%s:%s> It(%d) Comparing SV(%s) with BinV(%s)",
-                   MOD, meth, i, tostring(newValue), tostring(objList[i]));
-    if objList[i] ~= nil and objList[i] ~= FV_EMPTY then
-      resultValue = unTransformSimpleCompare(unTransform,objList[i],newValue);
-      if resultValue ~= nil then
-        GP=F and trace("[EARLY EXIT]: <%s:%s> Found(%s)",
-          MOD, meth, tostring(resultValue));
-        if( flag == FV_DELETE ) then
-          objList[i] = FV_EMPTY; -- the value is NO MORE
-          -- Decrement ItemCount (valid entries) but TotalCount stays the same
-          local itemCount = propMap[PM_ItemCount];
-          propMap[PM_ItemCount] = itemCount - 1;
-        elseif flag == FV_INSERT then
-          return 0 -- show caller nothing got inserted (don't count it)
-        end
-        -- Found it -- return result (only for scan and delete, not insert)
-        list.append( resultList, resultValue );
-        return 0; -- Found it. Return with success.
-      end -- end if found it
-    end -- end if not null and not empty
-  end -- end for each item in the list
-
-  -- Didn't find it.  If FV_INSERT, then append the value to the list
-  -- Ideally, if we noticed a hole, we should use THAT for insert and not
-  -- make the list longer.
-  -- TODO: Fill in holes if we notice a lot of gas in the lists.
-  if flag == FV_INSERT then
-    GP=F and trace("[EXIT]: <%s:%s> Inserting newValue(%s)",
-                   MOD, meth, tostring(newValue));
-    local storeValue = applyTransform( transform, newValue );
-    list.append( objList, storeValue );
-    return 1 -- show caller we did an insert
-  end
-  GP=F and trace("[LATE EXIT]: <%s:%s> Did NOT Find Value(%s)",
-                 MOD, meth, tostring(newValue));
-  return 0; -- All is well.
-end -- simpleScanList
-
-
--- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
--- Scan a List for an item.  Return the item if found.
--- Since there are two types of scans (simple, complex), we do the test
--- up front and call the appropriate scan type (rather than do the test
--- of which compare to do -- for EACH value.
--- Parms:
--- (*) ldtMap: the control map -- so we can see the type of key
--- (*) objList: the list of values from the record
--- (*) key: the value we're searching for
--- (*) flag:
---     ==> if ==  FV_DELETE:  then replace the found element with nil
---     ==> if ==  FV_SCAN: then return element if found, else return nil
---     ==> if ==  FV_INSERT: insert the element IF NOT FOUND
--- Return: nil if not found, Value if found.
--- (NOTE: Can't return 0 -- because that might be a valid value)
--- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
-local function scanList( resultList, ldtList, objList, key, flag,
-    filter, fargs ) 
-  local meth = "scanList()";
-  GP=F and trace("[ENTER]<%s:%s> ", MOD, meth );
-  --
-  -- Extract the property map and control map from the ldt bin list.
-  local propMap = ldtList[1];
-  local ldtMap  = ldtList[2];
-
-  GP=F and trace("[ENTER]<%s:%s>RL(%s)Mp(%s)OL(%s)SV(%s)Fg(%s)Fr(%s)Args(%s)",
-      MOD, meth, tostring( resultList), tostring(ldtMap),
-      tostring(objList), tostring(key), tostring(flag),
-      tostring( filter ), tostring( fargs ));
-
-  GP=F and trace("[DEBUG]:<%s:%s> KeyType(%s) A(%s) C(%s)",
-      MOD, meth, tostring(ldtMap[R_KeyType]), tostring(KT_ATOMIC),
-      tostring(KT_COMPLEX) );
-
-  -- If we don't have a key, then we don't apply a key, but
-  -- pass evertything thru to filter.
-  -- Choices for KeyType are KT_ATOMIC or KT_COMPLEX
-  if ldtMap[R_KeyType] == KT_ATOMIC then
-    return simpleScanList(resultList, ldtList, objList, key, flag ) 
-  else
-    return complexScanList(resultList, ldtList, objList, key, flag ) 
-  end
-end -- scanList()
 
 -- ======================================================================
--- compactListInsert( topRec, ldtList, newValue, stats )
--- ======================================================================
--- Pass the work on to "scanList()" who is used to heavy lifting
-local function compactListInsert( topRec, ldtList, newValue, stats )
-  local meth = "compactListInsert()";
-  GP=F and trace("[ENTER]<%s:%s> ", MOD, meth );
-
-  -- Extract the property map and control map from the ldt bin list.
-  local propMap = ldtList[1];
-  local ldtMap  = ldtList[2];
-
-  local compactList = ldtMap[R_CompactList];
-
-  local rc = scanList(nil,ldtList,compactList,newValue,FV_INSERT,nil,nil);
-
-  GP=F and trace("[EXIT]<%s:%s> rc(%s)", MOD, meth, tostring(rc) );
-  return rc;
-end -- compactListInsert()
-
--- ======================================================================
--- localInsert( topRec, ldtList, newValue, stats )
+-- localInsert( src, topRec, ldtList, newValue, stats )
 -- ======================================================================
 -- Perform the main work of insert (used by both convertList() and the
 -- regular insert().
@@ -4237,6 +4152,7 @@ end -- compactListInsert()
 local function localInsert(src, topRec, ldtList, newValue, stats )
   local meth = "localInsert()";
   GP=F and trace("[ENTER]:<%s:%s>Insert(%s)", MOD, meth, tostring(newValue));
+  local rc = 0;
   
   -- Extract the property map and control map from the ldt bin list.
   local propMap = ldtList[1];
@@ -4247,9 +4163,32 @@ local function localInsert(src, topRec, ldtList, newValue, stats )
   -- real tree insert.
   local insertResult = 0;
   if( ldtMap[R_StoreState] == SS_COMPACT ) then 
-    GP=F and info("[NOTICE]<%s:%s> Using COMPACT INSERT", MOD, meth);
-    insertResult = compactListInsert( topRec, ldtList, newValue, stats );
+    -- Do the COMPACT LIST INSERT
+    GP=F and info("[NOTICE]<%s:%s> Using >>>  LIST INSERT  <<<", MOD, meth);
+    local objectList = ldtMap[R_CompactList];
+    local key = getKeyValue( ldtMap, newValue );
+    local resultMap = searchObjectList( ldtMap, objectList, key );
+    if( resultMap.Status == ERR_OK ) then
+      -- If FOUND, then we have to verify that Duplicates are allowed.
+      -- Otherwise, do the insert.
+      if( resultMap.Found == true and ldtMap[R_KeyUnique] == true ) then
+        warn("[ERROR]<%s:%s> Unique Key Violation", MOD, meth );
+        error( ldte.ERR_UNIQUE_KEY );
+      end
+      local position = resultMap.Position;
+      rc = listInsert( objectList, newValue, position );
+      GP=F and trace("[DEBUG]<%s:%s> Insert List rc(%d)", MOD, meth, rc );
+      if( rc < 0 ) then
+        warn("[ERROR]<%s:%s> Problems with Insert: RC(%d)", MOD, meth, rc );
+        error( ldte.ERR_INTERNAL );
+      end
+    else
+      warn("[Internal ERROR]<%s:%s> Key(%s), List(%s)", MOD, meth,
+        tostring( key ), tostring( objectList ) );
+      error( ldte.ERR_INTERNAL );
+    end
   else
+    -- Do the TREE INSERT
     GP=F and info("[NOTICE]<%s:%s> Using >>>  TREE INSERT  <<<", MOD, meth);
     insertResult = treeInsert(src, topRec, ldtList, newValue, stats );
   end
@@ -4322,6 +4261,7 @@ local function convertList(src, topRec, ldtBinName, ldtList )
   local meth = "convertList()";
 
   GP=F and trace("[ENTER]<%s:%s>\n\n <><>  CONVERT LIST <><>\n\n", MOD, meth );
+  GP=F and trace("[ENTER]<%s:%s>\n\n <><>  CONVERT LIST <><>\n\n", MOD, meth );
   
   -- Extract the property map and control map from the ldt bin list.
   local propMap = ldtList[1];
@@ -4391,6 +4331,7 @@ treeScan(src, resultList, topRec, sp, ldtList, key, func, fargs )
     scan_A, scan_B  = scanLeaf(topRec, leafRec, startPosition, ldtMap,
                               resultList, key, func, fargs, flag)
 
+list.append(resultList, 999999 );
     -- Look and see if there's more scanning needed. If so, we'll read
     -- the next leaf in the tree and scan another leaf.
     if( scan_B < 0 ) then
@@ -4682,7 +4623,7 @@ function llist_create( topRec, ldtBinName, argList )
    MOD, meth, ldtSummaryString( ldtList ) );
 
   -- All done, store the record
-  local rc = -99; -- Use Odd starting Num: so that we know it got changed
+  local rc;
   if( not aerospike:exists( topRec ) ) then
     GP=F and trace("[DEBUG]:<%s:%s>:Create Record()", MOD, meth );
     rc = aerospike:create( topRec );
@@ -4690,9 +4631,15 @@ function llist_create( topRec, ldtBinName, argList )
     GP=F and trace("[DEBUG]:<%s:%s>:Update Record()", MOD, meth );
     rc = aerospike:update( topRec );
   end
-
-  GP=F and trace("[EXIT]: <%s:%s> : Done.  RC(%s)", MOD, meth, tostring(rc) );
-  return rc;
+  
+  -- Process Create/Update results.
+  if( rc == nil or rc == 0 ) then
+    GP=F and trace("[Normal EXIT]:<%s:%s> Return(0)", MOD, meth );
+    return 0;
+  else
+    GP=F and trace("[ERROR EXIT]:<%s:%s> Return(%s)", MOD, meth,tostring(rc));
+    error( ldte.ERR_INTERNAL );
+  end
 end -- function llist_create( topRec, namespace, set )
 
 -- ======================================================================
@@ -4795,7 +4742,7 @@ local function localLListInsert( topRec, ldtBinName, newValue, createSpec )
   end
 
   -- All done, store the record (either CREATE or UPDATE)
-  local rc = -99; -- Use Odd starting Num: so that we know it got changed
+  local rc;
   if( not aerospike:exists( topRec ) ) then
     GP=F and trace("[DEBUG]:<%s:%s>:Create TopRecord()", MOD, meth );
     rc = aerospike:create( topRec );
@@ -4804,14 +4751,15 @@ local function localLListInsert( topRec, ldtBinName, newValue, createSpec )
     rc = aerospike:update( topRec );
   end
 
-  GP=F and trace("[EXIT]<%s:%s> Done RC(%s)", MOD, meth, tostring(rc) );
-  -- return rc;
-  --
+  -- Process Create/Update results.
   if( rc == nil or rc == 0 ) then
-    return "OK";
+    GP=F and trace("[Normal EXIT]:<%s:%s> Return(0)", MOD, meth );
+    return 0;
   else
-    return "NOT OK";
+    GP=F and trace("[ERROR EXIT]:<%s:%s> Return(%s)", MOD, meth,tostring(rc));
+    error( ldte.ERR_INTERNAL );
   end
+
 end -- function localLListInsert()
 
 -- =======================================================================
@@ -4820,12 +4768,14 @@ end -- function localLListInsert()
 -- all of the work.
 -- =======================================================================
 function llist_insert( topRec, ldtBinName, newValue )
-  GP=F and info("\n\n >>>>>>>>> API[ LLIST INSERT ] <<<<<<<<<< \n\n");
+  GP=F and info("\n\n >>>>>>>>> API[ LLIST INSERT ] <<<<<<<<<(%s) \n",
+    tostring(newValue));
   return localLListInsert( topRec, ldtBinName, newValue, nil )
 end -- end llist_insert()
 
 function llist_create_and_insert( topRec, ldtBinName, newValue, createSpec )
-  GP=F and info("\n\n >>>>>>>>> API[ LLIST CREATE And INSERT ] <<<<<<<<<< \n\n");
+  GP=F and info("\n\n >>>>>>> API[ LLIST CREATE And INSERT ] <<<<<<<<(%s)\n",
+    tostring(newValue));
   return localLListInsert( topRec, ldtBinName, newValue, createSpec );
 end -- llist_create_and_insert()
 
@@ -4845,8 +4795,7 @@ end -- llist_create_and_insert()
 -- ======================================================================
 local function localLListSearch( topRec, ldtBinName, key, func, fargs )
   local meth = "localLListSearch()";
-  GP=F and trace("[ENTER]<%s:%s> key(%s) ",
-      MOD, meth,tostring(key) );
+  GP=F and trace("[ENTER]<%s:%s> key(%s) ", MOD, meth, tostring(key) );
 
   local rc = 0;
   -- Define our return list
@@ -4865,35 +4814,65 @@ local function localLListSearch( topRec, ldtBinName, key, func, fargs )
   -- the call.  Then, allows us to close them all at the end.
   local src = createSubrecContext();
 
+  local resultA;
+  local resultB;
+
   -- If our state is "compact", do a simple list search, otherwise do a
   -- full tree search.
   if( ldtMap[R_StoreState] == SS_COMPACT ) then 
-    GP=F and trace("[DEBUG]<%s:%s> Searching Compact List", MOD, meth );
-    local objList = ldtMap[R_CompactList];
-    rc = scanList(resultList,ldtList,objList,key,FV_SCAN,func,fargs);
+    -- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+    -- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+    -- Do the COMPACT LIST SEARCH
+    local objectList = ldtMap[R_CompactList];
+    local resultMap = searchObjectList( ldtMap, objectList, key );
+    if( resultMap.Status == ERR_OK and resultMap.Found == true ) then
+      local position = resultMap.Position;
+      resultA, resultB =  listScan(objectList, startPosition, ldtMap,
+                    resultList, key, func, fargs, flag);
+      GP=F and trace("[DEBUG]<%s:%s> Scan Compact List:Res(%s) A(%s) B(%s)",
+        MOD, meth, tostring(resultList), tostring(resultA), tostring(resultB));
+      if( resultB < 0 ) then
+        warn("[ERROR]<%s:%s> Problems with Scan: Key(%s), List(%s)", MOD, meth,
+          tostring( key ), tostring( objectList ) );
+        error( ldte.ERR_INTERNAL );
+      end
+    else
+      warn("[ERROR]<%s:%s> Search Not Found: Key(%s), List(%s)", MOD, meth,
+        tostring( key ), tostring( objectList ) );
+      error( ldte.ERR_NOT_FOUND );
+    end
+    -- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+    -- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
   else
+    -- Do the TREE Search
     GP=F and trace("[DEBUG]<%s:%s> Searching Tree", MOD, meth );
     local sp = createSearchPath(ldtMap);
     rc = treeSearch( src, topRec, sp, ldtList, key );
     if( rc == ST_FOUND ) then
-      rc = treeScan( src, resultList, topRec, sp, ldtList, key,
-                    func, fargs );
+      rc = treeScan( src, resultList, topRec, sp, ldtList, key, func, fargs );
+      if( rc < 0 or list.size( resultList ) == 0 ) then
+          warn("[ERROR]<%s:%s> Tree Scan Problem: RC(%d) after a good search",
+            MOD, meth, rc );
+      end
+    else
+      warn("[ERROR]<%s:%s> Tree Search Not Found: Key(%s)", MOD, meth,
+        tostring( key ) );
+      error( ldte.ERR_NOT_FOUND );
     end
   end -- tree search
 
   -- Close ALL of the subrecs that might have been opened
   rc = closeAllSubrecs( src );
   if( rc < 0 ) then
-    warn("[ERROR]<%s:%s> Problem closing subrec in search", MOD, meth );
+    warn("[EARLY EXIT]<%s:%s> Problem closing subrec in search", MOD, meth );
     error( ldte.ERR_SUBREC_CLOSE );
   end
 
   GP=F and trace("[EXIT]: <%s:%s>: Search Key(%s) Returns (%s)",
   MOD, meth, tostring(key), tostring(resultList));
   
-  -- TODO : NOTE :: Need to Pass a RESULT OBJECT HERE -- not just a status
-  -- or result list.
-  --
+  -- We have either jumped out of here via error() function call, or if
+  -- we got this far, then we are supposed to have a valid resultList.
   return resultList;
 end -- function localLListSearch() 
 
@@ -4910,7 +4889,8 @@ function llist_search( topRec, ldtBinName, searchKey )
   GP=F and trace("[ENTER]<%s:%s> LLIST BIN(%s) searchKey(%s)",
     MOD, meth, tostring(ldtBinName), tostring(searchKey) )
 
-  GP=F and info("\n\n >>>>>>>>> API[ LLIST SEARCH ] <<<<<<<<<< \n\n");
+  GP=F and info("\n\n >>>>>>>>> API[ LLIST SEARCH ] <<<<<<<<<(%s) \n",
+    tostring(searchKey));
 
   return localLListSearch( topRec, ldtBinName, searchKey, nil, nil );
 end -- end llist_search()
@@ -4921,7 +4901,8 @@ function llist_search_with_filter(topRec,ldtBinName,searchKey,func,fargs )
     MOD, meth, tostring(ldtBinName), tostring(searchKey),
     tostring(func), tostring(fargs));
 
-  GP=F and info("\n\n >>>>>>>>> API[ LLIST SEARCH With FILTER] <<<<<<<<<< \n\n");
+  GP=F and info("\n\n >>>>>>>> API[ LLIST SEARCH With FILTER] <<<<<<<(%s)\n",
+    tostring(searchKey));
 
   return localLListSearch( topRec, ldtBinName, searchKey, func, fargs );
 end -- end llist_search_with_filter()
@@ -4970,7 +4951,8 @@ function llist_delete( topRec, binName, key )
   local meth = "llist_delete()";
   local rc = 0;
 
-  GP=F and info("\n\n  >>>>>>> API[ DELETE ] <<<<<<<<<<<<<<<<<<< \n\n");
+  GP=F and info("\n\n  >>>>>>> API[ DELETE ] <<<<<<<<<<<<<<<(%s) \n",
+    tostring(key));
 
   GP=F and trace("[ENTER]<%s:%s>ldtBinName(%s) key(%s)",
       MOD, meth, tostring(binName), tostring(key));
@@ -4992,9 +4974,15 @@ function llist_delete( topRec, binName, key )
   -- real tree insert.
   local insertResult = 0;
   if( ldtMap[R_StoreState] == SS_COMPACT ) then 
-    local compactList = ldtMap[R_CompactList];
+    -- Search the compact list, find the location, then delete it.
     GP=F and info("[NOTICE]<%s:%s> Using COMPACT DELETE", MOD, meth);
-    rc = scanList( nil, ldtList, compactList, key, FV_DELETE, nil, nil);
+    local objectList = ldtMap[R_CompactList];
+    resultMap = searchObjectList( ldtMap, objectList, key );
+    if( resultMap.Status == ERR_OK and resultMap.Found == true ) then
+      ldtMap[R_CompactList] = listDelete(objectList, key, resultMap.Position);
+    else
+      error( ldte.ERR_NOT_FOUND );
+    end
   else
     GP=F and info("[NOTICE]<%s:%s> Using >>>  TREE DELETE  <<<", MOD, meth);
     rc = treeDelete(src, topRec, ldtList, key );
@@ -5023,12 +5011,22 @@ function llist_delete( topRec, binName, key )
     -- All done, store the record
     GP=F and trace("[DEBUG]:<%s:%s>:Update Record()", MOD, meth );
     rc = aerospike:update( topRec );
+
+    -- Update the Top Record.  Not sure if this returns nil or ZERO for ok,
+    -- so just turn any NILs into zeros.
+    rc = aerospike:update( topRec );
+    if( rc == nil or rc == 0 ) then
+      GP=F and trace("[Normal EXIT]:<%s:%s> Return(0)", MOD, meth );
+      return 0;
+    else
+      GP=F and trace("[ERROR EXIT]:<%s:%s> Return(%s)", MOD, meth,tostring(rc));
+      error( ldte.ERR_INTERNAL );
+    end
+  else
+    GP=F and trace("[ERROR EXIT]:<%s:%s> Return(%s)", MOD, meth,tostring(rc));
+    error( ldte.ERR_DELETE );
   end
-
-  GP=F and trace("[EXIT]: <%s:%s> : Done.  RC(%s)", MOD, meth, tostring(rc));
-  return rc;
 end -- function llist_delete()
-
 
 -- ========================================================================
 -- ldtRemove() -- Remove the LDT entirely from the record.
@@ -5097,12 +5095,18 @@ local function ldtRemove( topRec, binName )
     topRec[REC_LDT_CTRL_BIN] = recPropMap;
   end
   
+  -- Update the Top Record.  Not sure if this returns nil or ZERO for ok,
+  -- so just turn any NILs into zeros.
   rc = aerospike:update( topRec );
-  GP=F and trace("[EXIT]: <%s:%s> : Done.  RC(%s)", MOD, meth, tostring(rc));
+  if( rc == nil or rc == 0 ) then
+    GP=F and trace("[Normal EXIT]:<%s:%s> Return(0)", MOD, meth );
+    return 0;
+  else
+    GP=F and trace("[ERROR EXIT]:<%s:%s> Return(%s)", MOD, meth,tostring(rc));
+    error( ldte.ERR_INTERNAL );
+  end
 
-  return rc;
 end -- ldtRemove()
-
 
 -- ========================================================================
 -- lstack_remove() -- Remove the LDT entirely from the record.
@@ -5123,7 +5127,7 @@ end -- ldtRemove()
 --   res = -1: Some sort of error
 -- ========================================================================
 function llist_remove( topRec, lsoBinName )
-  GP=F and info("\n\n >>>>>>>>> API[ LLIST REMOVE ](%s) <<<<<<<<<< \n\n",
+  GP=F and info("\n\n >>>>>>>>> API[ LLIST REMOVE ](%s) <<<<<<<<<<(%s)\n",
     lsoBinName );
   return ldtRemove( topRec, lsoBinName );
 end
@@ -5138,7 +5142,7 @@ function llist_size( topRec, ldtBinName )
   GP=F and trace("[ENTER1]: <%s:%s> ldtBinName(%s)",
   MOD, meth, tostring(ldtBinName));
 
-  GP=F and info("\n\n >>>>>>>>> API[ LLIST SIZE ] <<<<<<<<<< \n\n");
+  GP=F and info("\n\n >>>>>>>>> API[ LLIST SIZE ] <<<<<<<<<(%s)\n",ldtBinName);
 
   -- Validate the topRec, the bin and the map.  If anything is weird, then
   -- this will kick out with a long jump error() call.
@@ -5163,7 +5167,7 @@ function llist_config( topRec, ldtBinName )
   GP=F and trace("[ENTER1]: <%s:%s> ldtBinName(%s)",
   MOD, meth, tostring(ldtBinName));
 
-  GP=F and info("\n\n >>>>>>>>> API[ LLIST CONFIG ] <<<<<<<<<< \n\n");
+  GP=F and info("\n\n >>>>>>>>> API[ LLIST CONFIG ] <<<<<<<<(%s)\n",ldtBinName);
 
   -- Validate the topRec, the bin and the map.  If anything is weird, then
   -- this will kick out with a long jump error() call.
@@ -5176,6 +5180,15 @@ function llist_config( topRec, ldtBinName )
   return config;
 end -- function llist_config()
 
+-- ========================================================================
+-- Debugging/Tracing mechanism -- show the WHOLE tree.
+-- ========================================================================
+function ldt_dump( topRec, ldtBinName )
+  GP=F and info("\n\n >>>>>>>>> API[ LLIST DUMP ] <<<<<<<<(%s)\n",ldtBinName);
+  local src = createSubrecContext();
+  printTree( src, topRec, ldtBinName );
+  return 0;
+end -- function ldt_dump()
 -- ========================================================================
 -- ========================================================================
 -- ========================================================================

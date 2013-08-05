@@ -2,7 +2,7 @@
 -- lstack.lua:  August 02, 2013
 --
 -- Module Marker: Keep this in sync with the stated version
-local MOD="lstack_2013_08_02.d"; -- the module name used for tracing
+local MOD="lstack_2013_08_02.e"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -4078,8 +4078,8 @@ function lstack_create( topRec, lsoBinName, createSpec )
   -- Update the Record.
   topRec[lsoBinName] = lsoList;
 
-  -- All done, store the record
-  local rc = -99; -- Use Odd starting Num: so that we know it got changed
+  -- All done, store the record (Create if needed, or just Update).
+  local rc;
   if( not aerospike:exists( topRec ) ) then
     GP=F and trace("[DEBUG]:<%s:%s>:Create Record()", MOD, meth );
     rc = aerospike:create( topRec );
@@ -4088,8 +4088,14 @@ function lstack_create( topRec, lsoBinName, createSpec )
     rc = aerospike:update( topRec );
   end
 
-  GP=F and trace("[EXIT]: <%s:%s> : Done.  RC(%d)", MOD, meth, rc );
-  return rc;
+  if( rc == nil or rc == 0 ) then
+    GP=F and trace("[Normal EXIT]:<%s:%s> Return(0)", MOD, meth );
+    return 0;
+  else
+    GP=F and trace("[ERROR EXIT]:<%s:%s> Return(%s)", MOD, meth,tostring(rc));
+    error( ldte.ERR_CREATE );
+  end
+  
 end -- function lstack_create()
 -- ======================================================================
 
@@ -4198,12 +4204,18 @@ local function localStackPush( topRec, lsoBinName, newValue, createSpec )
   -- All done, store the topRec.  Note that this is the ONLY place where
   -- we should be updating the TOP RECORD.  If something fails before here,
   -- we would prefer that the top record remains unchanged.
-  local rc = -99; -- Use Odd starting Num: so that we know it got changed
   GP=F and trace("[DEBUG]:<%s:%s>:Update Record", MOD, meth );
-  rc = aerospike:update( topRec );
 
-  GP=F and trace("[EXIT]: <%s:%s> : Done.  RC(%d)", MOD, meth, rc );
-  return rc
+  -- Update the Top Record.  Not sure if this returns nil or ZERO for ok,
+  -- so just turn any NILs into zeros.
+  local rc = aerospike:update( topRec );
+  if( rc == nil or rc == 0 ) then
+    GP=F and trace("[Normal EXIT]:<%s:%s> Return(0)", MOD, meth );
+    return 0;
+  else
+    GP=F and trace("[ERROR EXIT]:<%s:%s> Return(%s)", MOD, meth,tostring(rc));
+    error( ldte.ERR_INTERNAL );
+  end
 end -- function localStackPush()
 
 -- =======================================================================
@@ -4634,9 +4646,16 @@ local function ldtRemove( topRec, binName )
     topRec[REC_LDT_CTRL_BIN] = recPropMap;
   end
 
+  -- Update the Top Record.  Not sure if this returns nil or ZERO for ok,
+  -- so just turn any NILs into zeros.
   rc = aerospike:update( topRec );
-
-  return rc;
+  if( rc == nil or rc == 0 ) then
+    GP=F and trace("[Normal EXIT]:<%s:%s> Return(0)", MOD, meth );
+    return 0;
+  else
+    GP=F and trace("[ERROR EXIT]:<%s:%s> Return(%s)", MOD, meth,tostring(rc));
+    error( ldte.ERR_INTERNAL );
+  end
 end -- ldtRemove()
 
 
@@ -4730,7 +4749,7 @@ function lstack_delete_subrecs( topRec, lsoBinName )
   end -- for each subrecord
   return rc;
 
-end -- lstack_delete()
+end -- lstack_delete_subrecs()
 
 
 -- ========================================================================
@@ -4863,12 +4882,13 @@ function lstack_set_storage_limit( topRec, lsoBinName, newLimit )
   -- Update the Top Record.  Not sure if this returns nil or ZERO for ok,
   -- so just turn any NILs into zeros.
   rc = aerospike:update( topRec );
-  if( rc == nil ) then
-    rc = 0;
+  if( rc == nil or rc == 0 ) then
+    GP=F and trace("[Normal EXIT]:<%s:%s> Return(0)", MOD, meth );
+    return 0;
+  else
+    GP=F and trace("[ERROR EXIT]:<%s:%s> Return(%s)", MOD, meth,tostring(rc));
+    error( ldte.ERR_INTERNAL );
   end
-
-  GP=F and trace("[EXIT]:<%s:%s> Return(%d)", MOD, meth, rc );
-  return rc;
 end -- lstack_set_storage_limit();
 
 -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> --
