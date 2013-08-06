@@ -1,8 +1,8 @@
 -- Large Stack Object (LSO or LSTACK) Operations
--- lmap.lua:  July 12, 2013
+-- lmap.lua:  August 05, 2013
 --
 -- Module Marker: Keep this in sync with the stated version
-local MOD="lmap_2013_07_12.0"; -- the module name used for tracing
+local MOD="lmap_2013_08_05.f"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -140,15 +140,16 @@ local RPM_SelfDigest           = 'D';  -- Digest of this record
 -- Fields common for all LDT's
 local PM_ItemCount             = 'I'; -- (Top): Count of all items in LDT
 local PM_Version               = 'V'; -- (Top): Code Version
+local PM_SubRecCount           = 'S'; -- (Top): # of subrecs in the LDT
 local PM_LdtType               = 'T'; -- (Top): Type: stack, set, map, list
 local PM_BinName               = 'B'; -- (Top): LDT Bin Name
 local PM_Magic                 = 'Z'; -- (All): Special Sauce
+local PM_CreateTime			   = 'C';
 local PM_EsrDigest             = 'E'; -- (All): Digest of ESR
 local PM_RecType               = 'R'; -- (All): Type of Rec:Top,Ldr,Esr,CDir
 local PM_LogInfo               = 'L'; -- (All): Log Info (currently unused)
 local PM_ParentDigest          = 'P'; -- (Subrec): Digest of TopRec
 local PM_SelfDigest            = 'D'; -- (Subrec): Digest of THIS Record
-local PM_CreateTime			   = 'C';
 
 -- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 -- Main LSO Map Field Name Mapping
@@ -196,30 +197,30 @@ local M_TopChunkEntryCount = 'A';
 -- We won't need to do this for the smaller maps, as we can see by simple
 -- inspection that we haven't reused a character.
 --
--- A:M_WarmTopChunkEntryCount a:M_WarmTopChunkByteCount 0:
+-- A:                         a:                        0:
 -- B:                         b:M_LdrByteCountMax       1:
--- C:M_ColdDirListHead        c:M_ColdListMax           2:
+-- C:                         c:                        2:
 -- D:                         d:                        3:
 -- E:                         e:M_LdrEntryCountMax      4:
--- F:M_WarmTopFull            f:M_ColdTopFull           5:
+-- F:M_TopFull                f:                        5:
 -- G:                         g:                        6:
--- H:M_HotEntryList           h:M_HotListMax            7:
+-- H:M_Threshold              h:                        7:
 -- I:                         i:                        8:
 -- J:                         j:                        9:
 -- K:                         k:                  
--- L:M_HotEntryListItemCount  l:M_WarmListDigestCount
+-- L:                         l:M_ListDigestCount
 -- M:M_StoreMode              m:
 -- N:                         n:
 -- O:                         o:
 -- P:                         p:
 -- Q:                         q:
--- R:M_ColdDataRecCount       r:M_ColdDirRecCount
+-- R:M_ColdDataRecCount       r:
 -- S:M_StoreLimit             s:M_LdrByteEntrySize
 -- T:                         t:M_Transform
 -- U:                         u:M_UnTransform
 -- V:                         v:
--- W:M_WarmDigestList         w:M_WarmListMax
--- X:M_HotListTransfer        x:M_WarmListTransfer
+-- W:M_DigestList             w:                     
+-- X:                         x:                    
 -- Y:                         y:
 -- Z:                         z:
 -- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -545,6 +546,7 @@ local function lmapSummary( lmapList )
   -- Fields common for all LDT's
   resultMap.SUMMARY              = "LMAP Summary";
   resultMap.PropItemCount        = propMap[PM_ItemCount];
+  resultMap.PropSubRecCount      = propMap[PM_SubRecCount];
   resultMap.PropVersion          = propMap[PM_Version];
   resultMap.PropLdtType          = propMap[PM_LdtType];
   resultMap.PropBinName          = propMap[PM_BinName];
@@ -638,6 +640,7 @@ local function initializeLMap( topRec, lmapBinName, compact_mode_flag )
   MOD, meth, tostring(lmapBinName));
   -- General LDT Parms(Same for all LDTs): Held in the Property Map
   propMap[PM_ItemCount]  = 0; -- A count of all items in the stack
+  propMap[PM_SubRecCount] = 0;
   propMap[PM_Version]    = G_LDT_VERSION ; -- Current version of the code
   propMap[PM_LdtType]    = LDT_TYPE_LMAP; -- Validate the ldt type
   propMap[PM_Magic]      = MAGIC; -- Special Validation
@@ -667,7 +670,7 @@ local function initializeLMap( topRec, lmapBinName, compact_mode_flag )
   lmapCtrlInfo[M_CompactList]		 = list(); -- list entries to be held in compact mode 
 	  
  if compact_mode_flag == false then
-       -- ======  Begin : Regular mode settings ==================================
+       -- ======  Begin : Regular mode settings ==============================
   
    	  -- we are now in rehashSettoLmap(), we need to change lmapCtrlIndo params  
    	  -- all the other params must already be set by default. 
@@ -1382,7 +1385,7 @@ function lmap_subrec_list( topRec, lsoBinName )
   local lsoMap  = lsoList[2];
 
   -- Copy the warm list into the result list
-  local wdList = lsoMap[M_WarmDigestList];
+  local wdList = lsoMap[M_DigestList];
   local transAmount = list.size( wdList );
   local resultList = list.take( wdList, transAmount );
 
@@ -1530,19 +1533,22 @@ local function createAndInitESR( topRec, lmapBinName)
 
   local lMapList = topRec[lmapBinName] ;
   local propMap = lMapList[1]; 
-  local lmapCtrlInfo = lMapList[2];
+  -- local lmapCtrlInfo = lMapList[2]; Not needed here
   
   local rc = 0;
   local esr       = aerospike:create_subrec( topRec );
   local esrDigest = record.digest( esr );
   local topDigest = record.digest( topRec );
 
+  local subrecCount = propMap[PM_SubRecCount];
+  propMap[PM_SubRecCount] = subrecCount + 1;
+
   local esrPropMap = map(); 
   
   esrPropMap[PM_Magic]        = MAGIC;
-  esrPropMap[PM_RecType]   = RT_ESR;
+  esrPropMap[PM_RecType]      = RT_ESR;
   esrPropMap[PM_ParentDigest] = topDigest; -- Parent
-  esrPropMap[PM_EsrDigest] = esrDigest; -- Self
+  esrPropMap[PM_EsrDigest]    = esrDigest; -- Self
   esrPropMap[PM_SelfDigest]   = esrDigest;
   
   -- Set the record type as "ESR"
@@ -1552,15 +1558,16 @@ local function createAndInitESR( topRec, lmapBinName)
   
   esr[SUBREC_PROP_BIN] = esrPropMap;
 
-  GP=F and info("[EXIT]: <%s:%s> Leaving with ESR Digest(%s)",
-    MOD, meth, tostring(esrDigest));
+  GP=F and info("[DEBUG]: <%s:%s> Leaving with ESR Digest(%s): EsrMap(%s)",
+    MOD, meth, tostring(esrDigest), tostring( esrPropMap));
 
   -- no need to use updateSubrec for this, we dont need 
   -- maintain accouting for ESRs. 
   
   rc = aerospike:update_subrec( esr );
   if( rc == nil or rc == 0 ) then
-      aerospike:close_subrec( esr );
+    info("DO NOT CLOSE THE ESR FOR NOW");
+      -- aerospike:close_subrec( esr );
   else
     warn("[ERROR]<%s:%s>Problems Updating ESR rc(%s)",MOD,meth,tostring(rc));
     error("[ESR CREATE] Error Creating System Subrecord");
@@ -1569,16 +1576,25 @@ local function createAndInitESR( topRec, lmapBinName)
   -- update global attributes. 
   propMap[PM_EsrDigest] = esrDigest; 
   
-  local NewlMapList = list();
-  list.append( NewlMapList, propMap );
-  list.append( NewlMapList, lmapCtrlInfo );
-  topRec[lmapBinName] = NewlMapList;
+  -- local NewlMapList = list();
+  -- list.append( NewlMapList, propMap );
+  -- list.append( NewlMapList, lmapCtrlInfo );
   
   -- If the topRec already has an REC_LDT_CTRL_BIN (with a valid map in it),
   -- then we know that the main LDT record type has already been set.
   -- Otherwise, we should set it. This function will check, and if necessary,
   -- set the control bin.
   setLdtRecordType( topRec );
+
+  GP=F and info("[DEBUG]<%s:%s>Validate lMapList Contents(%s)",
+    MOD, meth, tostring( lMapList ));
+
+  topRec[lmapBinName] = lMapList;
+
+  -- Probably shouldn't need to do this -- but this is just being extra
+  -- conservative for the moment.
+  -- Remove this when we know it's safe.
+  aerospike:update( topRec );
 
   return esrDigest;
 
@@ -1635,6 +1651,13 @@ local function initializeSubrecLdrMap( topRec, lmapBinName, newLdrChunkRecord, l
     ldrPropMap[PM_EsrDigest] = createAndInitESR( topRec, lmapBinName );
   end
 
+  info("[VERIFY]<%s:%s> lMapList(%s) ldrPropMap(%s)", MOD, meth,
+    tostring(lMapList), tostring(ldrPropMap));
+
+  -- Double checking the assignment -- this should NOT be needed, as the
+  -- caller does it right after return of this function.
+  newLdrChunkRecord[SUBREC_PROP_BIN] = ldrPropMap;
+
 end -- initializeSubrecLdrMap()
 
 -- ======================================================================
@@ -1662,7 +1685,8 @@ local function   lmapLdrListChunkCreate( src, topRec, lmapBinName, lMapList )
   local newLdrChunkRecord = aerospike:create_subrec( topRec );
   
   if newLdrChunkRecord == nil then 
-    warn("[ERROR]<%s:%s>Problems Creating Subrec New-entry(%s)",MOD,meth,tostring(newLdrChunkRecord));
+    warn("[ERROR]<%s:%s>Problems Creating Subrec New-entry(%s)",
+      MOD,meth,tostring(newLdrChunkRecord));
     error("[SUBREC-CREATE] Error Creating System Subrecord");
     return newLdrChunkRecord;
   end
@@ -1674,12 +1698,21 @@ local function   lmapLdrListChunkCreate( src, topRec, lmapBinName, lMapList )
   local lmapCtrlInfo = lMapList[2];
   local binName    = propMap[PM_BinName];
 
+  info("[CHECK]<%s:%s> binName from Prop(%s) BinName from Map(%s)",
+    MOD, meth, tostring(binName), tostring(lmapBinName) );
+
+  -- Update the subrec count (and remember to save the change)
+  local subrecCount = propMap[PM_SubRecCount];
+  propMap[PM_SubRecCount] = subrecCount + 1;
+
+
   local rc = addSubrecToContext( src, newLdrChunkRecord ); 
   -- Each subrec that gets created, needs to have its properties initialized. 
   -- Also the ESR structure needs to get created, if needed
   -- Plus the REC_LDT_CTRL_BIN of topRec needs to be updated. 
   -- This function takes care of doing all of that. 
-  initializeSubrecLdrMap( topRec, lmapBinName, newLdrChunkRecord, ldrPropMap, ldrMap, lMapList );
+  initializeSubrecLdrMap( topRec, lmapBinName, newLdrChunkRecord, ldrPropMap,
+    ldrMap, lMapList );
 
   -- Assign Prop, Control info and List info to the LDR bins
   newLdrChunkRecord[SUBREC_PROP_BIN] = ldrPropMap;
@@ -1689,7 +1722,7 @@ local function   lmapLdrListChunkCreate( src, topRec, lmapBinName, lMapList )
   GP=F and info("[DEBUG]: <%s:%s> Chunk Create: CTRL Contents(%s)",
     MOD, meth, tostring(ldrPropMap) );
   
-  -- Add our new chunk (the digest) to the WarmDigestList
+  -- Add our new chunk (the digest) to the DigestList
   -- TODO: @TOBY: Remove these trace calls when fully debugged.
   GP=F and info("[DEBUG]: <%s:%s> Appending NewChunk with digest(%s) to DigestList(%s)",
     MOD, meth, tostring(newChunkDigest), tostring(lmapCtrlInfo[M_DigestList]));
@@ -1707,18 +1740,23 @@ local function   lmapLdrListChunkCreate( src, topRec, lmapBinName, lMapList )
   GP=F and info("[DEBUG]<%s:%s>Post CHunkAppend:NewChunk(%s) LMap(%s): ",
     MOD, meth, tostring(newChunkDigest), tostring(lmapCtrlInfo));
    
-  -- Increment the Warm Count
+  -- Increment the Digest Count
   -- gets inceremented once per LDR entry add. 
   local ChunkCount = lmapCtrlInfo[M_ListDigestCount]; 
   lmapCtrlInfo[M_ListDigestCount] = (ChunkCount + 1);
+
+  -- This doesn't appear to be getting set (updated) anywhere else.
+  -- Do it here.
+  aerospike:update_subrec( newLdrChunkRecord );
 
   -- NOTE: This may not be needed -- we may wish to update the topRec ONLY
   -- after all of the underlying SUB-REC  operations have been done.
   -- Update the top (LSO) record with the newly updated lsoMap;
   -- NewtopRec[ binName ] = lmapCtrlInfo;
 
-  --GP=F and trace("[EXIT]: <%s:%s> Return(%s) ",
-  --  MOD, meth, ldrChunkSummary(newLdrChunkRecord));
+  GP=F and trace("[EXIT]: <%s:%s> ldrPropMap(%s) ",
+    MOD, meth, tostring( ldrPropMap ));
+    -- MOD, meth, ldrChunkSummary(newLdrChunkRecord));
   return newLdrChunkRecord;
 end --  lmapLdrListChunkCreate()
 
