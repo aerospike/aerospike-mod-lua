@@ -497,7 +497,7 @@ end -- listUnCompress_5_20()
 -- (*) The value that is associated with the key "key".
 -- ======================================================================
 function UdfFunctionTable.keyExtract( objectValue )
-    info("[ENTER] Extract Key from Object(%s)", tostring(objectValue));
+   info("[ENTER] Extract Key from Object(%s)", tostring(objectValue));
 
   if objectValue == nil or objectValue["key"] == nil then
     return nil;
