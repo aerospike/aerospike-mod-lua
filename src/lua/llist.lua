@@ -1,8 +1,8 @@
 -- Large Ordered List (llist.lua)
--- Last Update August 05,  2013: tjl
+-- Last Update August 06,  2013: tjl
 --
 -- Keep this MOD value in sync with version above
-local MOD = "llist_2013_08_05.c"; -- module name used for tracing.  
+local MOD = "llist_2013_08_06.g"; -- module name used for tracing.  
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -631,6 +631,14 @@ local function setLdtRecordType( topRec )
   -- another miracle LDT birth.
   if( topRec[REC_LDT_CTRL_BIN] == nil ) then
     GP=F and trace("[DEBUG]<%s:%s>Creating Record LDT Map", MOD, meth );
+
+    -- If this record doesn't even exist yet -- then create it now.
+    -- Otherwise, things break.
+    if( not aerospike:exists( topRec ) ) then
+      GP=F and trace("[DEBUG]:<%s:%s>:Create Record()", MOD, meth );
+      rc = aerospike:create( topRec );
+    end
+
     record.set_type( topRec, RT_LDT );
     recPropMap = map();
     -- vinfo will be a 5 byte value, but it will be easier for us to store
@@ -814,6 +822,7 @@ local function packageTestModeNumber( ldtMap )
   ldtMap[R_KeyType] = KT_ATOMIC; -- Atomic Keys (A Number)
   ldtMap[R_Threshold] = 20; -- Change to TREE Ops after this many inserts
   ldtMap[R_KeyFunction] = nil; -- Special Attention Required.
+  ldtMap[R_KeyUnique] = true; -- Unique values only.
  
   -- Top Node Tree Root Directory
   ldtMap[R_RootListMax] = 20; -- Length of Key List (page list is KL + 1)
@@ -829,6 +838,37 @@ local function packageTestModeNumber( ldtMap )
 
   return 0;
 end -- packageTestModeNumber()
+
+-- ======================================================================
+-- Package = "TestModeNumberDup"
+-- ======================================================================
+local function packageTestModeNumberDup( ldtMap )
+  
+  -- General Parameters
+  ldtMap[R_Transform] = nil;
+  ldtMap[R_UnTransform] = nil;
+  ldtMap[R_StoreState] = SS_COMPACT; -- start in "compact mode"
+  ldtMap[R_StoreMode] = SM_LIST; -- Use List Mode
+  ldtMap[R_BinaryStoreSize] = nil; -- Don't waste room if we're not using it
+  ldtMap[R_KeyType] = KT_ATOMIC; -- Atomic Keys (A Number)
+  ldtMap[R_Threshold] = 20; -- Change to TREE Ops after this many inserts
+  ldtMap[R_KeyFunction] = nil; -- Special Attention Required.
+  ldtMap[R_KeyUnique] = false; -- allow Duplicates
+ 
+  -- Top Node Tree Root Directory
+  ldtMap[R_RootListMax] = 20; -- Length of Key List (page list is KL + 1)
+  ldtMap[R_RootByteCountMax] = 0; -- Max bytes for key space in the root
+  
+  -- LLIST Inner Node Settings
+  ldtMap[R_NodeListMax] = 20;  -- Max # of items (key+digest)
+  ldtMap[R_NodeByteCountMax] = 0; -- Max # of BYTES
+
+  -- LLIST Tree Leaves (Data Pages)
+  ldtMap[R_LeafListMax] = 20;  -- Max # of items
+  ldtMap[R_LeafByteCountMax] = 0; -- Max # of BYTES per data page
+
+  return 0;
+end -- packageTestModeNumberDup()
 
 -- ======================================================================
 -- Package = "TestModeObjectDup"
@@ -1183,6 +1223,8 @@ local function adjustLListMap( ldtMap, argListMap )
           packageTestModeBinary( ldtMap );
       elseif value == PackageTestModeNumber then
           packageTestModeNumber( ldtMap );
+      elseif value == PackageTestModeNumberDup then
+          packageTestModeNumberDup( ldtMap );
       elseif value == PackageProdListValBinStore then
           packageProdListValBinStore( ldtMap );
       elseif value == PackageDebugModeObjectDup then
@@ -1482,14 +1524,19 @@ end -- getNodeMap
 -- ======================================================================
 local function validateBinName( binName )
   local meth = "validateBinName()";
+
   GP=F and trace("[ENTER]<%s:%s> validate Bin Name(%s)",
     MOD, meth, tostring(binName));
 
   if binName == nil  then
+    WARN("[ERROR]<%s:%s> Bin Name is NULL", MOD, meth );
     error( ldte.ERR_NULL_BIN_NAME );
   elseif type( binName ) ~= "string"  then
+    WARN("[ERROR]<%s:%s> Bin Name is Not a String: Type(%s)", MOD, meth,
+      tostring( type(binName) ));
     error( ldte.ERR_BIN_NAME_NOT_STRING );
   elseif string.len( binName ) > 14 then
+    WARN("[ERROR]<%s:%s> Bin Name Too Long::Exceeds 14 characters", MOD, meth);
     error( ldte.ERR_BIN_NAME_TOO_LONG );
   end
   return 0;
@@ -1998,6 +2045,8 @@ local function objectCompare( ldtMap, searchKey, objectValue )
   local meth = "objectCompare()";
   local keyType = ldtMap[R_KeyType];
 
+  info("[ENTER]<%s:%s>", MOD, meth );
+
   GP=F and trace("[ENTER]<%s:%s> keyType(%s) searchKey(%s) data(%s)",
     MOD, meth, tostring(keyType), tostring(searchKey), tostring(objectValue));
 
@@ -2290,6 +2339,7 @@ local function searchObjectList( ldtMap, objectList, searchKey )
   if( searchKey == nil ) then
     resultMap.Found = true;
     resultMap.Position = 1;
+    GP=F and trace("[EARLY EXIT]<%s:%s> SCAN: Nil Key", MOD, meth );
     return resultMap;
   end
 
@@ -2304,6 +2354,9 @@ local function searchObjectList( ldtMap, objectList, searchKey )
   local objectKey;
   -- Do the List page mode search here
   local listSize = list.size( objectList );
+
+  GP=F and trace("[Starting LOOP]<%s:%s>", MOD, meth );
+
   for i = 1, listSize, 1 do
     compareResult = objectCompare( ldtMap, searchKey, objectList[i] );
     if compareResult == CR_ERROR then
@@ -2655,7 +2708,7 @@ local function listScan(objectList, startPosition, ldtMap, resultList,
                           searchKey, func, fargs, flag)
   local meth = "listScan()";
   local rc = 0;
-  GP=F and trace("[ENTER]<%s:%s>StartPosition(%s) SearchKey(%s)",
+  GP=F and trace("[ENTER]<%s:%s>StartPosition(%d) SearchKey(%s)",
         MOD, meth, startPosition, tostring( searchKey));
 
   -- Linear scan of the LIST (binary search will come later), for each
@@ -4798,7 +4851,8 @@ end -- llist_create_and_insert()
 -- ======================================================================
 local function localLListSearch( topRec, ldtBinName, key, func, fargs )
   local meth = "localLListSearch()";
-  GP=F and trace("[ENTER]<%s:%s> key(%s) ", MOD, meth, tostring(key) );
+  GP=F and trace("[ENTER]<%s:%s> bin(%s) key(%s) ", MOD, meth,
+      tostring( ldtBinName), tostring(key) );
 
   local rc = 0;
   -- Define our return list
@@ -4830,7 +4884,7 @@ local function localLListSearch( topRec, ldtBinName, key, func, fargs )
     local resultMap = searchObjectList( ldtMap, objectList, key );
     if( resultMap.Status == ERR_OK and resultMap.Found == true ) then
       local position = resultMap.Position;
-      resultA, resultB =  listScan(objectList, startPosition, ldtMap,
+      resultA, resultB =  listScan(objectList, position, ldtMap,
                     resultList, key, func, fargs, flag);
       GP=F and trace("[DEBUG]<%s:%s> Scan Compact List:Res(%s) A(%s) B(%s)",
         MOD, meth, tostring(resultList), tostring(resultA), tostring(resultB));
@@ -5112,7 +5166,7 @@ local function ldtRemove( topRec, binName )
 end -- ldtRemove()
 
 -- ========================================================================
--- lstack_remove() -- Remove the LDT entirely from the record.
+-- llist_remove() -- Remove the LDT entirely from the record.
 -- NOTE: This could eventually be moved to COMMON, and be "ldt_remove()",
 -- since it will work the same way for all LDTs.
 -- Remove the ESR, Null out the topRec bin.
@@ -5191,6 +5245,42 @@ function ldt_dump( topRec, ldtBinName )
   printTree( src, topRec, ldtBinName );
   return 0;
 end -- function ldt_dump()
+
+-- ========================================================================
+-- llist_debug() -- Turn the debug setting on (1) or off (0)
+-- ========================================================================
+-- Turning the debug setting "ON" pushes LOTS of output to the console.
+-- Parms:
+-- (1) topRec: the user-level record holding the LSO Bin
+-- (2) setting: 0 turns it off, anything else turns it on.
+-- Result:
+--   res = 0: all is well
+--   res = -1: Some sort of error
+-- ========================================================================
+function llist_debug( topRec, setting )
+  local meth = "llist_debug()";
+  local rc = 0;
+
+  GP=F and trace("[ENTER]: <%s:%s> setting(%s)", MOD, meth, tostring(setting));
+  if( setting ~= nil and type(setting) == "number" ) then
+    if( setting == 1 ) then
+      info("[DEBUG SET]<%s:%s> Turn Debug ON(%s)", MOD, meth );
+      F = true;
+    elseif( setting == 0 ) then
+      info("[DEBUG SET]<%s:%s> Turn Debug OFF(%s)", MOD, meth );
+      F = false;
+    else
+      info("[DEBUG SET]<%s:%s> Unknown Setting(%s)",MOD,meth,tostring(setting));
+      rc = -1;
+    end
+  else
+    info("[DEBUG SET]<%s:%s> Unknown Setting(%s)",MOD,meth,tostring(setting));
+    rc = -1;
+  end
+  return rc;
+end -- llist_debug()
+
+
 -- ========================================================================
 -- ========================================================================
 -- ========================================================================

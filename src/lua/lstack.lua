@@ -1,8 +1,8 @@
 -- Large Stack Object (LSO or LSTACK) Operations
--- lstack.lua:  August 02, 2013
+-- lstack.lua:  August 06, 2013
 --
 -- Module Marker: Keep this in sync with the stated version
-local MOD="lstack_2013_08_02.e"; -- the module name used for tracing
+local MOD="lstack_2013_08_06.k"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -16,7 +16,7 @@ local G_LDT_VERSION = 1.1;
 -- in the server).
 -- ======================================================================
 local GP=true; -- Leave this ALWAYS true (but value seems not to matter)
-local F=true; -- Set F (flag) to true to turn ON global print
+local F=false; -- Set F (flag) to true to turn ON global print
 
 -- ======================================================================
 -- LSTACK TODO LIST:
@@ -25,7 +25,7 @@ local F=true; -- Set F (flag) to true to turn ON global print
 -- Difficulty: High, Medium and Low
 -- ======================================================================
 -- ACTIVITIES LIST:
--- (*) IN-PROGRESS: (July 23, 2012)
+-- (*) DONE: (Started: July 23, 2012)
 --   + Release Cold Storage:  Release an entire Cold Dir Page (with the list
 --     of subrec digests) on addition of a new Cold-Head, when the Cold Dir
 --     Count > Max.
@@ -34,26 +34,29 @@ local F=true; -- Set F (flag) to true to turn ON global print
 --   + Add a Cold Dir TAIL pointer in addition to the HEAD pointer -- so that
 --     releasing the oldest Dir Rec Page (and its children) is quicker/easier.
 --
--- (*) IN-PROGRESS: (July 23, 2012)
+-- (*) DONE: (Started: July 23, 2012)
 --   + Implement the subrecContext (subrec management) here in LSTACK that
 --     we have in LLIST.  Name them all ldt_subrecXXXX() because they
 --     will become ldt common methods.
 --
--- (*) IN-PROGRESS: (July 23, 2012)
+-- (*) HOLD: (Started: July 23, 2012)
 --   + Switch to ldt_common.lua for the newly common functions.
+--   + Put on hold until next release work.
 --
--- (*) IN-PROGRESS: (July 23, 2012)
+-- (*) IN-DONE: (Started: July 23, 2012)
 --   + Added new method: lstack_set_storage_limit(), which limits peek sizes
 --     and also sets/resets the storage parameter values so that item counts
 --     over the size limits (Hot, Warm or Cold list) will discard old data.
 --
--- (*) IN-PROGRESS: (July 25, 2012)
+-- (*) IN-PROGRESS: (Started: July 25, 2012)
 --   + Add new "crec_release" method that takes a LIST of digests and
 --     releases the storage.  Raj will fill in the C code on the server
 --     side does the delete.
 --
 -- TODO:
--- (+) Implement Trim (release LDR pages from Warm/Cold List)
+-- (+) HOLD:  Trim is less important than "set_storage_limit()", and is
+--     more expensive.
+--     Implement Trim (release LDR pages from Warm/Cold List)
 --     stack_trim(): Must release storage before record delete.
 --     Notice that this is lower priority now that we're going to look to
 --     the Cold List Storage Release to deal with storage reclaimation
@@ -443,8 +446,8 @@ local PackageTestModeBinary      = "TestModeBinary";
 -- (*) A List Value (a 5 part tuple)
 -- (*) Special, packed (compressed) Binary storage
 local PackageProdListValBinStore = "ProdListValBinStore";
-local PackageDebugModeObject       = "DebugModeObject";
-local PackageDebugModeObjectPred   = "DebugModeObjectPred";
+local PackageDebugModeObject     = "DebugModeObject";
+local PackageDebugModeObjectDups = "DebugModeObjectDups";
 local PackageDebugModeList       = "DebugModeList";
 local PackageDebugModeBinary     = "DebugModeBinary";
 
@@ -660,6 +663,7 @@ local function lsoSummary( lsoList )
   resultMap.SUMMARY              = "LStack Summary";
   resultMap.PropBinName          = propMap[PM_BinName];
   resultMap.PropItemCount        = propMap[PM_ItemCount];
+  resultMap.PropSubRecCount      = propMap[PM_SubRecCount];
   resultMap.PropVersion          = propMap[PM_Version];
   resultMap.PropLdtType          = propMap[PM_LdtType];
   resultMap.PropEsrDigest        = propMap[PM_EsrDigest];
@@ -982,6 +986,14 @@ local function setLdtRecordType( topRec )
   -- another miracle LDT birth.
   if( topRec[REC_LDT_CTRL_BIN] == nil ) then
     GP=F and trace("[DEBUG]<%s:%s>Creating Record LDT Map", MOD, meth );
+
+    -- If this record doesn't even exist yet -- then create it now.
+    -- Otherwise, things break.
+    if( not aerospike:exists( topRec ) ) then
+      GP=F and trace("[DEBUG]:<%s:%s>:Create Record()", MOD, meth );
+      rc = aerospike:create( topRec );
+    end
+
     record.set_type( topRec, RT_LDT );
     recPropMap = map();
     -- vinfo will be a 5 byte value, but it will be easier for us to store
@@ -1471,13 +1483,13 @@ end -- packageDebugModeObject()
 
 
 -- ======================================================================
--- Package = "DebugModeObjectPred"
+-- Package = "DebugModeObjectDups"
 -- Test the LSTACK in DEBUG MODE (using very small numbers to force it to
 -- make LOTS of warm and close objects with very few inserted items), and
 -- use LIST MODE.
 -- Test with Objects and the General Range Filter Predicate
 -- ======================================================================
-local function packageDebugModeObjectPred( lsoMap )
+local function packageDebugModeObjectDups( lsoMap )
   -- General LSO Parms:
   lsoMap[M_StoreMode]        = SM_LIST;
   lsoMap[M_Transform]        = nil;
@@ -1496,7 +1508,7 @@ local function packageDebugModeObjectPred( lsoMap )
   -- Cold Directory List Settings: List of Directory Pages
   lsoMap[M_ColdListMax]      = 4; -- # of list entries in a Cold dir node
   lsoMap[M_ColdDirRecMax]    = 2; -- Max# of Cold DIRECTORY Records
-end -- packageDebugModeObjectPred()
+end -- packageDebugModeObjectDups()
 
 -- ======================================================================
 -- Package = "DebugModeList"
@@ -1603,6 +1615,8 @@ local function adjustLsoList( lsoList, argListMap )
             packageProdListValBinStore( lsoMap );
         elseif value == PackageDebugModeObject then
             packageDebugModeObject( lsoMap );
+        elseif value == PackageDebugModeObjectDups then
+            packageDebugModeObjectDups( lsoMap );
         elseif value == PackageDebugModeList then
             packageDebugModeList( lsoMap );
         elseif value == PackageDebugModeBinary then
@@ -3590,12 +3604,16 @@ local function validateBinName( binName )
       MOD, meth, tostring(binName));
 
   if binName == nil  then
+    warn("[ERROR EXIT]:<%s:%s> Null Bin Name", MOD, meth );
     error( ldte.ERR_NULL_BIN_NAME );
   elseif type( binName ) ~= "string"  then
+    warn("[ERROR EXIT]:<%s:%s> Bin Name Not a String", MOD, meth );
     error( ldte.ERR_BIN_NAME_NOT_STRING );
   elseif string.len( binName ) > 14 then
+    warn("[ERROR EXIT]:<%s:%s> Bin Name Too Long", MOD, meth );
     error( ldte.ERR_BIN_NAME_TOO_LONG );
   end
+  GP=F and trace("[EXIT]:<%s:%s> Ok", MOD, meth );
 end -- validateBinName
 
 -- ======================================================================
@@ -3665,6 +3683,7 @@ local function validateRecBinAndMap( topRec, lsoBinName, mustExist )
       end
     end -- if worth checking
   end -- else for must exist
+  GP=F and trace("[EXIT]:<%s:%s> Ok", MOD, meth );
 
 end -- validateRecBinAndMap()
 
@@ -4234,6 +4253,36 @@ function lstack_create_and_push( topRec, lsoBinName, newValue, createSpec )
   return localStackPush( topRec, lsoBinName, newValue, createSpec );
 end -- lstack_create_and_push()
 
+-- =======================================================================
+-- Stack Push ALL
+-- =======================================================================
+-- Iterate thru the list and call localStackPush on each element
+-- =======================================================================
+function lstack_push_all( topRec, lsoBinName, valueList, createSpec )
+  local meth = "lstack_push_all()";
+  GP=F and trace("[ENTER]:<%s:%s>LSO BIN(%s) valueList(%s) createSpec(%s)",
+    MOD, meth, tostring(lsoBinName), tostring(valueList), tostring(createSpec));
+
+  local rc = 0;
+  if( valueList ~= nil and list.size(valueList) > 0 ) then
+    local listSize = list.size( valueList );
+    for i = 1, listSize, 1 do
+      rc = localStackPush( topRec, lsoBinName, valueList[i], createSpec );
+      if( rc < 0 ) then
+        warn("[ERROR]<%s:%s> Problem Inserting Item #(%d) [%s]", MOD, meth, i,
+          tostring( valueList[i] ));
+        error(ldte.ERR_INSERT);
+      end
+    end
+  else
+    warn("[ERROR]<%s:%s> Invalid Input Value List(%s)",
+      MOD, meth, tostring(valueList));
+    error(ldte.ERR_INPUT_PARM);
+  end
+
+  return rc;
+end -- end lstack_push_all()
+
 -- ======================================================================
 -- |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- || Local StackPeek: 
@@ -4470,12 +4519,53 @@ function lstack_size( topRec, lsoBinName )
   local lsoList = topRec[ lsoBinName ];
   -- Extract the property map and lso control map from the lso bin list.
   local propMap = lsoList[1];
+  local ldtMap = lsoList[2];
   local itemCount = propMap[PM_ItemCount];
+  local storeLimit = ldtMap[M_StoreLimit];
+
+  -- Note that itemCount should never appear larger than the storeLimit,
+  -- but until our internal accounting is fixed, we fudge it like this.
+  if( itemCount > storeLimit ) then
+      itemCount = storeLimit;
+  end
 
   GP=F and trace("[EXIT]: <%s:%s> : size(%d)", MOD, meth, itemCount );
 
   return itemCount;
 end -- function lstack_size()
+
+
+-- ========================================================================
+-- lstack_get_capacity() -- return the current capacity setting for LSTACK.
+-- Parms:
+-- (1) topRec: the user-level record holding the LSO Bin
+-- (2) lsoBinName: The name of the LSO Bin
+-- Result:
+--   rc >= 0  (the current capacity)
+--   rc < 0: Aerospike Errors
+-- NOTE: Any parameter that might be printed (for trace/debug purposes)
+-- must be protected with "tostring()" so that we do not encounter a format
+-- error if the user passes in nil or any other incorrect value/type.
+-- ========================================================================
+function lstack_get_capacity( topRec, lsoBinName )
+  local meth = "lstack_get_capacity()";
+
+  GP=F and trace("[ENTER]: <%s:%s> lsoBinName(%s)",
+    MOD, meth, tostring(lsoBinName));
+
+  -- validate the topRec, the bin and the map.  If anything is weird, then
+  -- this will kick out with a long jump error() call.
+  validateRecBinAndMap( topRec, lsoBinName, true );
+
+  local lsoList = topRec[ lsoBinName ];
+  -- Extract the property map and lso control map from the lso bin list.
+  local ldtMap = lsoList[2];
+  local capacity = ldtMap[M_StoreLimit];
+
+  GP=F and trace("[EXIT]: <%s:%s> : size(%d)", MOD, meth, capacity );
+
+  return capacity;
+end -- function lstack_get_capacity()
 
 -- ========================================================================
 -- lstack_config() -- return the config settings
@@ -4615,16 +4705,26 @@ local function ldtRemove( topRec, binName )
   local ldtList = topRec[ binName ];
   local propMap = ldtList[1];
 
-  -- Get the ESR and delete it.
+  -- Get the ESR and delete it -- if it exists.  If we have ONLY a HotList,
+  -- then the ESR will be ZERO.
   local esrDigest = propMap[PM_EsrDigest];
-  local esrDigestString = tostring(esrDigest);
-  local esrRec = aerospike:open_subrec( topRec, esrDigestString );
-  rc = aerospike:remove_subrec( esrRec );
-  if( rc == nil or rc == 0 ) then
-    GP=F and trace("[STATUS]<%s:%s> Successful CREC REMOVE", MOD, meth );
+  if( esrDigest ~= nil and esrDigest ~= 0 ) then
+    local esrDigestString = tostring(esrDigest);
+    info("[SUBREC OPEN]<%s:%s> Digest(%s)", MOD, meth, esrDigestString );
+    local esrRec = aerospike:open_subrec( topRec, esrDigestString );
+    if( esrRec ~= nil ) then
+      rc = aerospike:remove_subrec( esrRec );
+      if( rc == nil or rc == 0 ) then
+        GP=F and trace("[STATUS]<%s:%s> Successful CREC REMOVE", MOD, meth );
+      else
+        warn("[ESR DELETE ERROR]<%s:%s>RC(%d) Bin(%s)", MOD, meth, rc, binName);
+        error( ldte.ERR_SUBREC_DELETE );
+      end
+    else
+      warn("[ESR DELETE ERROR]<%s:%s> ERROR on ESR Open", MOD, meth );
+    end
   else
-    warn("[ESR DELETE ERROR] RC(%d) Bin(%s)", MOD, meth, rc, binName);
-    error( ldte.ERR_SUBREC_DELETE );
+    info("[ESR DELETE]<%s:%s> LDT ESR is not yet set.", MOD, meth );
   end
 
   topRec[binName] = nil;
@@ -4753,7 +4853,7 @@ end -- lstack_delete_subrecs()
 
 
 -- ========================================================================
--- lstack_set_storage_limit()
+-- localSetCapacity()
 -- ========================================================================
 -- This is a special command to both set the new storage limit.  It does
 -- NOT release storage, however.  That is done either lazily after a 
@@ -4766,8 +4866,8 @@ end -- lstack_delete_subrecs()
 --   res = 0: all is well
 --   res = -1: Some sort of error
 -- ========================================================================
-function lstack_set_storage_limit( topRec, lsoBinName, newLimit )
-  local meth = "lstack_delete()";
+local function localSetCapacity( topRec, lsoBinName, newLimit )
+  local meth = "localSetCapacity()";
 
   GP=F and trace("[ENTER]: <%s:%s> lsoBinName(%s) newLimit(%s)",
     MOD, meth, tostring(lsoBinName), tostring(newLimit));
@@ -4889,7 +4989,70 @@ function lstack_set_storage_limit( topRec, lsoBinName, newLimit )
     GP=F and trace("[ERROR EXIT]:<%s:%s> Return(%s)", MOD, meth,tostring(rc));
     error( ldte.ERR_INTERNAL );
   end
-end -- lstack_set_storage_limit();
+end -- localSetCapacity();
+
+
+-- ========================================================================
+-- lstack_set_storage_limit()
+-- lstack_set_capacity()
+-- ========================================================================
+-- This is a special command to both set the new storage limit.  It does
+-- NOT release storage, however.  That is done either lazily after a 
+-- warm/cold insert or with an explit lstack_trim() command.
+-- Parms:
+-- (*) topRec: the user-level record holding the LSO Bin
+-- (*) lsoBinName: The name of the LSO Bin
+-- (*) newLimit: The new limit of the number of entries
+-- Result:
+--   res = 0: all is well
+--   res = -1: Some sort of error
+-- ========================================================================
+function lstack_set_storage_limit( topRec, lsoBinName, newLimit )
+  local meth = "lstack_set_storage_limit()";
+  return localSetCapacity( topRec, lsoBinName, newLimit );
+end
+
+function lstack_set_capacity( topRec, lsoBinName, newLimit )
+  local meth = "lstack_set_set_capacity()";
+  return localSetCapacity( topRec, lsoBinName, newLimit );
+end
+
+-- ========================================================================
+-- lstack_debug() -- Turn the debug setting on (1) or off (0)
+-- ========================================================================
+-- Turning the debug setting "ON" pushes LOTS of output to the console.
+-- It would be nice if we could figure out how to make this setting change
+-- PERSISTENT. Until we do that, this will be a no-op.
+-- Parms:
+-- (1) topRec: the user-level record holding the LSO Bin
+-- (2) setting: 0 turns it off, anything else turns it on.
+-- Result:
+--   res = 0: all is well
+--   res = -1: Some sort of error
+-- ========================================================================
+function lstack_debug( topRec, setting )
+  local meth = "lstack_debug()";
+  local rc = 0;
+
+  GP=F and trace("[ENTER]: <%s:%s> setting(%s)", MOD, meth, tostring(setting));
+  if( setting ~= nil and type(setting) == "number" ) then
+    if( setting == 1 ) then
+      info("[DEBUG SET]<%s:%s> Turn Debug ON", MOD, meth );
+      F = true;
+    elseif( setting == 0 ) then
+      info("[DEBUG SET]<%s:%s> Turn Debug OFF", MOD, meth );
+      F = false;
+    else
+      info("[DEBUG SET]<%s:%s> Unknown Setting(%s)",MOD,meth,tostring(setting));
+      rc = -1;
+    end
+  else
+    info("[DEBUG SET]<%s:%s> Unknown Setting(%s)",MOD,meth,tostring(setting));
+    rc = -1;
+  end
+  return rc;
+end -- lstack_debug()
+
 
 -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> --
 -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> --
