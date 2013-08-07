@@ -69,8 +69,8 @@ pthread_rwlock_t g_cache_lock = PTHREAD_RWLOCK_INITIALIZER;
 #define CACHE_ENTRY_STATE_MAX 128
 #define CACHE_ENTRY_STATE_MIN 10
 
-#define MOD_LUA_CONFIG_SYSPATH "/opt/citrusleaf/sys/udf/lua"
-#define MOD_LUA_CONFIG_USRPATH "/opt/citrusleaf/usr/udf/lua"
+#define MOD_LUA_CONFIG_SYSPATH "/opt/aerospike/sys/udf/lua"
+#define MOD_LUA_CONFIG_USRPATH "/opt/aerospike/usr/udf/lua"
 
 /******************************************************************************
  * TYPES
