@@ -17,6 +17,7 @@ local G_LDT_VERSION = 1.1;
 -- ======================================================================
 local GP=true; -- Leave this ALWAYS true (but value seems not to matter)
 local F=false; -- Set F (flag) to true to turn ON global print
+local E=false; -- Set E (ENTER/EXIT) to true to turn ON Enter/Exit print
 
 -- ======================================================================
 -- LSTACK TODO LIST:
@@ -729,7 +730,7 @@ end
 -- ======================================================================
 local function createSubrecContext()
   local meth = "createSubrecContext()";
-  GP=F and trace("[ENTER]<%s:%s>", MOD, meth );
+  GP=E and trace("[ENTER]<%s:%s>", MOD, meth );
 
   -- We need to track BOTH the Open Records and their Dirty State.
   -- Do this with a LIST of maps:
@@ -744,7 +745,7 @@ local function createSubrecContext()
   list.append( srcList, recMap ); -- recMap
   list.append( srcList, dirtyMap ); -- dirtyMap
 
-  GP=F and trace("[EXIT]: <%s:%s> : SRC(%s)", MOD, meth, tostring(srcList));
+  GP=E and trace("[EXIT]: <%s:%s> : SRC(%s)", MOD, meth, tostring(srcList));
   return srcList;
 end -- createSubrecContext()
 
@@ -754,7 +755,7 @@ end -- createSubrecContext()
 -- ======================================================================
 local function addSubrecToContext( srcList, subrec )
   local meth = "addSubrecContext()";
-  GP=F and trace("[ENTER]<%s:%s> src(%s)", MOD, meth, tostring( srcList));
+  GP=E and trace("[ENTER]<%s:%s> src(%s)", MOD, meth, tostring( srcList));
 
   if( srcList == nil ) then
     warn("[ERROR]<%s:%s> Bad Subrec Context: SRC is NIL", MOD, meth );
@@ -771,7 +772,7 @@ local function addSubrecToContext( srcList, subrec )
   local itemCount = recMap.ItemCount;
   recMap.ItemCount = itemCount + 1;
 
-  GP=F and trace("[EXIT]: <%s:%s> : SRC(%s)", MOD, meth, tostring(srcList));
+  GP=E and trace("[EXIT]: <%s:%s> : SRC(%s)", MOD, meth, tostring(srcList));
   return 0;
 end -- addSubrecToContext()
 
@@ -780,7 +781,7 @@ end -- addSubrecToContext()
 -- ======================================================================
 local function openSubrec( srcList, topRec, digestString )
   local meth = "openSubrec()";
-  GP=F and trace("[ENTER]<%s:%s> TopRec(%s) DigestStr(%s) SRC(%s)",
+  GP=E and trace("[ENTER]<%s:%s> TopRec(%s) DigestStr(%s) SRC(%s)",
     MOD, meth, tostring(topRec), digestString, tostring(srcList));
 
   -- We have a global limit on the number of subrecs that we can have
@@ -813,7 +814,7 @@ local function openSubrec( srcList, topRec, digestString )
     GP=F and trace("[FOUND REC]<%s:%s>Rec(%s)", MOD, meth, tostring(subrec));
   end
 
-  GP=F and trace("[EXIT]<%s:%s>Rec(%s) Dig(%s)",
+  GP=E and trace("[EXIT]<%s:%s>Rec(%s) Dig(%s)",
     MOD, meth, tostring(subrec), digestString );
   return subrec;
 end -- openSubrec()
@@ -828,7 +829,7 @@ end -- openSubrec()
 -- ======================================================================
 local function closeSubrec( srcList, digestString )
   local meth = "closeSubrec()";
-  GP=F and trace("[ENTER]<%s:%s> DigestStr(%s) SRC(%s)",
+  GP=E and trace("[ENTER]<%s:%s> DigestStr(%s) SRC(%s)",
     MOD, meth, digestString, tostring(srcList));
 
   local recMap = srcList[1];
@@ -855,7 +856,7 @@ local function closeSubrec( srcList, digestString )
       digestString, tostring( rc ));
   end
 
-  GP=F and trace("[EXIT]<%s:%s>Rec(%s) Dig(%s) rc(%s)",
+  GP=E and trace("[EXIT]<%s:%s>Rec(%s) Dig(%s) rc(%s)",
     MOD, meth, tostring(subrec), digestString, tostring(rc));
   return rc;
 end -- closeSubrec()
@@ -868,7 +869,7 @@ end -- closeSubrec()
 -- ======================================================================
 local function updateSubrec( srcList, subrec, digest )
   local meth = "updateSubrec()";
-  GP=F and trace("[ENTER]<%s:%s> TopRec(%s) DigestStr(%s) SRC(%s)",
+  GP=E and trace("[ENTER]<%s:%s> TopRec(%s) DigestStr(%s) SRC(%s)",
     MOD, meth, tostring(topRec), digestString, tostring(srcList));
 
   local recMap = srcList[1];
@@ -883,7 +884,7 @@ local function updateSubrec( srcList, subrec, digest )
   rc = aerospike:update_subrec( subrec );
   dirtyMap[digestString] = true;
 
-  GP=F and trace("[EXIT]<%s:%s>Rec(%s) Dig(%s) rc(%s)",
+  GP=E and trace("[EXIT]<%s:%s>Rec(%s) Dig(%s) rc(%s)",
     MOD, meth, tostring(subrec), digestString, tostring(rc));
   return rc;
 end -- updateSubrec()
@@ -893,7 +894,7 @@ end -- updateSubrec()
 -- ======================================================================
 local function markSubrecDirty( srcList, digestString )
   local meth = "markSubrecDirty()";
-  GP=F and trace("[ENTER]<%s:%s> src(%s)", MOD, meth, tostring(srcList));
+  GP=E and trace("[ENTER]<%s:%s> src(%s)", MOD, meth, tostring(srcList));
 
   -- Pull up the dirtyMap, find the entry for this digestString and
   -- mark it dirty.  We don't even care what the existing value used to be.
@@ -902,7 +903,7 @@ local function markSubrecDirty( srcList, digestString )
 
   dirtyMap[digestString] = true;
   
-  GP=F and trace("[EXIT]<%s:%s> SRC(%s)", MOD, meth, tostring(srcList) );
+  GP=E and trace("[EXIT]<%s:%s> SRC(%s)", MOD, meth, tostring(srcList) );
   return 0;
 end -- markSubrecDirty()
 
@@ -911,7 +912,7 @@ end -- markSubrecDirty()
 -- ======================================================================
 local function closeAllSubrecs( srcList )
   local meth = "closeAllSubrecs()";
-  GP=F and trace("[ENTER]<%s:%s> src(%s)", MOD, meth, tostring(srcList));
+  GP=E and trace("[ENTER]<%s:%s> src(%s)", MOD, meth, tostring(srcList));
 
   local recMap = srcList[1];
   local dirtyMap = srcList[2];
@@ -937,7 +938,7 @@ local function closeAllSubrecs( srcList )
     end
   end -- for all fields in SRC
 
-  GP=F and trace("[EXIT]: <%s:%s> : RC(%s)", MOD, meth, tostring(rc) );
+  GP=E and trace("[EXIT]: <%s:%s> : RC(%s)", MOD, meth, tostring(rc) );
   -- return rc;
   return 0; -- Mask the error for now:: TODO::@TOBY::Figure this out.
 end -- closeAllSubrecs()
@@ -975,7 +976,7 @@ end -- listAppend()
 -- ======================================================================
 local function setLdtRecordType( topRec )
   local meth = "setLdtRecordType()";
-  GP=F and trace("[ENTER]<%s:%s>", MOD, meth );
+  GP=E and trace("[ENTER]<%s:%s>", MOD, meth );
 
   local rc = 0;
   local recPropMap;
@@ -1020,7 +1021,7 @@ local function setLdtRecordType( topRec )
   -- changes are saved.
   rc = aerospike:update( topRec );
 
-  GP=F and trace("[EXIT]<%s:%s> rc(%d)", MOD, meth, rc );
+  GP=E and trace("[EXIT]<%s:%s> rc(%d)", MOD, meth, rc );
   return rc;
 end -- setLdtRecordType()
 
@@ -1062,7 +1063,7 @@ end -- setLdtRecordType()
 -- ======================================================================
 local function initializeLso( topRec, lsoBinName )
   local meth = "initializeLso()";
-  GP=F and trace("[ENTER]: <%s:%s>:: LsoBinName(%s)",
+  GP=E and trace("[ENTER]: <%s:%s>:: LsoBinName(%s)",
     MOD, meth, tostring(lsoBinName));
 
   -- Create the two maps and fill them in.  There's the General Property Map
@@ -1140,7 +1141,7 @@ local function initializeLso( topRec, lsoBinName )
   GP=F and trace("[DEBUG]: <%s:%s> Back from calling record.set_flags()",
     MOD, meth );
 
-  GP=F and trace("[EXIT]:<%s:%s>:", MOD, meth );
+  GP=E and trace("[EXIT]:<%s:%s>:", MOD, meth );
   return lsoList;
 end -- initializeLso()
 
@@ -1160,7 +1161,7 @@ end -- initializeLso()
 local function
 ldtInitPropMap( propMap, esrDigest, selfDigest, topDigest, rtFlag, topPropMap )
   local meth = "ldtInitPropMap()";
-  GP=F and trace("[ENTER]: <%s:%s>", MOD, meth );
+  GP=E and trace("[ENTER]: <%s:%s>", MOD, meth );
 
   -- Remember the ESR in the Top Record
   topPropMap[PM_EsrDigest] = esrDigest;
@@ -1188,7 +1189,7 @@ end -- ldtInitPropMap()
 -- ======================================================================
 local function createAndInitESR(src, topRec, lsoList )
   local meth = "createAndInitESR()";
-  GP=F and trace("[ENTER]: <%s:%s>", MOD, meth );
+  GP=E and trace("[ENTER]: <%s:%s>", MOD, meth );
 
   local rc = 0;
 
@@ -1222,7 +1223,7 @@ local function createAndInitESR(src, topRec, lsoList )
   record.set_type( esrRec, RT_ESR );
   trace("[TRACE]<%s:%s> DONE SETTING RECORD TYPE", MOD, meth );
 
-  GP=F and trace("[EXIT]: <%s:%s> Leaving with ESR Digest(%s)",
+  GP=E and trace("[EXIT]: <%s:%s> Leaving with ESR Digest(%s)",
     MOD, meth, tostring(esrDigest));
 
   -- Now that it's initialized, add the ESR to the SRC.
@@ -1259,7 +1260,7 @@ end -- createAndInitESR()
 -- ======================================================================
 local function initializeLdrMap(src,topRec,ldrRec,ldrPropMap,ldrMap,lsoList)
   local meth = "initializeLdrMap()";
-  GP=F and trace("[ENTER]: <%s:%s>", MOD, meth );
+  GP=E and trace("[ENTER]: <%s:%s>", MOD, meth );
 
   local lsoPropMap = lsoList[1];
   local lsoMap     = lsoList[2];
@@ -1312,7 +1313,7 @@ end -- initializeLdrMap()
 -- ======================================================================
 local function initializeColdDirMap( topRec, cdRec, cdPropMap, cdMap, lsoList )
   local meth = "initializeColdDirMap()";
-  GP=F and trace("[ENTER]: <%s:%s>", MOD, meth );
+  GP=E and trace("[ENTER]: <%s:%s>", MOD, meth );
 
   local lsoPropMap = lsoList[1];
   local lsoMap     = lsoList[2];
@@ -1579,7 +1580,7 @@ local function adjustLsoList( lsoList, argListMap )
   local propMap = lsoList[1];
   local lsoMap = lsoList[2];
 
-  GP=F and trace("[ENTER]: <%s:%s>:: LsoList(%s)::\n ArgListMap(%s)",
+  GP=E and trace("[ENTER]: <%s:%s>:: LsoList(%s)::\n ArgListMap(%s)",
     MOD, meth, tostring(lsoList), tostring( argListMap ));
 
   -- Iterate thru the argListMap and adjust (override) the map settings 
@@ -1645,7 +1646,7 @@ local function adjustLsoList( lsoList, argListMap )
   -- Do we need to reassign map to list?
   lsoList[2] = lsoMap;
 
-  GP=F and trace("[EXIT]:<%s:%s>:LsoList after Init(%s)",
+  GP=E and trace("[EXIT]:<%s:%s>:LsoList after Init(%s)",
     MOD,meth,tostring(lsoList));
   return lsoList;
 end -- adjustLsoList
@@ -1752,7 +1753,7 @@ local function readEntryList( resultList, lsoList, entryList, count,
     func, fargs, all)
 
   local meth = "readEntryList()";
-  GP=F and trace("[ENTER]: <%s:%s> Count(%s) func(%s) fargs(%s) all(%s)",
+  GP=E and trace("[ENTER]: <%s:%s> Count(%s) func(%s) fargs(%s) all(%s)",
       MOD,meth,tostring(count), tostring(func), tostring(fargs),tostring(all));
 
   -- Extract the property map and lso control map from the lso bin list.
@@ -1812,13 +1813,13 @@ local function readEntryList( resultList, lsoList, entryList, count,
     
     numRead = numRead + 1;
     if numRead >= numToRead and all == false then
-      GP=F and trace("[Early EXIT]: <%s:%s> NumRead(%d) resultListSummary(%s)",
+      GP=E and trace("[Early EXIT]: <%s:%s> NumRead(%d) resultListSummary(%s)",
         MOD, meth, numRead, summarizeList( resultList ));
       return numRead;
     end
   end -- for each entry in the list
 
-  GP=F and trace("[EXIT]: <%s:%s> NumRead(%d) resultListSummary(%s) ",
+  GP=E and trace("[EXIT]: <%s:%s> NumRead(%d) resultListSummary(%s) ",
     MOD, meth, numRead, summarizeList( resultList ));
   return numRead;
 end -- readEntryList()
@@ -1850,7 +1851,7 @@ end -- readEntryList()
 local function readByteArray( resultList, lsoList, ldrChunk, count,
                               func, fargs, all)
   local meth = "readByteArray()";
-  GP=F and trace("[ENTER]: <%s:%s> Count(%s) func(%s) fargs(%s) all(%s)",
+  GP=E and trace("[ENTER]: <%s:%s> Count(%s) func(%s) fargs(%s) all(%s)",
     MOD,meth,tostring(count), tostring(func), tostring(fargs), tostring(all));
             
   local lsoMap = lsoList[2];
@@ -1949,13 +1950,13 @@ local function readByteArray( resultList, lsoList, ldrChunk, count,
     
     numRead = numRead + 1;
     if numRead >= numToRead and all == false then
-      GP=F and trace("[Early EXIT]: <%s:%s> NumRead(%d) resultList(%s)",
+      GP=E and trace("[Early EXIT]: <%s:%s> NumRead(%d) resultList(%s)",
         MOD, meth, numRead, tostring( resultList ));
       return numRead;
     end
   end -- for each entry in the list (packed byte array)
 
-  GP=F and trace("[EXIT]: <%s:%s> NumRead(%d) resultListSummary(%s) ",
+  GP=E and trace("[EXIT]: <%s:%s> NumRead(%d) resultListSummary(%s) ",
     MOD, meth, numRead, summarizeList( resultList ));
   return numRead;
 end -- readByteArray()
@@ -1984,7 +1985,7 @@ end -- readByteArray()
 -- ======================================================================
 local function ldrInsertList(ldrRec,lsoMap,listIndex,insertList )
   local meth = "ldrInsertList()";
-  GP=F and trace("[ENTER]: <%s:%s> Index(%d) List(%s)",
+  GP=E and trace("[ENTER]: <%s:%s> Index(%d) List(%s)",
     MOD, meth, listIndex, tostring( insertList ) );
 
   GP=F and trace("[DEBUG]<%s:%s> LSO MAP(%s)", MOD, meth, tostring(lsoMap));
@@ -2046,7 +2047,7 @@ local function ldrInsertList(ldrRec,lsoMap,listIndex,insertList )
   ldrRec[LDR_CTRL_BIN] = ldrMap;
   ldrRec[LDR_LIST_BIN] = ldrValueList;
 
-  GP=F and trace("[EXIT]: <%s:%s> newItemsStored(%d) List(%s) ",
+  GP=E and trace("[EXIT]: <%s:%s> newItemsStored(%d) List(%s) ",
     MOD, meth, newItemsStored, tostring( ldrValueList) );
   return newItemsStored;
 end -- ldrInsertList()
@@ -2072,7 +2073,7 @@ end -- ldrInsertList()
 -- ======================================================================
 local function ldrInsertBytes( ldrChunkRec, lsoMap, listIndex, insertList )
   local meth = "ldrInsertBytes()";
-  GP=F and trace("[ENTER]: <%s:%s> Index(%d) List(%s)",
+  GP=E and trace("[ENTER]: <%s:%s> Index(%d) List(%s)",
     MOD, meth, listIndex, tostring( insertList ) );
 
   local ldrMap = ldrChunkRec[LDR_CTRL_BIN];
@@ -2190,7 +2191,7 @@ local function ldrInsertBytes( ldrChunkRec, lsoMap, listIndex, insertList )
   ldrChunkRec[LDR_CTRL_BIN] = ldrMap;
   ldrChunkRec[LDR_BNRY_BIN] = chunkByteArray;
 
-  GP=F and trace("[EXIT]: <%s:%s> newItemsStored(%d) List(%s) ",
+  GP=E and trace("[EXIT]: <%s:%s> newItemsStored(%d) List(%s) ",
     MOD, meth, newItemsStored, tostring( chunkByteArray ));
   return newItemsStored;
 end -- ldrInsertBytes()
@@ -2212,7 +2213,7 @@ end -- ldrInsertBytes()
 -- ======================================================================
 local function ldrInsert(ldrChunkRec,lsoMap,listIndex,insertList )
   local meth = "ldrInsert()";
-  GP=F and trace("[ENTER]: <%s:%s> Index(%d) List(%s), ChunkSummary(%s)",
+  GP=E and trace("[ENTER]: <%s:%s> Index(%d) List(%s), ChunkSummary(%s)",
     MOD, meth, listIndex, tostring( insertList ),ldrSummary(ldrChunkRec));
 
   if lsoMap[M_StoreMode] == SM_LIST then
@@ -2240,7 +2241,7 @@ end -- ldrInsert()
 local function ldrChunkRead( ldrChunk, resultList, lsoList, count,
                              func, fargs, all )
   local meth = "ldrChunkRead()";
-  GP=F and trace("[ENTER]: <%s:%s> Count(%d) All(%s)",
+  GP=E and trace("[ENTER]: <%s:%s> Count(%d) All(%s)",
       MOD, meth, count, tostring(all));
 
   -- Extract the property map and lso control map from the lso bin list.
@@ -2260,7 +2261,7 @@ local function ldrChunkRead( ldrChunk, resultList, lsoList, count,
                             func, fargs, all);
   end
 
-  GP=F and trace("[EXIT]: <%s:%s> NumberRead(%d) ResultListSummary(%s) ",
+  GP=E and trace("[EXIT]: <%s:%s> NumberRead(%d) ResultListSummary(%s) ",
     MOD, meth, numRead, summarizeList( resultList ));
   return numRead;
 end -- ldrChunkRead()
@@ -2284,7 +2285,7 @@ end -- ldrChunkRead()
 local function digestListRead(src, topRec, resultList, lsoList, digestList,
                               count, func, fargs, all)
   local meth = "digestListRead()";
-  GP=F and trace("[ENTER]: <%s:%s> Count(%d) all(%s)",
+  GP=E and trace("[ENTER]: <%s:%s> Count(%d) all(%s)",
     MOD, meth, count, tostring(all) );
 
   GP=F and trace("[DEBUG]: <%s:%s> Count(%d) DigList(%s) ResList(%s)",
@@ -2335,7 +2336,7 @@ local function digestListRead(src, topRec, resultList, lsoList, digestList,
     if( all == false and
       ( chunkItemsRead >= remaining or totalAmountRead >= count ) )
     then
-      GP=F and trace("[Early EXIT]:<%s:%s>totalAmountRead(%d) ResultList(%s) ",
+      GP=E and trace("[Early EXIT]:<%s:%s>totalAmountRead(%d) ResultList(%s) ",
         MOD, meth, totalAmountRead, tostring(resultList));
       status = aerospike:close_subrec( ldrChunk );
       return totalAmountRead;
@@ -2351,7 +2352,7 @@ local function digestListRead(src, topRec, resultList, lsoList, digestList,
     remaining = remaining - chunkItemsRead;
   end -- for each Data Chunk Record
 
-  GP=F and trace("[EXIT]: <%s:%s> totalAmountRead(%d) ResultListSummary(%s) ",
+  GP=E and trace("[EXIT]: <%s:%s> totalAmountRead(%d) ResultListSummary(%s) ",
   MOD, meth, totalAmountRead, summarizeList(resultList));
   return totalAmountRead;
 end -- digestListRead()
@@ -2382,7 +2383,7 @@ end -- digestListRead()
 -- Return 'count' items from the Hot List
 local function hotListRead( resultList, lsoList, count, func, fargs, all)
   local meth = "hotListRead()";
-  GP=F and trace("[ENTER]:<%s:%s>Count(%d) All(%s)",
+  GP=E and trace("[ENTER]:<%s:%s>Count(%d) All(%s)",
       MOD, meth, count, tostring( all ) );
 
   local lsoMap = lsoList[2];
@@ -2391,7 +2392,7 @@ local function hotListRead( resultList, lsoList, count, func, fargs, all)
   local numRead =
     readEntryList(resultList, lsoList, hotList, count, func, fargs, all);
 
-  GP=F and trace("[EXIT]:<%s:%s>resultListSummary(%s)",
+  GP=E and trace("[EXIT]:<%s:%s>resultListSummary(%s)",
     MOD, meth, summarizeList(resultList) );
   return resultList;
 end -- hotListRead()
@@ -2412,7 +2413,7 @@ end -- hotListRead()
 -- ======================================================================
 local function extractHotListTransferList( lsoMap )
   local meth = "extractHotListTransferList()";
-  GP=F and trace("[ENTER]: <%s:%s> ", MOD, meth );
+  GP=E and trace("[ENTER]: <%s:%s> ", MOD, meth );
 
   -- Get the first N (transfer amount) list elements
   local transAmount = lsoMap[M_HotListTransfer];
@@ -2436,7 +2437,7 @@ local function extractHotListTransferList( lsoMap )
   local helic = lsoMap[M_HotEntryListItemCount];
   lsoMap[M_HotEntryListItemCount] = helic - transAmount;
 
-  GP=F and trace("[EXIT]: <%s:%s> ResultList(%s)",
+  GP=E and trace("[EXIT]: <%s:%s> ResultList(%s)",
     MOD, meth, summarizeList(resultList));
   return resultList;
 end -- extractHotListTransferList()
@@ -2452,7 +2453,7 @@ end -- extractHotListTransferList()
 -- want to add more sophistication in the future.
 local function hotListHasRoom( lsoMap, insertValue )
   local meth = "hotListHasRoom()";
-  GP=F and trace("[ENTER]: <%s:%s> : ", MOD, meth );
+  GP=E and trace("[ENTER]: <%s:%s> : ", MOD, meth );
   local result = true;  -- This is the usual case
 
   local hotListLimit = lsoMap[M_HotListMax];
@@ -2461,7 +2462,7 @@ local function hotListHasRoom( lsoMap, insertValue )
     return false;
   end
 
-  GP=F and trace("[EXIT]: <%s:%s> Result(%s) : ", MOD, meth, tostring(result));
+  GP=E and trace("[EXIT]: <%s:%s> Result(%s) : ", MOD, meth, tostring(result));
   return result;
 end -- hotListHasRoom()
 
@@ -2490,7 +2491,7 @@ end -- hotListHasRoom()
 -- (*) newStorageValue: the new value to be pushed on the stack
 local function hotListInsert( lsoList, newStorageValue  )
   local meth = "hotListInsert()";
-  GP=F and trace("[ENTER]: <%s:%s> : Insert Value(%s)",
+  GP=E and trace("[ENTER]: <%s:%s> : Insert Value(%s)",
     MOD, meth, tostring(newStorageValue) );
 
   local propMap = lsoList[1];
@@ -2511,7 +2512,7 @@ local function hotListInsert( lsoList, newStorageValue  )
   local hotCount = lsoMap[M_HotEntryListItemCount];
   lsoMap[M_HotEntryListItemCount] = (hotCount + 1);
 
-  GP=F and trace("[EXIT]: <%s:%s> : LSO List Result(%s)",
+  GP=E and trace("[EXIT]: <%s:%s> : LSO List Result(%s)",
     MOD, meth, tostring( lsoList ) );
 
   return 0;  -- all is well
@@ -2534,7 +2535,7 @@ end -- hotListInsert()
 -- new chunk into the lsoMap (the warm dir list), and return it.
 local function   warmListChunkCreate( src, topRec, lsoList )
   local meth = "warmListChunkCreate()";
-  GP=F and trace("[ENTER]: <%s:%s> ", MOD, meth );
+  GP=E and trace("[ENTER]: <%s:%s> ", MOD, meth );
 
   -- Create the Aerospike Record, initialize the bins: Ctrl, List
   -- Note: All Field Names start with UPPER CASE.
@@ -2583,7 +2584,7 @@ local function   warmListChunkCreate( src, topRec, lsoList )
   -- Update the top (LSO) record with the newly updated lsoMap;
   topRec[ binName ] = lsoMap;
 
-  GP=F and trace("[EXIT]: <%s:%s> Return(%s) ",
+  GP=E and trace("[EXIT]: <%s:%s> Return(%s) ",
     MOD, meth, ldrSummary(newLdrChunkRecord));
   return newLdrChunkRecord;
 end --  warmListChunkCreate()
@@ -2601,7 +2602,7 @@ end --  warmListChunkCreate()
 -- ======================================================================
 local function extractWarmListTransferList( lsoList )
   local meth = "extractWarmListTransferList()";
-  GP=F and trace("[ENTER]: <%s:%s> ", MOD, meth );
+  GP=E and trace("[ENTER]: <%s:%s> ", MOD, meth );
 
   -- Extract the main property map and lso control map from the lsoList
   local lsoPropMap = lsoList[1];
@@ -2628,7 +2629,7 @@ local function extractWarmListTransferList( lsoList )
   oldWarmDigestList = nil;
   lsoMap[M_WarmListDigestCount] = lsoMap[M_WarmListDigestCount] - transAmount;
 
-  GP=F and trace("[EXIT]: <%s:%s> ResultList(%s) LsoMap(%s)",
+  GP=E and trace("[EXIT]: <%s:%s> ResultList(%s) LsoMap(%s)",
       MOD, meth, summarizeList(resultList), tostring(lsoMap));
 
   return resultList;
@@ -2645,14 +2646,14 @@ end -- extractWarmListTransferList()
 local function warmListHasRoom( lsoMap )
   local meth = "warmListHasRoom()";
   local decision = 1; -- Start Optimistic (most times answer will be YES)
-  GP=F and trace("[ENTER]: <%s:%s> Bin Map(%s)", 
+  GP=E and trace("[ENTER]: <%s:%s> Bin Map(%s)", 
     MOD, meth, tostring( lsoMap ));
 
   if lsoMap[M_WarmListDigestCount] >= lsoMap[M_WarmListMax] then
     decision = 0;
   end
 
-  GP=F and trace("[EXIT]: <%s:%s> Decision(%d)", MOD, meth, decision );
+  GP=E and trace("[EXIT]: <%s:%s> Decision(%d)", MOD, meth, decision );
   return decision;
 end -- warmListHasRoom()
 
@@ -2693,7 +2694,7 @@ end -- warmListRead()
 -- ======================================================================
 local function warmListGetTop( src, topRec, lsoMap )
   local meth = "warmListGetTop()";
-  GP=F and trace("[ENTER]: <%s:%s> lsoMap(%s)", MOD, meth, tostring( lsoMap ));
+  GP=E and trace("[ENTER]: <%s:%s> lsoMap(%s)", MOD, meth, tostring( lsoMap ));
 
   local warmDigestList = lsoMap[M_WarmDigestList];
   local stringDigest = tostring( warmDigestList[ list.size(warmDigestList) ]);
@@ -2703,7 +2704,7 @@ local function warmListGetTop( src, topRec, lsoMap )
 
   local topWarmChunk = aerospike:open_subrec( topRec, stringDigest );
 
-  GP=F and trace("[EXIT]: <%s:%s> result(%s) ",
+  GP=E and trace("[EXIT]: <%s:%s> result(%s) ",
     MOD, meth, ldrSummary( topWarmChunk ) );
   return topWarmChunk;
 end -- warmListGetTop()
@@ -2736,7 +2737,7 @@ local function warmListInsert( src, topRec, lsoList, entryList )
   local lsoMap  = lsoList[2];
   local binName = propMap[PM_BinName];
 
-  GP=F and trace("[ENTER]: <%s:%s> WDL(%s)",
+  GP=E and trace("[ENTER]: <%s:%s> WDL(%s)",
     MOD, meth, tostring(lsoMap[M_WarmDigestList]));
 
   GP=F and trace("[DEBUG]:<%s:%s> LSO LIST(%s)", MOD, meth, tostring(lsoList));
@@ -2845,7 +2846,7 @@ end -- warmListInsert
 local function releaseStorage( topRec, lsoList, digestList )
   local meth = "releaseStorage()";
   local rc = 0;
-  GP=F and trace("[ENTER]:<%s:%s> lsoSummary(%s) digestList(%s)",
+  GP=E and trace("[ENTER]:<%s:%s> lsoSummary(%s) digestList(%s)",
     MOD, meth, lsoSummaryString( lsoList ), tostring(digestList));
 
     info("LSTACK Subrecord Eviction: Subrec List(%s)",tostring(digestList));
@@ -2870,7 +2871,7 @@ local function releaseStorage( topRec, lsoList, digestList )
       end
     end
 
-  GP=F and trace("[EXIT]: <%s:%s> ", MOD, meth );
+  GP=E and trace("[EXIT]: <%s:%s> ", MOD, meth );
 end -- releaseStorage()
 
 -- ======================================================================
@@ -2884,7 +2885,7 @@ end -- releaseStorage()
 -- ======================================================================
 local function setPagePointers( coldDirRec, prevDigest, nextDigest )
   local meth = "setLeafPagePointers()";
-  GP=F and trace("[ENTER]<%s:%s> prev(%s) next(%s)",
+  GP=E and trace("[ENTER]<%s:%s> prev(%s) next(%s)",
     MOD, meth, tostring(prevDigest), tostring(nextDigest) );
   leafMap = leafRec[LSR_CTRL_BIN];
   if( prevDigest ~= nil ) then
@@ -2896,7 +2897,7 @@ local function setPagePointers( coldDirRec, prevDigest, nextDigest )
   leafRec[LSR_CTRL_BIN] = leafMap;
   aerospike:update_subrec( leafRec );
 
-  GP=F and trace("[EXIT]<%s:%s> ", MOD, meth );
+  GP=E and trace("[EXIT]<%s:%s> ", MOD, meth );
 end -- setPagePointers()
 
 -- ======================================================================
@@ -2926,7 +2927,7 @@ end -- setPagePointers()
 -- ======================================================================
 local function coldDirHeadCreate( src, topRec, lsoList, spaceEstimate )
   local meth = "coldDirHeadCreate()";
-  GP=F and trace("[ENTER]<%s:%s>LSO(%s)",MOD,meth,lsoSummaryString(lsoList));
+  GP=E and trace("[ENTER]<%s:%s>LSO(%s)",MOD,meth,lsoSummaryString(lsoList));
 
   local propMap = lsoList[1];
   local lsoMap  = lsoList[2];
@@ -2960,7 +2961,7 @@ local function coldDirHeadCreate( src, topRec, lsoList, spaceEstimate )
   GP=F and trace("[DEBUG]<%s:%s>coldDirRecCount(%s) coldDirRecMax(%s)",
     MOD, meth, tostring(coldDirRecCount), tostring(coldDirRecMax));
   if( coldDirRecMax == 1 and coldDirRecCount == 1 ) then
-    GP=F and trace("[ENTER]<%s:%s>Special Case ONE Dir", MOD, meth );
+    GP=F and trace("[DEBUG]<%s:%s>Special Case ONE Dir", MOD, meth );
     -- We have the weird special case. We will NOT delete this Cold Dir Head
     -- and Create a new one.  Instead, we will just clean out
     -- the Digest List enough so that we have room for "newItemCount".
@@ -3002,7 +3003,7 @@ local function coldDirHeadCreate( src, topRec, lsoList, spaceEstimate )
     returnColdHead = coldDirRec;
 
   elseif( coldDirRecCount >= coldDirRecMax ) then
-    GP=F and trace("[ENTER]<%s:%s>Release Cold Dirs: Cnt(%d) Max(%d)",
+    GP=F and trace("[DEBUG]<%s:%s>Release Cold Dirs: Cnt(%d) Max(%d)",
     MOD, meth, coldDirRecCount, coldDirRecMax );
     -- Release as many cold dirs as we are OVER the max.  Release
     -- them in reverse order, starting with the tail.  We put all of the
@@ -3081,7 +3082,7 @@ local function coldDirHeadCreate( src, topRec, lsoList, spaceEstimate )
   -- going to add a new Cold Directory HEAD.
   if( createNewHead == true ) then
 
-    GP=F and trace("[ENTER]<%s:%s>Regular Cold Head Case", MOD, meth );
+    GP=F and trace("[DEBUG]<%s:%s>Regular Cold Head Case", MOD, meth );
 
     -- Create the Cold Head Record, initialize the bins: Ctrl, List
     -- Also -- now that we have a DOUBLY linked list, get the NEXT Cold Dir,
@@ -3154,7 +3155,7 @@ local function coldDirHeadCreate( src, topRec, lsoList, spaceEstimate )
     returnColdHead = newColdHeadRec;
   end -- if we should create a new Cold HEAD
 
-  GP=F and trace("[EXIT]: <%s:%s> New Cold Head Record(%s) ",
+  GP=E and trace("[EXIT]: <%s:%s> New Cold Head Record(%s) ",
     MOD, meth, coldDirRecSummary( returnColdHead ));
   return returnColdHead;
 end --  coldDirHeadCreate()()
@@ -3176,7 +3177,7 @@ end --  coldDirHeadCreate()()
 local function coldDirRecInsert(lsoList,coldHeadRec,digestListIndex,digestList)
   local meth = "coldDirRecInsert()";
   local rc = 0;
-  GP=F and trace("[ENTER]:<%s:%s> ColdHead(%s) ColdDigestList(%s)",
+  GP=E and trace("[ENTER]:<%s:%s> ColdHead(%s) ColdDigestList(%s)",
       MOD, meth, coldDirRecSummary(coldHeadRec), tostring( digestList ));
 
   -- Extract the property map and lso control map from the lso bin list.
@@ -3246,7 +3247,7 @@ local function coldDirRecInsert(lsoList,coldHeadRec,digestListIndex,digestList)
   coldHeadRec[COLD_DIR_CTRL_BIN] = coldDirMap;
   coldHeadRec[COLD_DIR_LIST_BIN] = coldDirList;
 
-  GP=F and trace("[EXIT]: <%s:%s> newItemsStored(%d) Digest List(%s) map(%s)",
+  GP=E and trace("[EXIT]: <%s:%s> newItemsStored(%d) Digest List(%s) map(%s)",
     MOD, meth, newItemsStored, tostring( coldDirList), tostring(coldDirMap));
 
   return newItemsStored;
@@ -3276,7 +3277,7 @@ local function coldListInsert( src, topRec, lsoList, digestList )
   local lsoMap  = lsoList[2];
   local binName = propMap[PM_BinName];
 
-  GP=F and trace("[ENTER]<%s:%s>SRC(%s) LSO Summary(%s) DigestList(%s)", MOD,
+  GP=E and trace("[ENTER]<%s:%s>SRC(%s) LSO Summary(%s) DigestList(%s)", MOD,
     meth, tostring(src), lsoSummaryString(lsoList), tostring( digestList ));
 
   GP=F and trace("[DEBUG 0]:Map:WDL(%s)", tostring(lsoMap[M_WarmDigestList]));
@@ -3288,7 +3289,7 @@ local function coldListInsert( src, topRec, lsoList, digestList )
   -- the "release storage" method and return.
   if( lsoMap[M_ColdDirRecMax] == 0 ) then
     rc = releaseStorage( topRec, lsoList, digestList );
-    GP=F and trace("[Early EXIT]: <%s:%s> Release Storage Status(%s) RC(%d)",
+    GP=E and trace("[Early EXIT]: <%s:%s> Release Storage Status(%s) RC(%d)",
       MOD,meth, tostring(status), rc );
     return rc;
   end
@@ -3376,7 +3377,7 @@ local function coldListInsert( src, topRec, lsoList, digestList )
     MOD,meth, tostring(status));
 
   status = aerospike:close_subrec( coldHeadRec );
-  GP=F and trace("[EXIT]: <%s:%s> SUB-REC  Close Status(%s) RC(%d)",
+  GP=E and trace("[EXIT]: <%s:%s> SUB-REC  Close Status(%s) RC(%d)",
     MOD,meth, tostring(status), rc );
 
   -- Note: This is warm to cold transfer only.  So, no new data added here,
@@ -3407,7 +3408,7 @@ end -- coldListInsert
 local function
 coldListRead(src, topRec, resultList, lsoList, count, func, fargs, all)
   local meth = "coldListRead()";
-  GP=F and trace("[ENTER]: <%s:%s> Count(%d) All(%s) lsoMap(%s)",
+  GP=E and trace("[ENTER]: <%s:%s> Count(%d) All(%s) lsoMap(%s)",
       MOD, meth, count, tostring( all ), tostring( lsoMap ));
 
   -- Extract the property map and lso control map from the lso bin list.
@@ -3468,7 +3469,7 @@ coldListRead(src, topRec, resultList, lsoList, count, func, fargs, all)
           tostring(coldDirMap[CDM_PrevDirRec]));
 
     if countRemaining <= 0 or coldDirMap[CDM_NextDirRec] == 0 then
-        GP=F and trace("[EARLY EXIT]:<%s:%s>:Cold Read: (%d) Items",
+        GP=E and trace("[EARLY EXIT]:<%s:%s>:Cold Read: (%d) Items",
           MOD, meth, totalNumRead );
         aerospike:close_subrec( coldDirRec );
         return totalNumRead;
@@ -3495,7 +3496,7 @@ coldListRead(src, topRec, resultList, lsoList, count, func, fargs, all)
   GP=F and trace("[DEBUG]<%s:%s>After ColdListRead:LsoMap(%s) ColdHeadMap(%s)",
       MOD, meth, tostring( lsoMap ), tostring( coldDirMap )); 
 
-  GP=F and trace("[EXIT]:<%s:%s>totalAmountRead(%d) ResultListSummary(%s) ",
+  GP=E and trace("[EXIT]:<%s:%s>totalAmountRead(%d) ResultListSummary(%s) ",
       MOD, meth, totalNumRead, summarizeList(resultList));
   return totalNumRead;
 end -- coldListRead()
@@ -3533,7 +3534,7 @@ end -- coldListRead()
 local function warmListTransfer( src, topRec, lsoList )
   local meth = "warmListTransfer()";
   local rc = 0;
-  GP=F and trace("[ENTER]<%s:%s>\n\n <> TRANSFER TO COLD LIST <> lso(%s)\n",
+  GP=E and trace("[ENTER]<%s:%s>\n\n <> TRANSFER TO COLD LIST <> lso(%s)\n",
     MOD, meth, tostring(lsoList) );
 
   -- if we haven't yet initialized the cold list, then set up the
@@ -3546,7 +3547,7 @@ local function warmListTransfer( src, topRec, lsoList )
   -- list to the cold list. Use coldListInsert() to insert them.
   local transferList = extractWarmListTransferList( lsoList );
   rc = coldListInsert( src, topRec, lsoList, transferList );
-  GP=F and trace("[EXIT]: <%s:%s> lso(%s) ", MOD, meth, tostring(lsoList) );
+  GP=E and trace("[EXIT]: <%s:%s> lso(%s) ", MOD, meth, tostring(lsoList) );
   return rc;
 end -- warmListTransfer()
 
@@ -3568,7 +3569,7 @@ end -- warmListTransfer()
 local function hotListTransfer( src, topRec, lsoList )
   local meth = "hotListTransfer()";
   local rc = 0;
-  GP=F and trace("[ENTER]: <%s:%s> LSO Summary(%s) ",
+  GP=E and trace("[ENTER]: <%s:%s> LSO Summary(%s) ",
       MOD, meth, tostring( lsoSummary(lsoList) ));
       --
   -- Extract the property map and lso control map from the lso bin list.
@@ -3587,7 +3588,7 @@ local function hotListTransfer( src, topRec, lsoList )
   local transferList = extractHotListTransferList( lsoMap );
   rc = warmListInsert( src, topRec, lsoList, transferList );
 
-  GP=F and trace("[EXIT]: <%s:%s> result(%d) LsoMap(%s) ",
+  GP=E and trace("[EXIT]: <%s:%s> result(%d) LsoMap(%s) ",
     MOD, meth, rc, tostring( lsoMap ));
   return rc;
 end -- hotListTransfer()
@@ -3600,7 +3601,7 @@ end -- hotListTransfer()
 -- ======================================================================
 local function validateBinName( binName )
   local meth = "validateBinName()";
-  GP=F and trace("[ENTER]: <%s:%s> validate Bin Name(%s)",
+  GP=E and trace("[ENTER]: <%s:%s> validate Bin Name(%s)",
       MOD, meth, tostring(binName));
 
   if binName == nil  then
@@ -3613,7 +3614,7 @@ local function validateBinName( binName )
     warn("[ERROR EXIT]:<%s:%s> Bin Name Too Long", MOD, meth );
     error( ldte.ERR_BIN_NAME_TOO_LONG );
   end
-  GP=F and trace("[EXIT]:<%s:%s> Ok", MOD, meth );
+  GP=E and trace("[EXIT]:<%s:%s> Ok", MOD, meth );
 end -- validateBinName
 
 -- ======================================================================
@@ -3626,7 +3627,7 @@ end -- validateBinName
 -- ======================================================================
 local function validateRecBinAndMap( topRec, lsoBinName, mustExist )
   local meth = "validateRecBinAndMap()";
-  GP=F and trace("[ENTER]:<%s:%s> BinName(%s) ME(%s)",
+  GP=E and trace("[ENTER]:<%s:%s> BinName(%s) ME(%s)",
     MOD, meth, tostring( lsoBinName ), tostring( mustExist ));
 
   -- Start off with validating the bin name -- because we might as well
@@ -3662,7 +3663,7 @@ local function validateRecBinAndMap( topRec, lsoBinName, mustExist )
     local lsoMap  = lsoList[2];
 
     if propMap[PM_Magic] ~= MAGIC then
-      GP=F and warn("[ERROR EXIT]:<%s:%s>LSO BIN(%s) Corrupted (no magic)",
+      GP=E and warn("[ERROR EXIT]:<%s:%s>LSO BIN(%s) Corrupted (no magic)",
             MOD, meth, tostring( lsoBinName ) );
       error( ldte.ERR_BIN_DAMAGED );
     end
@@ -3677,13 +3678,13 @@ local function validateRecBinAndMap( topRec, lsoBinName, mustExist )
       local propMap = lsoList[1];
       local lsoMap  = lsoList[2];
       if propMap[PM_Magic] ~= MAGIC then
-        GP=F and warn("[ERROR EXIT]:<%s:%s> LSO BIN(%s) Corrupted (no magic)2",
+        GP=E and warn("[ERROR EXIT]:<%s:%s> LSO BIN(%s) Corrupted (no magic)2",
               MOD, meth, tostring( lsoBinName ) );
         error( ldte.ERR_BIN_DAMAGED );
       end
     end -- if worth checking
   end -- else for must exist
-  GP=F and trace("[EXIT]:<%s:%s> Ok", MOD, meth );
+  GP=E and trace("[EXIT]:<%s:%s> Ok", MOD, meth );
 
 end -- validateRecBinAndMap()
 
@@ -3705,7 +3706,7 @@ end -- validateRecBinAndMap()
 local function buildSubRecList( topRec, lsoList, position )
   local meth = "buildSubRecList()";
 
-  GP=F and trace("[ENTER]: <%s:%s> position(%s) lsoSummary(%s)",
+  GP=E and trace("[ENTER]: <%s:%s> position(%s) lsoSummary(%s)",
     MOD, meth, tostring(position), lsoSummaryString( lsoList ));
 
   local propMap = lsoList[1];
@@ -3803,7 +3804,7 @@ local function buildSubRecList( topRec, lsoList, position )
     aerospike:close_subrec( coldDirRec );
   end -- for each coldDirRecDigest
 
-  GP=F and trace("[EXIT]:<%s:%s> SubRec Digest Result List(%s)",
+  GP=E and trace("[EXIT]:<%s:%s> SubRec Digest Result List(%s)",
       MOD, meth, tostring( resultList ) );
 
   return resultList
@@ -3825,7 +3826,7 @@ end -- buildResultList()
 function buildSubRecListAll( src, topRec, lsolist )
   local meth = "buildSubRecListAll()";
 
-  GP=F and trace("[ENTER]: <%s:%s> LSO Summary(%s)",
+  GP=E and trace("[ENTER]: <%s:%s> LSO Summary(%s)",
     MOD, meth, lsoSummaryString( lsoList ));
 
   -- Extract the property map and lso control map from the lso bin list.
@@ -3877,7 +3878,7 @@ function buildSubRecListAll( src, topRec, lsolist )
 
   end -- Loop thru each cold directory
 
-  GP=F and trace("[EXIT]:<%s:%s> SubRec Digest Result List(%s)",
+  GP=E and trace("[EXIT]:<%s:%s> SubRec Digest Result List(%s)",
       MOD, meth, tostring( resultList ) );
 
   return resultList
@@ -3944,7 +3945,7 @@ end -- buildSubRecListAll()
 -- ======================================================================
 local function locatePosition( topRec, lsoList, sp, position )
   local meth = "locatePosition()";
-  GP=F and trace("[ENTER]:<%s:%s> LDT(%s) Position(%d)",
+  GP=E and trace("[ENTER]:<%s:%s> LDT(%s) Position(%d)",
     MOD, meth, ldtSummaryString( lsoList ), position );
 
     -- TODO: Finish this
@@ -3992,7 +3993,7 @@ local function locatePosition( topRec, lsoList, sp, position )
   -- (*) Track Warm and Cold List Capacity
   -- (*) Track WarmTop Size (how much room is left?)
 
-  GP=F and trace("[EXIT]: <%s:%s>", MOD, meth );
+  GP=E and trace("[EXIT]: <%s:%s>", MOD, meth );
 end -- locatePosition
 
 -- ======================================================================
@@ -4007,10 +4008,10 @@ end -- locatePosition
 -- ======================================================================
 local function localTrim( topRec, lsoList, searchPath )
   local meth = "localTrim()";
-  GP=F and trace("[ENTER]:<%s:%s> LsoSummary(%s) SearchPath(%s)",
+  GP=E and trace("[ENTER]:<%s:%s> LsoSummary(%s) SearchPath(%s)",
     MOD, meth, lsoSummaryString(lsoList), tostring(searchPath));
 
-  GP=F and trace("[EXIT]: <%s:%s>", MOD, meth );
+  GP=E and trace("[EXIT]: <%s:%s>", MOD, meth );
 end -- localTrim()
 
 -- ======================================================================
@@ -4070,10 +4071,10 @@ function lstack_create( topRec, lsoBinName, createSpec )
   local meth = "stackCreate()";
 
   if createSpec == nil then
-    GP=F and trace("[ENTER1]: <%s:%s> lsoBinName(%s) NULL createSpec",
+    GP=E and trace("[ENTER1]: <%s:%s> lsoBinName(%s) NULL createSpec",
       MOD, meth, tostring(lsoBinName));
   else
-    GP=F and trace("[ENTER2]: <%s:%s> lsoBinName(%s) createSpec(%s) ",
+    GP=E and trace("[ENTER2]: <%s:%s> lsoBinName(%s) createSpec(%s) ",
     MOD, meth, tostring( lsoBinName), tostring( createSpec ));
   end
 
@@ -4108,10 +4109,10 @@ function lstack_create( topRec, lsoBinName, createSpec )
   end
 
   if( rc == nil or rc == 0 ) then
-    GP=F and trace("[Normal EXIT]:<%s:%s> Return(0)", MOD, meth );
+    GP=E and trace("[Normal EXIT]:<%s:%s> Return(0)", MOD, meth );
     return 0;
   else
-    GP=F and trace("[ERROR EXIT]:<%s:%s> Return(%s)", MOD, meth,tostring(rc));
+    GP=E and trace("[ERROR EXIT]:<%s:%s> Return(%s)", MOD, meth,tostring(rc));
     error( ldte.ERR_CREATE );
   end
   
@@ -4151,7 +4152,7 @@ local function localStackPush( topRec, lsoBinName, newValue, createSpec )
 
   -- Note: functionTable is "global" to this module, defined at top of file.
 
-  GP=F and trace("[ENTER1]:<%s:%s>LSO BIN(%s) NewVal(%s) createSpec(%s)",
+  GP=E and trace("[ENTER1]:<%s:%s>LSO BIN(%s) NewVal(%s) createSpec(%s)",
       MOD, meth, tostring(lsoBinName), tostring( newValue ),
       tostring( createSpec ) );
 
@@ -4229,10 +4230,10 @@ local function localStackPush( topRec, lsoBinName, newValue, createSpec )
   -- so just turn any NILs into zeros.
   local rc = aerospike:update( topRec );
   if( rc == nil or rc == 0 ) then
-    GP=F and trace("[Normal EXIT]:<%s:%s> Return(0)", MOD, meth );
+    GP=E and trace("[Normal EXIT]:<%s:%s> Return(0)", MOD, meth );
     return 0;
   else
-    GP=F and trace("[ERROR EXIT]:<%s:%s> Return(%s)", MOD, meth,tostring(rc));
+    GP=E and trace("[ERROR EXIT]:<%s:%s> Return(%s)", MOD, meth,tostring(rc));
     error( ldte.ERR_INTERNAL );
   end
 end -- function localStackPush()
@@ -4260,7 +4261,7 @@ end -- lstack_create_and_push()
 -- =======================================================================
 function lstack_push_all( topRec, lsoBinName, valueList, createSpec )
   local meth = "lstack_push_all()";
-  GP=F and trace("[ENTER]:<%s:%s>LSO BIN(%s) valueList(%s) createSpec(%s)",
+  GP=E and trace("[ENTER]:<%s:%s>LSO BIN(%s) valueList(%s) createSpec(%s)",
     MOD, meth, tostring(lsoBinName), tostring(valueList), tostring(createSpec));
 
   local rc = 0;
@@ -4323,7 +4324,7 @@ end -- end lstack_push_all()
 local function localStackPeek( topRec, lsoBinName, peekCount, func, fargs )
   local meth = "localStackPeek()";
 
-  GP=F and trace("[ENTER]: <%s:%s> LSO BIN(%s) Count(%s) func(%s) fargs(%s)",
+  GP=E and trace("[ENTER]: <%s:%s> LSO BIN(%s) Count(%s) func(%s) fargs(%s)",
     MOD, meth, tostring(lsoBinName), tostring(peekCount),
     tostring(func), tostring(fargs) );
 
@@ -4431,7 +4432,7 @@ local function localStackPeek( topRec, lsoBinName, peekCount, func, fargs )
   local coldCount = 
      coldListRead(src,topRec,resultList,lsoList,remainingCount,func,fargs,all);
 
-  GP=F and trace("[EXIT]: <%s:%s>: PeekCount(%d) ResultListSummary(%s)",
+  GP=E and trace("[EXIT]: <%s:%s>: PeekCount(%d) ResultListSummary(%s)",
     MOD, meth, peekCount, summarizeList(resultList));
 
   return resultList;
@@ -4470,7 +4471,7 @@ end -- lstack_peek_then_filter()
 function lstack_trim( topRec, lsoBinName, trimCount )
   local meth = "lstack_trim()";
 
-  GP=F and trace("[ENTER1]: <%s:%s> lsoBinName(%s) trimCount(%s)",
+  GP=E and trace("[ENTER1]: <%s:%s> lsoBinName(%s) trimCount(%s)",
     MOD, meth, tostring(lsoBinName), tostring( trimCount ));
 
   warn("[NOTICE!!]<%s:%s> Under Construction", MOD, meth );
@@ -4489,7 +4490,7 @@ function lstack_trim( topRec, lsoBinName, trimCount )
   -- TODO: Create localTrim()
   localTrim( topRec, lsoList, searchPath );
 
-  GP=F and trace("[EXIT]: <%s:%s>", MOD, meth );
+  GP=E and trace("[EXIT]: <%s:%s>", MOD, meth );
 
   return config;
 end -- function lstack_trim()
@@ -4509,7 +4510,7 @@ end -- function lstack_trim()
 function lstack_size( topRec, lsoBinName )
   local meth = "lstack_size()";
 
-  GP=F and trace("[ENTER1]: <%s:%s> lsoBinName(%s)",
+  GP=E and trace("[ENTER1]: <%s:%s> lsoBinName(%s)",
     MOD, meth, tostring(lsoBinName));
 
   -- validate the topRec, the bin and the map.  If anything is weird, then
@@ -4529,7 +4530,7 @@ function lstack_size( topRec, lsoBinName )
       itemCount = storeLimit;
   end
 
-  GP=F and trace("[EXIT]: <%s:%s> : size(%d)", MOD, meth, itemCount );
+  GP=E and trace("[EXIT]: <%s:%s> : size(%d)", MOD, meth, itemCount );
 
   return itemCount;
 end -- function lstack_size()
@@ -4550,7 +4551,7 @@ end -- function lstack_size()
 function lstack_get_capacity( topRec, lsoBinName )
   local meth = "lstack_get_capacity()";
 
-  GP=F and trace("[ENTER]: <%s:%s> lsoBinName(%s)",
+  GP=E and trace("[ENTER]: <%s:%s> lsoBinName(%s)",
     MOD, meth, tostring(lsoBinName));
 
   -- validate the topRec, the bin and the map.  If anything is weird, then
@@ -4562,7 +4563,7 @@ function lstack_get_capacity( topRec, lsoBinName )
   local ldtMap = lsoList[2];
   local capacity = ldtMap[M_StoreLimit];
 
-  GP=F and trace("[EXIT]: <%s:%s> : size(%d)", MOD, meth, capacity );
+  GP=E and trace("[EXIT]: <%s:%s> : size(%d)", MOD, meth, capacity );
 
   return capacity;
 end -- function lstack_get_capacity()
@@ -4582,7 +4583,7 @@ end -- function lstack_get_capacity()
 function lstack_config( topRec, lsoBinName )
   local meth = "lstack_config()";
 
-  GP=F and trace("[ENTER1]: <%s:%s> lsoBinName(%s)",
+  GP=E and trace("[ENTER1]: <%s:%s> lsoBinName(%s)",
     MOD, meth, tostring(lsoBinName));
 
   -- validate the topRec, the bin and the map.  If anything is weird, then
@@ -4592,7 +4593,7 @@ function lstack_config( topRec, lsoBinName )
   local lsoList = topRec[ lsoBinName ];
   local config = lsoSummary( lsoList );
 
-  GP=F and trace("[EXIT]: <%s:%s> : config(%s)", MOD, meth, tostring(config));
+  GP=E and trace("[EXIT]: <%s:%s> : config(%s)", MOD, meth, tostring(config));
 
   return config;
 end -- function lstack_config()
@@ -4613,7 +4614,7 @@ end -- function lstack_config()
 function lstack_subrec_list( topRec, lsoBinName )
   local meth = "lstack_subrec_list()";
 
-  GP=F and trace("[ENTER]: <%s:%s> lsoBinName(%s)",
+  GP=E and trace("[ENTER]: <%s:%s> lsoBinName(%s)",
     MOD, meth, tostring(lsoBinName));
 
   -- Extract the property map and lso control map from the lso bin list.
@@ -4666,7 +4667,7 @@ function lstack_subrec_list( topRec, lsoBinName )
 
   end -- Loop thru each cold directory
 
-  GP=F and trace("[EXIT]:<%s:%s> SubRec Digest Result List(%s)",
+  GP=E and trace("[EXIT]:<%s:%s> SubRec Digest Result List(%s)",
       MOD, meth, tostring( resultList ) );
 
   return resultList
@@ -4695,7 +4696,7 @@ end -- lstack_subrec_list()
 local function ldtRemove( topRec, binName )
   local meth = "ldtRemove()";
 
-  GP=F and trace("[ENTER]<%s:%s> binName(%s)", MOD, meth, tostring(binName));
+  GP=E and trace("[ENTER]<%s:%s> binName(%s)", MOD, meth, tostring(binName));
   local rc = 0; -- start off optimistic
 
   -- Validate the binName before moving forward
@@ -4750,10 +4751,10 @@ local function ldtRemove( topRec, binName )
   -- so just turn any NILs into zeros.
   rc = aerospike:update( topRec );
   if( rc == nil or rc == 0 ) then
-    GP=F and trace("[Normal EXIT]:<%s:%s> Return(0)", MOD, meth );
+    GP=E and trace("[Normal EXIT]:<%s:%s> Return(0)", MOD, meth );
     return 0;
   else
-    GP=F and trace("[ERROR EXIT]:<%s:%s> Return(%s)", MOD, meth,tostring(rc));
+    GP=E and trace("[ERROR EXIT]:<%s:%s> Return(%s)", MOD, meth,tostring(rc));
     error( ldte.ERR_INTERNAL );
   end
 end -- ldtRemove()
@@ -4808,7 +4809,7 @@ end -- ldt_remove()
 function lstack_delete_subrecs( topRec, lsoBinName )
   local meth = "lstack_delete()";
 
-  GP=F and trace("[ENTER]: <%s:%s> lsoBinName(%s)",
+  GP=E and trace("[ENTER]: <%s:%s> lsoBinName(%s)",
     MOD, meth, tostring(lsoBinName));
 
   trace("[ATTENTION!!!]::LSTACK_DELETE IS NOT YET IMPLEMENTED!!!");
@@ -4869,7 +4870,7 @@ end -- lstack_delete_subrecs()
 local function localSetCapacity( topRec, lsoBinName, newLimit )
   local meth = "localSetCapacity()";
 
-  GP=F and trace("[ENTER]: <%s:%s> lsoBinName(%s) newLimit(%s)",
+  GP=E and trace("[ENTER]: <%s:%s> lsoBinName(%s) newLimit(%s)",
     MOD, meth, tostring(lsoBinName), tostring(newLimit));
 
   local rc = 0; -- start off optimistic
@@ -4983,10 +4984,10 @@ local function localSetCapacity( topRec, lsoBinName, newLimit )
   -- so just turn any NILs into zeros.
   rc = aerospike:update( topRec );
   if( rc == nil or rc == 0 ) then
-    GP=F and trace("[Normal EXIT]:<%s:%s> Return(0)", MOD, meth );
+    GP=E and trace("[Normal EXIT]:<%s:%s> Return(0)", MOD, meth );
     return 0;
   else
-    GP=F and trace("[ERROR EXIT]:<%s:%s> Return(%s)", MOD, meth,tostring(rc));
+    GP=E and trace("[ERROR EXIT]:<%s:%s> Return(%s)", MOD, meth,tostring(rc));
     error( ldte.ERR_INTERNAL );
   end
 end -- localSetCapacity();
@@ -5034,7 +5035,7 @@ function lstack_debug( topRec, setting )
   local meth = "lstack_debug()";
   local rc = 0;
 
-  GP=F and trace("[ENTER]: <%s:%s> setting(%s)", MOD, meth, tostring(setting));
+  GP=E and trace("[ENTER]: <%s:%s> setting(%s)", MOD, meth, tostring(setting));
   if( setting ~= nil and type(setting) == "number" ) then
     if( setting == 1 ) then
       info("[DEBUG SET]<%s:%s> Turn Debug ON", MOD, meth );
