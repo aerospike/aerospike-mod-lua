@@ -4,10 +4,10 @@
 -- |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- ======================================================================
 -- UDF Function Table:
--- Version 07.26.0:    Last Update: (July 26, 2013) tjl
+-- Version 08.08.0:    Last Update: (August 08, 2013) tjl
 
 -- Keep this global value in sync with (above) version
-local MOD="UdfFunctionTable_7.26.0"; -- the module name used for tracing
+local MOD="UdfFunctionTable_2013_8_08.a"; -- the module name used for tracing
 
 -- Table of Functions: Used for Transformation and Filter Functions in
 -- conjunction with Large Stack Objects (LSO) and Large Sets (LSET).
@@ -86,27 +86,27 @@ function UdfFunctionTable.transformFilter1( argList )
   local resultList = list();
   local entryList = arglist[1]; 
   local entry = 0;
-  GP=F and info("[ENTER]: <%s:%s> EntryList(%s) \n",
+  GP=F and trace("[ENTER]: <%s:%s> EntryList(%s) \n",
                  MOD, meth, tostring(entryList));
 
   -- change EVERY entry that is > 200 to 0.
   for i = 1, list.size( entryList ) do
-      GP=F and info("[DEBUG]: <%s:%s> EntryList[%d](%s) \n",
+      GP=F and trace("[DEBUG]: <%s:%s> EntryList[%d](%s) \n",
         MOD, meth, i, tostring(entryList[i]));
     if entryList[i] > 200 then 
-      GP=F and info("[DEBUG]: <%s:%s> Setting Entry to ZERO \n", MOD, meth );
+      GP=F and trace("[DEBUG]: <%s:%s> Setting Entry to ZERO \n", MOD, meth );
       entry = 0;
     else 
-      GP=F and info("[DEBUG]: <%s:%s> Setting Entry to entryList(%s) \n",
+      GP=F and trace("[DEBUG]: <%s:%s> Setting Entry to entryList(%s) \n",
         MOD, meth, tostring(entryList[i]));
       entry = entryList[i];
     end
     list.append( resultList, entry );
-    GP=F and info("[DEBUG]: <%s:%s> List Append: Result:(%s) Entry(%s)\n",
+    GP=F and trace("[DEBUG]: <%s:%s> List Append: Result:(%s) Entry(%s)\n",
                   MOD, meth, tostring(resultList[i]), tostring( entry));
   end
 
-  GP=F and info("[EXIT]: <%s:%s> Return with ResultList(%s) \n",
+  GP=F and trace("[EXIT]: <%s:%s> Return with ResultList(%s) \n",
                 MOD, meth, tostring(resultList));
   return resultList;
 end
@@ -133,7 +133,7 @@ function UdfFunctionTable.rangeFilter( dbObject, arglist )
   local meth = "rangeFilter()";
   local result = true;
 
-  GP=F and info("[ENTER]: <%s:%s> ArgList(%s) dbObject(%s)",
+  GP=F and trace("[ENTER]: <%s:%s> ArgList(%s) dbObject(%s)",
                 MOD, meth, tostring(arglist), tostring(dbObject));
 
   -- Check the "arglist" object -=- it must not be goofy.
@@ -170,7 +170,7 @@ function UdfFunctionTable.rangeFilter( dbObject, arglist )
   end -- for each term in arglist
   
 
-  GP=F and info("[EXIT]: <%s:%s> Result(%s) \n", MOD, meth, tostring(result));
+  GP=F and trace("[EXIT]: <%s:%s> Result(%s) \n", MOD, meth, tostring(result));
   if result == true then
       return dbObject
   else
@@ -191,7 +191,7 @@ end -- rangeFilter
 function UdfFunctionTable.compressTest4( entryList, arglist )
   local meth = "compressTest4()";
   local rc = 0;
-  GP=F and info("[ENTER]: <%s:%s> EntryList(%s) ArgList(%s) \n",
+  GP=F and trace("[ENTER]: <%s:%s> EntryList(%s) ArgList(%s) \n",
                 MOD, meth, tostring(entryList), tostring(arglist));
 
   local b16 = bytes(16);
@@ -200,7 +200,7 @@ function UdfFunctionTable.compressTest4( entryList, arglist )
   bytes.put_int32(b16, 9,  entryList[3] ); -- 4 byte int
   bytes.put_int32(b16, 13, entryList[4] ); -- 4 byte int
 
-  GP=F and info("[EXIT]: <%s:%s> Result(%s) \n", MOD, meth, tostring(b16));
+  GP=F and trace("[EXIT]: <%s:%s> Result(%s) \n", MOD, meth, tostring(b16));
   return b16
 end -- compressTest4()
 
@@ -216,7 +216,7 @@ end -- compressTest4()
 function UdfFunctionTable.unCompressTest4( b16, arglist )
   local meth = "unCompressTest4()";
   local rc = 0;
-  GP=F and info("[ENTER]: <%s:%s> packedB16(%s) ArgList(%s) \n",
+  GP=F and trace("[ENTER]: <%s:%s> packedB16(%s) ArgList(%s) \n",
                 MOD, meth, tostring(b16), tostring(arglist));
 
   local entryList = list();
@@ -225,7 +225,7 @@ function UdfFunctionTable.unCompressTest4( b16, arglist )
   entryList[3] = bytes.get_int32(b16, 9 ); -- 4 byte int
   entryList[4] = bytes.get_int32(b16, 13); -- 4 byte int
 
-  GP=F and info("[EXIT]:<%s:%s>Result(%s)", MOD, meth, tostring(entryList));
+  GP=F and trace("[EXIT]:<%s:%s>Result(%s)", MOD, meth, tostring(entryList));
   return entryList;
 end -- unCompressTest4()
 
@@ -245,14 +245,14 @@ end -- unCompressTest4()
 -- ======================================================================
 function UdfFunctionTable.testFilter1( arglist )
   local meth = "testFilter1()";
-  GP=F and info("[ENTER]: <%s:%s> ArgList(%s) \n",
+  GP=F and trace("[ENTER]: <%s:%s> ArgList(%s) \n",
                 MOD, meth, tostring(arglist));
 
   local result = "Test Filter1 Hello";
-  GP=F and info("[DEBUG]: <%s:%s> Msg (%s) ArgList(%s) \n",
+  GP=F and trace("[DEBUG]: <%s:%s> Msg (%s) ArgList(%s) \n",
                 MOD, meth, result, tostring(arglist));
 
-  GP=F and info("[EXIT]: <%s:%s> Result(%s) \n", MOD, meth, result );
+  GP=F and trace("[EXIT]: <%s:%s> Result(%s) \n", MOD, meth, result );
 
   return result
 end
@@ -271,13 +271,13 @@ end
 function UdfFunctionTable.compress4ByteInteger( luaNumber, arglist )
   local meth = "compress4ByteInteger()";
   local rc = 0;
-  GP=F and info("[ENTER]: <%s:%s> Number(%s) ArgList(%s) \n",
+  GP=F and trace("[ENTER]: <%s:%s> Number(%s) ArgList(%s) \n",
                 MOD, meth, tostring(luaNumber), tostring(arglist));
 
   local b4 = bytes(4);
   bytes.put_int32(b4, 1,  luaNumber[1] ); -- 4 byte int
 
-  GP=F and info("[EXIT]: <%s:%s> Result(%s) \n", MOD, meth, tostring(b4));
+  GP=F and trace("[EXIT]: <%s:%s> Result(%s) \n", MOD, meth, tostring(b4));
   return b4
 end -- compress4ByteInteger()
 
@@ -294,12 +294,12 @@ function UdfFunctionTable.unCompress4ByteInteger( b4, arglist )
   local rc = 0;
   -- protect against bad prints
   if arglist == nil then arglist = 0; end
-  GP=F and info("[ENTER]: <%s:%s> PackedNum(%s) ArgList(%s) \n",
+  GP=F and trace("[ENTER]: <%s:%s> PackedNum(%s) ArgList(%s) \n",
                 MOD, meth, tostring(b4), tostring(arglist));
 
   local luaNumber = bytes.get_int32(b4, 1 ); -- 4 byte int
 
-  GP=F and info("[EXIT]: <%s:%s> ResultNumber (%s) type(%s)\n",
+  GP=F and trace("[EXIT]: <%s:%s> ResultNumber (%s) type(%s)\n",
                 MOD, meth, tostring( luaNumber ));
   return luaNumber;
 end -- unCompress4ByteInteger()
@@ -317,7 +317,7 @@ end -- unCompress4ByteInteger()
 function UdfFunctionTable.listCompress_4_18( listTuple, arglist )
   local meth = "listCompress()";
   local rc = 0;
-  GP=F and info("[ENTER]: <%s:%s> tuple(%s) ArgList(%s) \n",
+  GP=F and trace("[ENTER]: <%s:%s> tuple(%s) ArgList(%s) \n",
                 MOD, meth, tostring(listTuple), tostring(arglist));
 
   local b18 = bytes(18);
@@ -326,7 +326,7 @@ function UdfFunctionTable.listCompress_4_18( listTuple, arglist )
   bytes.put_int64(b18, 9,  listTuple[3] ); -- 8 byte int
   bytes.put_int16(b18, 17, listTuple[4] ); -- 2 byte int
 
-  GP=F and info("[EXIT]: <%s:%s> Result(%s) \n", MOD, meth, tostring(b18));
+  GP=F and trace("[EXIT]: <%s:%s> Result(%s) \n", MOD, meth, tostring(b18));
   return b18
 end -- listCompress_4_18( listTuple, arglist )
 
@@ -345,7 +345,7 @@ function UdfFunctionTable.listUnCompress_4_18( b18, arglist )
   local rc = 0;
   -- protect against bad prints
   if arglist == nil then arglist = 0; end
-  GP=F and info("[ENTER]: <%s:%s> tuple(%s) Tuple Type(%s) ArgList(%s) \n",
+  GP=F and trace("[ENTER]: <%s:%s> tuple(%s) Tuple Type(%s) ArgList(%s) \n",
                 MOD, meth, tostring(b18), type(b18), tostring(arglist));
 
   local listTuple = list();
@@ -354,7 +354,7 @@ function UdfFunctionTable.listUnCompress_4_18( b18, arglist )
   listTuple[3] = bytes.get_int64(b18, 9 ); -- 8 byte int
   listTuple[4] = bytes.get_int16(b18, 17); -- 2 byte int
 
-  GP=F and info("[EXIT]: <%s:%s> Result(%s) type(%s)\n",
+  GP=F and trace("[EXIT]: <%s:%s> Result(%s) type(%s)\n",
                 MOD, meth, tostring(listTuple), type(listTuple ));
   return listTuple;
 end -- listUnCompress_4_18
@@ -373,7 +373,7 @@ end -- listUnCompress_4_18
 function UdfFunctionTable.listCompress_5_18( listTuple, arglist )
   local meth = "listCompress_5_18()";
   local rc = 0;
-  GP=F and info("[ENTER]: <%s:%s> tuple(%s) ArgList(%s) ",
+  GP=F and trace("[ENTER]: <%s:%s> tuple(%s) ArgList(%s) ",
                 MOD, meth, tostring(listTuple), tostring(arglist));
 
   local b18 = bytes(18);
@@ -383,7 +383,7 @@ function UdfFunctionTable.listCompress_5_18( listTuple, arglist )
   bytes.put_int32(b18, 13, listTuple[4] ); -- 4 byte int
   bytes.put_int16(b18, 17, listTuple[5] ); -- 2 byte int
 
-  GP=F and info("[EXIT]: <%s:%s> BinaryResult(%s)", MOD, meth, tostring(b18));
+  GP=F and trace("[EXIT]: <%s:%s> BinaryResult(%s)", MOD, meth, tostring(b18));
   return b18
 end -- listCompress_5_18( listTuple, arglist )
 
@@ -402,7 +402,7 @@ function UdfFunctionTable.listUnCompress_5_18( b18, arglist )
   local rc = 0;
   -- protect against bad prints
   if arglist == nil then arglist = 0; end
-  GP=F and info("[ENTER]: <%s:%s> BinaryTuple(%s) TupleType(%s) ArgList(%s) \n",
+  GP=F and trace("[ENTER]: <%s:%s> BinaryTuple(%s) TupleType(%s) ArgList(%s) \n",
                 MOD, meth, tostring(b18), type(b18), tostring(arglist));
 
   local listTuple = list(5);
@@ -420,7 +420,7 @@ function UdfFunctionTable.listUnCompress_5_18( b18, arglist )
   --  listTuple[4] = bytes.get_int32(b18, 13 ); -- 4 byte int
   --  listTuple[5] = bytes.get_int16(b18, 17);  -- 2 byte int
 
-  GP=F and info("[EXIT]: <%s:%s> TupleResult(%s) type(%s)\n",
+  GP=F and trace("[EXIT]: <%s:%s> TupleResult(%s) type(%s)\n",
                 MOD, meth, tostring(listTuple), type(listTuple ));
   return listTuple;
 end -- listUnCompress_5_18()
@@ -440,7 +440,7 @@ end -- listUnCompress_5_18()
 function UdfFunctionTable.listCompress_5_20( inputTuple, arglist )
   local meth = "listCompress_5_20()";
   local rc = 0;
-  GP=F and info("[ENTER]: <%s:%s> tuple(%s) ArgList(%s) ",
+  GP=F and trace("[ENTER]: <%s:%s> tuple(%s) ArgList(%s) ",
                 MOD, meth, tostring(listTuple), tostring(arglist));
 
   local b20 = bytes(20);
@@ -450,7 +450,7 @@ function UdfFunctionTable.listCompress_5_20( inputTuple, arglist )
   bytes.put_int32(b20, 13, inputTuple[4] ); -- 4 byte int
   bytes.put_int32(b20, 17, inputTuple[5] ); -- 4 byte int
 
-  GP=F and info("[EXIT]: <%s:%s> BinaryResult(%s)", MOD, meth, tostring(b20));
+  GP=F and trace("[EXIT]: <%s:%s> BinaryResult(%s)", MOD, meth, tostring(b20));
   return b20
 end -- listCompress_5_20( listTuple, arglist )
 
@@ -469,7 +469,7 @@ function UdfFunctionTable.listUnCompress_5_20( b20, arglist )
   local rc = 0;
   -- protect against bad prints
   if arglist == nil then arglist = 0; end
-  GP=F and info("[ENTER]: <%s:%s> BinaryTuple(%s) TupleType(%s) ArgList(%s) \n",
+  GP=F and trace("[ENTER]<%s:%s> BinaryTuple(%s) TupleType(%s) ArgList(%s)",
                 MOD, meth, tostring(b20), type(b20), tostring(arglist));
 
   local listTuple = list(5);
@@ -480,7 +480,7 @@ function UdfFunctionTable.listUnCompress_5_20( b20, arglist )
   list.append( listTuple, bytes.get_int32(b20, 13));  -- 4 byte int
   list.append( listTuple, bytes.get_int32(b20, 17));  -- 4 byte int
 
-  GP=F and info("[EXIT]: <%s:%s> TupleResult(%s) type(%s)\n",
+  GP=F and trace("[EXIT]: <%s:%s> TupleResult(%s) type(%s)\n",
                 MOD, meth, tostring(listTuple), type(listTuple ));
   return listTuple;
 end -- listUnCompress_5_20()
@@ -497,7 +497,7 @@ end -- listUnCompress_5_20()
 -- (*) The value that is associated with the key "key".
 -- ======================================================================
 function UdfFunctionTable.keyExtract( objectValue )
-   info("[ENTER] Extract Key from Object(%s)", tostring(objectValue));
+   GP=F and trace("[ENTER] Extract Key from Object(%s)", tostring(objectValue));
 
   if objectValue == nil or objectValue["key"] == nil then
     return nil;
@@ -535,7 +535,7 @@ function UdfFunctionTable.keyCompareEqual( searchValue, databaseValue )
     result = false;
   end
 
-  GP=F and info("[EXIT]: <%s:%s> SV(%s) == DV(%s) is Compare Result(%s) ",
+  GP=F and trace("[EXIT]: <%s:%s> SV(%s) == DV(%s) is Compare Result(%s) ",
       MOD, meth, tostring(searchValue), type(databaseValue),tostring(result));
   return result;
 end -- keyCompareEqual()
@@ -568,7 +568,7 @@ function UdfFunctionTable.debugListCompareEqual( searchValue, databaseValue )
     result = false;
   end
 
-  GP=F and info("[EXIT]: <%s:%s> SV(%s) == DV(%s) is Compare Result(%s) ",
+  GP=F and trace("[EXIT]: <%s:%s> SV(%s) == DV(%s) is Compare Result(%s) ",
       MOD, meth, tostring(searchValue), type(databaseValue),tostring(result));
   return result;
 end -- debugListCompareEqual()
