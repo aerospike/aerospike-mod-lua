@@ -1288,6 +1288,9 @@ local function adjustLMapCtrlInfo( lmapCtrlInfo, argListMap )
     elseif tostring(value) == PackageTestModeObject then
         GP=F and info(" !!!!!!!!! Calling PackageTestModeObject !!!!");
         packageTestModeObject( lmapCtrlInfo );
+    elseif value == PackageDebugModeObject then
+        GP=F and info(" !!!!!!!!! Calling PackageDebugModeObject !!!!");
+        packageDebugModeObject( lmapCtrlInfo );
     else
 	warn(" <>><><><><>< UNKNOWN PACKAGE <><><><> (%s)", tostring(value) );
     end
@@ -3385,6 +3388,74 @@ local function simpleScanListAll(topRec, resultList, lMapList, binName, filter, 
 end -- simpleScanListAll
 
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- Scan a List, append all the items in the list to result. 
+-- This is SIMPLE SCAN, where we are assuming ATOMIC values.
+-- Parms:
+-- (*) objList: the list of values from the record
+-- Return: resultlist 
+-- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+local function simpleDumpListAll(topRec, resultList, lMapList, binName, filter, fargs) 
+
+  local meth = "simpleDumpListAll()";
+  GP=F and trace("[ENTER]: <%s:%s> Appending all the elements of List ",
+                 MOD, meth)
+
+  local propMap = lMapList[1]; 
+  local lmapCtrlInfo = lMapList[2]; 
+  local listCount = 0;
+  local transform = nil;
+  local unTransform = nil;
+  local retValue = nil;
+
+  -- Check once for the transform/untransform functions -- so we don't need
+  -- to do it inside the loop.
+  if lmapCtrlInfo[M_Transform] ~= nil then
+    transform = functionTable[lmapCtrlInfo[M_Transform]];
+  end
+
+  if lmapCtrlInfo[M_UnTransform] ~= nil then
+    unTransform = functionTable[lmapCtrlInfo[M_UnTransform]];
+  end
+   
+    GP=F and trace(" Parsing through :%s ", tostring(binName))
+
+	if lmapCtrlInfo[M_CompactList] ~= nil then
+		local objList = lmapCtrlInfo[M_CompactList];
+	        list.append( resultList, "\n" );
+		for i = 1, list.size( objList ), 1 do
+                        local indexentry = "INDEX:" .. tostring(i); 
+			list.append( resultList, indexentry );
+			if objList[i] ~= nil and objList[i] ~= FV_EMPTY then
+				retValue = objList[i]; 
+				if unTransform ~= nil then
+					retValue = unTransform( objList[i] );
+				end
+
+        			local resultFiltered;
+
+				if filter ~= nil and fargs ~= nil then
+        				resultFiltered = functionTable[func]( retValue, fargs );
+			    	else
+      					resultFiltered = retValue;
+    				end
+
+			        list.append( resultList, resultFiltered );
+				listCount = listCount + 1;
+                        else 
+			        list.append( resultList, "EMPTY ITEM" );
+			end -- end if not null and not empty
+			list.append( resultList, "\n" );
+		end -- end for each item in the list
+	end -- end of topRec null check 
+
+  GP=F and trace("[EXIT]: <%s:%s> Appending %d elements to ResultList ",
+                 MOD, meth, listCount)
+
+  return 0; 
+end -- simpleScanListAll
+
+-- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- Scan a List, append all the items in the list to result.
 --
 -- TODO :  
@@ -3446,6 +3517,75 @@ local function complexScanListAll(topRec, resultList, lMapList, binName, filter,
 
   return 0; 
 end -- complexScanListAll
+
+-- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- Scan a List, append all the items in the list to result.
+--
+-- TODO :  
+-- This is COMPLEX SCAN, currently an exact copy of the simpleScanListAll().
+-- I need to first write an unTransformComplexCompare() which involves
+-- using the compare function, to write a new complexScanListAll()  
+--
+-- Parms:
+-- (*) binList: the list of values from the record
+-- Return: resultlist 
+-- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+local function complexDumpListAll(topRec, resultList, lMapList, binName, filter, fargs) 
+  local meth = "complexDumpListAll()";
+  GP=F and trace("[ENTER]: <%s:%s> Appending all the elements of List ",
+                 MOD, meth)
+                 
+  local propMap = lMapList[1]; 
+  local lmapCtrlInfo = lMapList[2]; 
+  local listCount = 0;
+  local transform = nil;
+  local unTransform = nil;
+  local retValue = nil;
+  
+  if lmapCtrlInfo[M_Transform] ~= nil then
+    transform = functionTable[lmapCtrlInfo[M_Transform]];
+  end
+
+  if lmapCtrlInfo[M_UnTransform] ~= nil then
+    unTransform = functionTable[lmapCtrlInfo[M_UnTransform]];
+  end
+
+    GP=F and trace(" Parsing through :%s ", tostring(binName))
+	local binList = lmapCtrlInfo[M_CompactList];
+	local resultValue = nil;
+    if topRec[binName] ~= nil then
+	        list.append( resultList, "\n" );
+		for i = 1, list.size( binList ), 1 do
+                        local indexentry = "INDEX:" .. tostring(i); 
+			list.append( resultList, indexentry );
+			if binList[i] ~= nil and binList[i] ~= FV_EMPTY then
+				retValue = binList[i]; 
+				if unTransform ~= nil then
+					retValue = unTransform( binList[i] );
+				end
+        			local resultFiltered;
+
+				if filter ~= nil and fargs ~= nil then
+        				resultFiltered = functionTable[func]( retValue, fargs );
+			    	else
+      					resultFiltered = retValue;
+    				end
+
+			        list.append( resultList, resultFiltered );
+				listCount = listCount + 1; 
+                        else 
+			        list.append( resultList, "EMPTY ITEM" );
+			end -- end if not null and not empty
+			list.append( resultList, "\n" );
+  		end -- end for each item in the list
+    end -- end of topRec null check 
+
+ GP=F and trace("[EXIT]: <%s:%s> Appending %d elements to ResultList ",
+                 MOD, meth, listCount)
+
+  return 0; 
+end -- complexDumpListAll
 
 local function localLMapSearchAll(resultList,topRec,lmapBinName,filter,fargs)
   
@@ -3834,11 +3974,90 @@ function lmap_config( topRec, lmapBinName )
 end -- function lmap_config()
 
 
+local function localLMapWalkThru(resultList,topRec,lmapBinName,filter,fargs)
+  
+  local meth = "localLMapWalkThru()";
+  rc = 0; -- start out OK.
+  GP=F and info("[ENTER]: <%s:%s> Search for Value(%s)",
+                 MOD, meth, tostring( searchValue ) );
+                 
+  local lMapList = topRec[lmapBinName]; -- The main lmap
+  local propMap = lMapList[1]; 
+  local lmapCtrlInfo = lMapList[2]; 
+  local binName = lmapBinName;
+  
+  -- Validate the topRec, the bin and the map.  If anything is weird, then
+  -- this will kick out with a long jump error() call.
+  validateLmapParams( topRec, lmapBinName, true );
+
+  if lmapCtrlInfo[M_StoreState] == SS_COMPACT then 
+	  -- Find the appropriate bin for the Search value
+	  GP=F and info(" !!!!!! Compact Mode LMAP Search !!!!!");
+	  local binList = lmapCtrlInfo[M_CompactList];
+          list.append( resultList, " =========== LMAP WALK-THRU COMPACT MODE \n ================" );
+	  
+	  if lmapCtrlInfo[M_KeyType] == KT_ATOMIC then
+		rc = simpleDumpListAll(topRec, resultList, lMapList, binName, filter, fargs) 
+	  else
+		rc = complexDumpListAll(topRec, resultList, lMapList, binName, filter, fargs)
+	  end
+	
+	  GP=F and info("[EXIT]: <%s:%s>: Search Returns (%s)",
+	                 MOD, meth, tostring(result));
+  else -- regular searchAll
+	  -- HACK : TODO : Fix this number to list conversion  
+	  local digestlist = lmapCtrlInfo[M_DigestList];
+	  local src = createSubrecContext();
+	
+	  -- for each digest in the digest-list, open that subrec, send it to our 
+	  -- routine, then get the list-back and keep appending and building the
+	  -- final resultList. 
+	   
+          list.append( resultList, "\n =========== LMAP WALK-THRU REGULAR MODE \n ================" );
+	  for i = 1, list.size( digestlist ), 1 do
+	  
+	      if digestlist[i] ~= 0 then 
+		  local stringDigest = tostring( digestlist[i] );
+                  local digestentry = "DIGEST:" .. stringDigest; 
+        	  list.append( resultList, digestentry );
+	          local IndexLdrChunk = openSubrec( src, topRec, stringDigest );
+		  GP=F and info("[DEBUG]: <%s:%s> Calling ldrSearchList: List(%s)",
+			           MOD, meth, tostring( entryList ));
+			  
+	          -- temporary list having result per digest-entry LDR 
+	          local ldrlist = list(); 
+		  local entryList  = list(); 
+		  -- The magical function that is going to fix our deletion :)
+	          rc = ldrSearchList(topRec, lmapBinName, ldrlist, IndexLdrChunk, 0, entryList, filter, fargs );
+		  if( rc == nil or rc == 0 ) then
+		  	GP=F and info("AllSearch returned SUCCESS %s", tostring(ldrlist));
+        	        list.append( resultList, "LIST-ENTRIES:" );
+			for j = 1, list.size(ldrlist), 1 do 
+ 			  -- no need to filter here, results are already filtered in-routine
+        		  list.append( resultList, ldrlist[j] );
+    		        end
+		  end -- end of if-rc check 
+                  rc = closeSubrec( src, stringDigest )
+              else -- if digest-list is empty
+      		 list.append( resultList, "EMPTY ITEM")
+	      end -- end of digest-list if check  
+              list.append( resultList, "\n" );
+	  end -- end of digest-list for loop 
+          list.append( resultList, "\n =========== END :  LMAP WALK-THRU REGULAR MODE \n ================" );
+          -- Close ALL of the subrecs that might have been opened
+          rc = closeAllSubrecs( src );
+  end -- end of else 
+
+  return resultList;
+end
+ 
 -- ========================================================================
 -- lmap_dump()
 -- ========================================================================
 -- Dump the full contents of the Large Map, with Separate Hash Groups
--- shown in the result.
+-- shown in the result. Unlike scan which simply returns the contents of all 
+-- the bins, this routine gives a tree-walk through or map walk-through of the
+-- entire lmap structure. 
 -- Return a LIST of lists -- with Each List marked with it's Hash Name.
 -- ========================================================================
 function lmap_dump( topRec, binName )
@@ -3857,7 +4076,17 @@ function lmap_dump( topRec, binName )
   resultList = list();
   GP=F and info("\n\n  >>>>>>>> API[ DUMP ] <<<<<<<<<<<<<<<<<< \n");
 
-  return localLMapSearchAll(resultList,topRec,lmapBinName,nil,nil);
+  localLMapWalkThru(resultList,topRec,lmapBinName,nil,nil);
 
+  for i = 1, list.size( resultList ), 1 do
+     info(tostring(resultList[i]));
+  end 
+
+  -- Another key difference between dump and scan : 
+  -- dump prints things in the logs and returns a 0
+  -- scan returns the list to the client/caller 
+
+  local ret = " \n Lmap bin contents dumped to server-logs \n"; 
+  return ret; 
 end -- lmap_dump();
 

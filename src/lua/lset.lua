@@ -2175,7 +2175,8 @@ function lset_dump( topRec, binName )
 
   GP=F and trace("[EXIT]<%s:%s>ResultList(%s)",MOD,meth,tostring(resultList));
 
-  return binList; 
+  local ret = " \n Lset bin contents dumped to server-logs \n"; 
+  return ret; 
 end -- lset_dump();
 
 -- ========================================================================
