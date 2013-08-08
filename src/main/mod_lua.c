@@ -259,7 +259,15 @@ static int cache_add_file(context * ctx, const char * filename) {
     char    key[CACHE_ENTRY_KEY_MAX]    = "";
     char    gen[CACHE_ENTRY_GEN_MAX]    = "";
     memcpy(key, filename, CACHE_ENTRY_KEY_MAX);
-    *(rindex(key, '.')) = '\0';
+    char *tmp_char = rindex(key, '.');
+    if (  !tmp_char             // Filename without extension
+       || key == tmp_char       // '.' as first character
+       || strlen(tmp_char) <= 1) // '.' in filename , but no extension e.g. "abc."
+    {
+        as_logger_error(mod_lua.logger, "LUA registration failed : Invalid filename %s", filename);
+        return -1;
+    }
+    *tmp_char = '\0';
     cache_init(ctx, key, gen);
     return 0;
 }
@@ -399,7 +407,11 @@ static int update(as_module * m, as_module_event * e) {
         }
         case AS_MODULE_EVENT_FILE_ADD: {
             if ( e->data.filename == NULL ) return 2;
-            if ( ctx->config.cache_enabled ) cache_add_file(ctx, e->data.filename);
+            if (ctx->config.cache_enabled) {
+                if (cache_add_file(ctx, e->data.filename)) {
+                    return 4;    //Why 4? - No defined error codes, so returning distinct nonzero value.
+                }
+            }
             break;
         }
         case AS_MODULE_EVENT_FILE_REMOVE: {
