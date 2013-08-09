@@ -1,8 +1,8 @@
 -- Large Stack Object (LSO or LSTACK) Operations
--- lstack.lua:  August 06, 2013
+-- lstack.lua:  August 09, 2013
 --
 -- Module Marker: Keep this in sync with the stated version
-local MOD="lstack_2013_08_06.k"; -- the module name used for tracing
+local MOD="lstack_2013_08_09.a"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -1000,10 +1000,11 @@ local function setLdtRecordType( topRec )
     -- vinfo will be a 5 byte value, but it will be easier for us to store
     -- 6 bytes -- and just leave the high order one at zero.
     -- Initialize the VINFO value to all zeros.
-    local vinfo = bytes(6);
-    bytes.put_int16(vinfo, 1, 0 );
-    bytes.put_int16(vinfo, 3, 0 );
-    bytes.put_int16(vinfo, 5, 0 );
+    -- local vinfo = bytes(6);
+    -- bytes.put_int16(vinfo, 1, 0 );
+    -- bytes.put_int16(vinfo, 3, 0 );
+    -- bytes.put_int16(vinfo, 5, 0 );
+    local vinfo = 0;
     recPropMap[RPM_VInfo] = vinfo; 
     recPropMap[RPM_LdtCount] = 1; -- this is the first one.
     recPropMap[RPM_Magic] = MAGIC;
