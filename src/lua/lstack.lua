@@ -2,7 +2,7 @@
 -- lstack.lua:  August 09, 2013
 --
 -- Module Marker: Keep this in sync with the stated version
-local MOD="lstack_2013_08_09.a"; -- the module name used for tracing
+local MOD="lstack_2013_08_09.b"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -1644,8 +1644,8 @@ local function adjustLsoList( lsoList, argListMap )
       end
   end -- for each argument
       
-  -- Do we need to reassign map to list?
-  lsoList[2] = lsoMap;
+  -- Do we need to reassign map to list?  We should not need this.
+  -- lsoList[2] = lsoMap;
 
   GP=E and trace("[EXIT]:<%s:%s>:LsoList after Init(%s)",
     MOD,meth,tostring(lsoList));
