@@ -538,11 +538,16 @@ local function getKeyValue( lmapCtrlInfo, value )
     -- there, look for the special case where the object has a field
     -- called 'key'.  If not, then, well ... tough.  We tried.
     local keyFunction = lmapCtrlInfo[M_KeyFunction];
+
+    -- WE ARE DEALING WITH A NAME:VALUE PAIR HERE !!!!!!!!!
+
     if( keyFunction ~= nil ) and functionTable[keyFunction] ~= nil then
         GP=F and info(" !!! Key Function Specified !!!!! ");
       keyValue = functionTable[keyFunction]( value );
-    elseif value["key"] ~= nil then
-      keyValue = value["key"];
+    elseif value ~= nil then
+      -- WE ARE DEALING WITH A NAME:VALUE PAIR HERE !!!!!!!!!
+      -- USE THE STRING OF THE ENTIRE MAP OBJEC AS OUR KEY 
+      keyValue = tostring(value); 
     else
       keyValue = -1;
     end
@@ -633,9 +638,11 @@ local function unTransformComplexCompare(lmapCtrlInfo, unTransform, dbValue, sea
       MOD, meth, tostring( unTransform ));
     modValue = unTransform( dbValue );
   end
-  local dbKey = getKeyValue( lmapCtrlInfo, modValue );
+  
+  local dbKey =  modValue; 
 
-  if dbKey == searchKey then
+  if tostring(dbKey) == tostring(searchKey) then
+    GP=F and info(" Item already exists !!!!!!!!"); 
     resultValue = modValue;
   end
 
@@ -1065,7 +1072,8 @@ local function packageTestModeObject( lmapCtrlInfo )
 --  lmapCtrlInfo[M_BinName] = LSET_CONTROL_BIN;
   lmapCtrlInfo[M_Modulo] = DEFAULT_DISTRIB;
   lmapCtrlInfo[M_ThreshHold] = 4; -- Rehash after this many have been inserted
-  lmapCtrlInfo[M_KeyFunction] = "keyExtract"; -- Defined in UdfFunctionTable
+  --lmapCtrlInfo[M_KeyFunction] = "keyExtract"; -- Defined in UdfFunctionTable
+  lmapCtrlInfo[M_KeyFunction] = nil; 
   GP=F and info(" packageTestModeObject Threshold : %s ", tostring( lmapCtrlInfo[M_ThreshHold] ) );
   
  end -- packageTestModeObject()
@@ -1086,7 +1094,8 @@ local function packageTestModeList( lmapCtrlInfo )
   --lmapCtrlInfo[M_BinName] = LSET_CONTROL_BIN;
   lmapCtrlInfo[M_Modulo] = DEFAULT_DISTRIB;
   lmapCtrlInfo[M_ThreshHold] = 4; -- Rehash after this many have been inserted
-  lmapCtrlInfo[M_KeyFunction] = "keyExtract"; -- Defined in UdfFunctionTable
+  -- lmapCtrlInfo[M_KeyFunction] = "keyExtract"; -- Defined in UdfFunctionTable
+  lmapCtrlInfo[M_KeyFunction] = nil; 
  
   GP=F and info(" packageTestModeList Threshold : %s ", tostring( lmapCtrlInfo[M_ThreshHold] ) );
 end -- packageTestModeList()
@@ -1131,7 +1140,8 @@ local function packageDebugModeObject( lmapCtrlInfo )
 --  lmapCtrlInfo[M_BinName] = LSET_CONTROL_BIN;
   lmapCtrlInfo[M_Modulo] = DEFAULT_DISTRIB;
   lmapCtrlInfo[M_ThreshHold] = 4; -- Rehash after this many have been inserted
-  lmapCtrlInfo[M_KeyFunction] = "keyExtract"; -- Defined in UdfFunctionTable
+  -- lmapCtrlInfo[M_KeyFunction] = "keyExtract"; -- Defined in UdfFunctionTable
+  lmapCtrlInfo[M_KeyFunction] = nil; 
   
   GP=F and info(" packageDebugModeObject Threshold : %s ", tostring( lmapCtrlInfo[M_ThreshHold] ) );
 end -- packageDebugModeObject()
@@ -1262,40 +1272,29 @@ local function adjustLMapCtrlInfo( lmapCtrlInfo, argListMap )
       GP=F and info("Enter !!!!!!!!!!!!!!!!! Name: %s Value: %s::%s", tostring(name), tostring(value), value ); 
 
     if value == PackageStandardList then
-        GP=F and info(" !!!!!!!!! Calling PackageTestModeObject !!!!");
         packageStandardList( lmapCtrlInfo );
     elseif value == PackageTestModeList then
-        GP=F and info(" !!!!!!!!! >>>>>>>>>>>>>. Calling PackageTestMode LIST ");
         packageTestModeList( lmapCtrlInfo );
     elseif value == PackageTestModeBinary then
-        GP=F and info(" !!!!!!!!! Calling PackageTestModeObject !!!!");
         packageTestModeBinary( lmapCtrlInfo );
     elseif value == PackageTestModeNumber then
-        GP=F and info(" !!!!!!!!! Calling PackageTestModeObject !!!!");
         packageTestModeNumber( lmapCtrlInfo );
     elseif value == PackageStumbleUpon then
-        GP=F and info(" !!!!!!!!! Calling PackageTestModeObject !!!!");
         packageStumbleUpon( lmapCtrlInfo );
     elseif value == PackageDebugModeList then
-        GP=F and info(" !!!!!!!!! Calling PackageTestModeObject !!!!");
         packageDebugModeList( lmapCtrlInfo );
     elseif value == PackageDebugModeBinary then
-        GP=F and info(" !!!!!!!!! Calling PackageTestModeObject !!!!");
         packageDebugModeBinary( lmapCtrlInfo );
     elseif value == PackageDebugModeNumber then
-        GP=F and info(" !!!!!!!!! Calling PackageTestModeObject !!!!");
         packageDebugModeNumber( lmapCtrlInfo );
-    elseif tostring(value) == PackageTestModeObject then
-        GP=F and info(" !!!!!!!!! Calling PackageTestModeObject !!!!");
+    elseif value == PackageTestModeObject then
         packageTestModeObject( lmapCtrlInfo );
     elseif value == PackageDebugModeObject then
-        GP=F and info(" !!!!!!!!! Calling PackageDebugModeObject !!!!");
         packageDebugModeObject( lmapCtrlInfo );
     else
 	warn(" <>><><><><>< UNKNOWN PACKAGE <><><><> (%s)", tostring(value) );
     end
 
-    GP=F and info(" !!!!!! DID NOT CALL ANYBODY !!!!!!!!"); 
   elseif name == "KeyType" and type( value ) == "string" then
     -- Use only valid values (default to ATOMIC if not specifically complex)
     -- Allow both upper and lower case versions of "complex".
@@ -1528,6 +1527,10 @@ local function computeSetBin( newValue, lmapCtrlInfo )
       key = newValue;
       GP=F and info(" Type of Key ATOMIC = %s", type(key))
     else
+      -- WE ARE DEALING WITH NAME VALUE PAIRS HERE
+      -- SO THE KEY WILL BE BASED ON THE STRING OF THE 
+      -- THE COMPLETE OBJECT ITSELF, RATHER THAN ON A 
+      -- SPECIAL FIELD CALLED "KEY"
       local key = getKeyValue( lmapCtrlInfo, newValue );
     end
 
@@ -2377,25 +2380,6 @@ local function unTransformSimpleCompare(unTransform, dbValue, searchValue)
   return resultValue;
 end -- unTransformSimpleCompare()
 
--- =======================================================================
--- Apply Transform Function
--- Take the Transform defined in the lsetCtrlMap, if present, and apply
--- it to the value, returning the transformed value.  If no transform
--- is present, then return the original value (as is).
--- NOTE: This can be made more efficient.
--- =======================================================================
-local function applyTransform( transformFunc, newValue )
-  local meth = "applyTransform()";
-  GP=F and trace("[ENTER]: <%s:%s> transform(%s) type(%s) Value(%s)",
- MOD, meth, tostring(transformFunc), type(transformFunc), tostring(newValue));
-
-  local storeValue = newValue;
-  if transformFunc ~= nil then 
-    storeValue = transformFunc( newValue );
-  end
-  return storeValue;
-end -- applyTransform()
-
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- Scan a List for an item.  Return the item if found.
 -- This is SIMPLE SCAN, where we are assuming ATOMIC values.
@@ -2521,11 +2505,13 @@ end -- simpleScanList
 -- Return 0 if found (and not inserted), otherwise 1 if inserted.
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 
-local function complexScanList(topRec, resultList, lMapList, binList, key, value, flag, filter, fargs) 
+local function complexScanList(topRec, resultList, lMapList, binList, searchMap, flag, filter, fargs) 
   local meth = "complexScanList()";
   local result = nil;
   local propMap = lMapList[1]; 
   local lmapCtrlInfo = lMapList[2];
+
+  GP=F and info(" Search-Value is : %s, type is %s", tostring(searchMap), type(searchMap)); 
 
   local transform = nil;
   local unTransform = nil;
@@ -2537,16 +2523,26 @@ local function complexScanList(topRec, resultList, lMapList, binList, key, value
     unTransform = functionTable[lmapCtrlInfo[M_UnTransform]];
   end
 
+  -- we are supposed to get only one map-entry pair of values
+  local entry_name; 
+  local entry_val;  
+  for name, value in map.pairs( searchMap ) do
+   entry_name = name; 
+   entry_val = value; 
+  end 
+
+  GP=F and info(" !!!! Array items parsed as : %s %s !!!!!", tostring(entry_name), tostring(entry_val)); 
+ 
   -- Scan the list for the item, return true if found,
   -- Later, we may return a set of things 
   local resultValue = nil;
   for i = 1, list.size( binList ), 1 do
-    GP=F and trace("[DEBUG]: <%s:%s> It(%d) Comparing SV(%s) with BinV(%s)",
-                   MOD, meth, i, tostring(value), tostring(binList[i]));
+    GP=F and info("[DEBUG]: <%s:%s> It(%d) Comparing SV(%s) with BinV(%s)",
+                   MOD, meth, i, tostring(searchMap), tostring(binList[i]));
     if binList[i] ~= nil and binList[i] ~= FV_EMPTY then
-      resultValue = unTransformComplexCompare(lmapCtrlInfo, unTransform, binList[i], key);
+      resultValue = unTransformComplexCompare(lmapCtrlInfo, unTransform, binList[i], searchMap);
       if resultValue ~= nil then
-        GP=F and trace("[EARLY EXIT]: <%s:%s> Found(%s)",
+        GP=F and info("[EARLY EXIT]: <%s:%s> Found(%s)",
           MOD, meth, tostring(resultValue));
         if( flag == FV_DELETE ) then
           binList[i] = FV_EMPTY; -- the value is NO MORE
@@ -2555,6 +2551,7 @@ local function complexScanList(topRec, resultList, lMapList, binList, key, value
           propMap[PM_ItemCount] = itemCount - 1;
           lMapList[1] = propMap;
         elseif flag == FV_INSERT then
+          GP=F and info(" !!!!!!!! Item already exists !!! ");
           return 0 -- show caller nothing got inserted (don't count it)
         end
         -- Found it -- return result
@@ -2575,10 +2572,10 @@ local function complexScanList(topRec, resultList, lMapList, binList, key, value
   -- Didn't find it.  If FV_INSERT, then append the value to the list
   if flag == FV_INSERT then
     GP=F and info("[DEBUG]: <%s:%s> INSERTING(%s)",
-                   MOD, meth, tostring(value));
+                   MOD, meth, tostring(searchMap));
 
     -- apply the transform (if needed)
-    local storeValue = applyTransform( transform, value );
+    local storeValue = applyTransform( transform, searchMap );
     list.append( binList, storeValue );
     return 1 -- show caller we did an insert
   end
@@ -2613,12 +2610,15 @@ local function scanList( topRec, resultList, lMapList, binList, searchValue, fla
 
   GP=F and info("Ctrl Data is : %s List : %s", tostring(lmapCtrlInfo), tostring(binList)); 
  
-  -- Choices for KeyType are KT_ATOMIC or KT_COMPLEX
   if lmapCtrlInfo[M_KeyType] == KT_ATOMIC then
     return simpleScanList(topRec, resultList, lMapList, binList, searchValue, flag, filter, fargs ) 
   else
-    local key = getKeyValue( lmapCtrlInfo, searchValue ); 
-    return complexScanList(topRec, resultList, lMapList, binList, key, searchValue, flag, filter, fargs ) 
+    -- we no longer have a key-value pair, we instead have a name-value pair 
+    -- like a traditional map-object. So we'll call a getNameValue() to extract
+    -- the 2 values. Instead of passing-in two arrays, we 'll use the same array
+    -- to store the key and the value serially. 
+    -- local key = getKeyValue( lmapCtrlInfo, searchValue ); 
+    return complexScanList(topRec, resultList, lMapList, binList, searchValue, flag, filter, fargs ) 
   end
 end
 
