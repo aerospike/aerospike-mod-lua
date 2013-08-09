@@ -743,6 +743,14 @@ local function setLdtRecordType( topRec )
   -- another miracle LDT birth.
   if( topRec[REC_LDT_CTRL_BIN] == nil ) then
     GP=F and info("[DEBUG]<%s:%s>Creating Record LDT Map", MOD, meth );
+
+    -- If this record doesn't even exist yet -- then create it now.
+    -- Otherwise, things break.
+    if( not aerospike:exists( topRec ) ) then
+      GP=F and trace("[DEBUG]:<%s:%s>:Create Record()", MOD, meth );
+      rc = aerospike:create( topRec );
+    end
+
     record.set_type( topRec, RT_LDT );
     recPropMap = map();
     -- vinfo will be a 5 byte value, but it will be easier for us to store
@@ -752,7 +760,7 @@ local function setLdtRecordType( topRec )
     bytes.put_int16(vinfo, 1, 0 );
     bytes.put_int16(vinfo, 3, 0 );
     bytes.put_int16(vinfo, 5, 0 );
-    recPropMap[RPM_VInfo] = vinfo; 
+    recPropMap[RPM_VInfo] = 0; 
     recPropMap[RPM_LdtCount] = 1; -- this is the first one.
     recPropMap[RPM_Magic] = MAGIC;
     topRec[REC_LDT_CTRL_BIN] = recPropMap;    
@@ -850,9 +858,9 @@ local function initializeLMap( topRec, lmapBinName )
   lmapCtrlInfo[M_ThreshHold]         = 101; -- Rehash after this many have been inserted
   lmapCtrlInfo[M_CompactList]		 = list(); -- list entries to be held in compact mode 
 	  
-  if( topRec[REC_LDT_CTRL_BIN] == nil ) then
-     setLdtRecordType( topRec );
-  end 
+  setLdtRecordType( topRec );
+
+  record.set_flags( topRec, lmapBinName, BF_LDT_BIN );
 
   -- Put our new maps in a list, in the record, then store the record.
   list.append( lmapList, propMap );
@@ -1734,6 +1742,9 @@ local function initializeSubrecLdrMap( topRec, lmapBinName, newLdrChunkRecord, l
   -- caller does it right after return of this function.
   newLdrChunkRecord[SUBREC_PROP_BIN] = ldrPropMap;
 
+  -- Set the type of this record to LDT (it might already be set by another
+  -- LDT in this same record).
+  record.set_type( newLdrChunkRecord, RT_SUB ); -- LDT Type Rec
 end -- initializeSubrecLdrMap()
 
 -- ======================================================================
