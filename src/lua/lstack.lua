@@ -2,7 +2,7 @@
 -- lstack.lua:  August 09, 2013
 --
 -- Module Marker: Keep this in sync with the stated version
-local MOD="lstack_2013_08_09.a"; -- the module name used for tracing
+local MOD="lstack_2013_08_09.d"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -1591,61 +1591,61 @@ local function adjustLsoList( lsoList, argListMap )
 
 
   for name, value in map.pairs( argListMap ) do
-      GP=F and trace("[DEBUG]: <%s:%s> : Processing Arg: Name(%s) Val(%s)",
-          MOD, meth, tostring( name ), tostring( value ));
+    GP=F and trace("[DEBUG]: <%s:%s> : Processing Arg: Name(%s) Val(%s)",
+        MOD, meth, tostring( name ), tostring( value ));
 
-      -- Process our "prepackaged" settings first:
-      -- (*) StandardList: Generic starting mode.
-      -- (*) TestMode List Mode: Small sizes to exercise the structure.
-      -- (*) TestMode Binary Mode: Employ UDF transform and use small sizes
-      --     to exercise the structure.
-      -- (*) Production Customer Settings:
-      --     - Binary Mode, Compress UDF, High Performance Settings.
-      -- NOTE: Eventually, these "packages" will be installed in either
-      -- a separate "package" lua file, or possibly in the UdfFunctionTable.
-      -- Regardless though -- they will move out of this main file, except
-      -- maybe for the "standard" packages.
-      if name == "Package" and type( value ) == "string" then
-        -- Figure out WHICH package we're going to deploy:
-        if value == PackageStandardList then
-            packageStandardList( lsoMap );
-        elseif value == PackageTestModeList then
-            packageTestModeList( lsoMap );
-        elseif value == PackageTestModeBinary then
-            packageTestModeBinary( lsoMap );
-        elseif value == PackageProdListValBinStore then
-            packageProdListValBinStore( lsoMap );
-        elseif value == PackageDebugModeObject then
-            packageDebugModeObject( lsoMap );
-        elseif value == PackageDebugModeObjectDups then
-            packageDebugModeObjectDups( lsoMap );
-        elseif value == PackageDebugModeList then
-            packageDebugModeList( lsoMap );
-        elseif value == PackageDebugModeBinary then
-            packageDebugModeBinary( lsoMap );
-        end
-      elseif name == "StoreMode" and type( value )  == "string" then
-        -- Verify it's a valid value
-        if value == SM_LIST or value == SM_BINARY then
-          lsoMap[M_StoreMode] = value;
-        end
-      elseif name == "HotListSize"  and type( value )  == "number" then
-        if value >= 10 and value <= 500 then
-          lsoMap[M_HotListMax] = value;
-        end
-      elseif name == "HotListTransfer" and type( value ) == "number" then
-        if value >= 2 and value <= ( lsoMap[M_HotListMax] - 2 ) then
-          argListMap.HotListTransfer = value;
-        end
-      elseif name == "ByteEntrySize" and type( value ) == "number" then
-        if value > 0 and value <= 4000 then
-          lsoMap[M_LdrByteEntrySize] = value;
-        end
+    -- Process our "prepackaged" settings first:
+    -- (*) StandardList: Generic starting mode.
+    -- (*) TestMode List Mode: Small sizes to exercise the structure.
+    -- (*) TestMode Binary Mode: Employ UDF transform and use small sizes
+    --     to exercise the structure.
+    -- (*) Production Customer Settings:
+    --     - Binary Mode, Compress UDF, High Performance Settings.
+    -- NOTE: Eventually, these "packages" will be installed in either
+    -- a separate "package" lua file, or possibly in the UdfFunctionTable.
+    -- Regardless though -- they will move out of this main file, except
+    -- maybe for the "standard" packages.
+    if name == "Package" and type( value ) == "string" then
+      -- Figure out WHICH package we're going to deploy:
+      if value == PackageStandardList then
+          packageStandardList( lsoMap );
+      elseif value == PackageTestModeList then
+          packageTestModeList( lsoMap );
+      elseif value == PackageTestModeBinary then
+          packageTestModeBinary( lsoMap );
+      elseif value == PackageProdListValBinStore then
+          packageProdListValBinStore( lsoMap );
+      elseif value == PackageDebugModeObject then
+          packageDebugModeObject( lsoMap );
+      elseif value == PackageDebugModeObjectDups then
+          packageDebugModeObjectDups( lsoMap );
+      elseif value == PackageDebugModeList then
+          packageDebugModeList( lsoMap );
+      elseif value == PackageDebugModeBinary then
+          packageDebugModeBinary( lsoMap );
       end
+    elseif name == "StoreMode" and type( value )  == "string" then
+      -- Verify it's a valid value
+      if value == SM_LIST or value == SM_BINARY then
+        lsoMap[M_StoreMode] = value;
+      end
+    elseif name == "HotListSize"  and type( value )  == "number" then
+      if value >= 10 and value <= 500 then
+        lsoMap[M_HotListMax] = value;
+      end
+    elseif name == "HotListTransfer" and type( value ) == "number" then
+      if value >= 2 and value <= ( lsoMap[M_HotListMax] - 2 ) then
+        argListMap.HotListTransfer = value;
+      end
+    elseif name == "ByteEntrySize" and type( value ) == "number" then
+      if value > 0 and value <= 4000 then
+        lsoMap[M_LdrByteEntrySize] = value;
+      end
+    end
   end -- for each argument
       
-  -- Do we need to reassign map to list?
-  lsoList[2] = lsoMap;
+  -- Do we need to reassign map to list?  We should not need this.
+  -- lsoList[2] = lsoMap;
 
   GP=E and trace("[EXIT]:<%s:%s>:LsoList after Init(%s)",
     MOD,meth,tostring(lsoList));
@@ -2532,7 +2532,7 @@ end -- hotListInsert()
 -- (*) topRec: User-level Record holding the LSO Bin
 -- (*) lsoList: The main structure of the LSO Bin.
 -- ======================================================================
--- Create and initialise a new LDR "chunk", load the new digest for that
+-- Create and initialize a new LDR "chunk", load the new digest for that
 -- new chunk into the lsoMap (the warm dir list), and return it.
 local function   warmListChunkCreate( src, topRec, lsoList )
   local meth = "warmListChunkCreate()";

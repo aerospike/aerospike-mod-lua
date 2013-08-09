@@ -1,8 +1,8 @@
 -- Large Ordered List (llist.lua)
--- Last Update August 06,  2013: tjl
+-- Last Update August 09,  2013: tjl
 --
 -- Keep this MOD value in sync with version above
-local MOD = "llist_2013_08_07.h"; -- module name used for tracing.  
+local MOD = "llist_2013_08_09.d"; -- module name used for tracing.  
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -374,6 +374,7 @@ local SCAN_CONINTUE     =  1;  -- Keep Scanning
 local RT_REG  = 0; -- 0x0: Regular Record (Here only for completeneness)
 local RT_LDT  = 1; -- 0x1: Top Record (contains an LDT)
 local RT_NODE = 2; -- 0x2: Regular Sub Record (Node, Leaf)
+local RT_SUB  = 2; -- 0x2: Regular Sub Record (Node, Leaf)::Used for set_type
 local RT_LEAF = 3; -- xxx: Leaf Nodes:: Not used for set_type() 
 local RT_ESR  = 4; -- 0x4: Existence Sub Record
 
@@ -648,10 +649,12 @@ local function setLdtRecordType( topRec )
     -- vinfo will be a 5 byte value, but it will be easier for us to store
     -- 6 bytes -- and just leave the high order one at zero.
     -- Initialize the VINFO value to all zeros.
-    local vinfo = bytes(6);
-    bytes.put_int16(vinfo, 1, 0 );
-    bytes.put_int16(vinfo, 3, 0 );
-    bytes.put_int16(vinfo, 5, 0 );
+    -- local vinfo = bytes(6);
+    -- bytes.put_int16(vinfo, 1, 0 );
+    -- bytes.put_int16(vinfo, 3, 0 );
+    -- bytes.put_int16(vinfo, 5, 0 );
+    -- Change this to use a number, rather than bytes.
+    local vinfo = 0;
     recPropMap[RPM_VInfo] = vinfo; -- to be replaced later - on the server side.
     recPropMap[RPM_LdtCount] = 1; -- this is the first one.
     recPropMap[RPM_Magic] = MAGIC;
@@ -690,7 +693,7 @@ end -- setLdtRecordType()
 -- local ldtMap  = ldtList[2];
 -- ======================================================================
 local function
-initializeLList( topRec, ldtBinName, transFunc, untransFunc )
+initializeLList( topRec, ldtBinName )
   local meth = "initializeLList()";
   GP=E and trace("[ENTER]<%s:%s>:: ldtBinName(%s)",
     MOD, meth, tostring(ldtBinName));
@@ -723,8 +726,8 @@ initializeLList( topRec, ldtBinName, transFunc, untransFunc )
   ldtMap[R_TreeLevel] = 1;     -- Start off Lvl 1: Root ONLY. Leaves Come l8tr
   ldtMap[R_KeyType]   = KT_ATOMIC;-- atomic or complex
   ldtMap[R_KeyUnique] = false; -- Keys are NOT unique by default.
-  ldtMap[R_TransFunc] = transFunc; -- transform Func (user to storage)
-  ldtMap[R_UnTransFunc] = untransFunc; -- Reverse transform (storage to user)
+  ldtMap[R_TransFunc] = nil; -- (set later) transform Func (user to storage)
+  ldtMap[R_UnTransFunc] = nil; -- (set later) Un-transform (storage to user)
   ldtMap[R_StoreState] = SS_COMPACT; -- start in "compact mode"
   ldtMap[R_Threshold] = DEFAULT_THRESHOLD;-- Amount to Move out of compact mode
 
@@ -1370,6 +1373,9 @@ local function initializeNode(topRec, nodeRec, ldtList)
   nodeRec[NSR_KEY_LIST_BIN] = list(); -- Holds the keys
   nodeRec[NSR_DIGEST_BIN] = list(); -- Holds the Digests -- the Rec Ptrs
 
+  -- We must tell the system what type of record this is (sub-record)
+  record.set_type( nodeRec, RT_SUB );
+
   aerospike:update_subrec( nodeRec );
 
   -- If we had BINARY MODE working for inner nodes, we would initialize
@@ -1480,6 +1486,9 @@ local function initializeLeaf(topRec, ldtList, leafRec, firstValue, pd, nd )
   -- Take our new structures and put them in the leaf record.
   leafRec[SUBREC_PROP_BIN] = leafPropMap;
   leafRec[LSR_CTRL_BIN] = leafMap;
+  -- We must tell the system what type of record this is (sub-record)
+  record.set_type( leafRec, RT_SUB );
+
   aerospike:update_subrec( leafRec );
   -- Note that the caller will write out the record, since there will
   -- possibly be more to do (like add data values to the object list).
@@ -4674,7 +4683,7 @@ function llist_create( topRec, ldtBinName, argList )
 
   -- Create and initialize the LDT MAP -- the main LDT structure
   -- initializeLList() also assigns the map to the record bin.
-  local ldtList = initializeLList( topRec, ldtBinName, nil, nil );
+  local ldtList = initializeLList( topRec, ldtBinName );
   local propMap = ldtList[1];
   local ldtMap  = ldtList[2];
 
@@ -4746,7 +4755,7 @@ local function localLListInsert( topRec, ldtBinName, newValue, createSpec )
   if( topRec[ldtBinName] == nil ) then
     GP=F and trace("[DEBUG]<%s:%s>LIST CONTROL BIN does not Exist:Creating",
          MOD, meth );
-    ldtList = initializeLList( topRec, ldtBinName, nil, nil );
+    ldtList = initializeLList( topRec, ldtBinName );
     propMap = ldtList[1];
     ldtMap  = ldtList[2];
     -- If the user has passed in some settings that override our defaults
