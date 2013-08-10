@@ -1,8 +1,8 @@
 -- AS Large Set (LSET) Operations
--- Last Update August 2, 2013: TJL
+-- Last Update August 9, 2013: TJL
 --
 -- Keep this in sync with the version above.
-local MOD="lset_2013_08_02.c"; -- the module name used for tracing
+local MOD="lset_2013_08_09.d"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -464,6 +464,64 @@ local function packageStumbleUpon( lsetMap )
   lsetMap[M_ThreshHold] = 100; -- Rehash after this many inserts
   
 end -- packageStumbleUpon( lsetMap )
+--
+-- ======================================================================
+-- When we create the initial LDT Control Bin for the entire record (the
+-- first time ANY LDT is initialized in a record), we create a property
+-- map in it with various values.
+-- TODO: Move this to LDT_COMMON (7/21/2013)
+-- ======================================================================
+local function setLdtRecordType( topRec )
+  local meth = "setLdtRecordType()";
+  GP=E and trace("[ENTER]<%s:%s>", MOD, meth );
+
+  local rc = 0;
+  local recPropMap;
+
+  -- Check for existence of the main record control bin.  If that exists,
+  -- then we're already done.  Otherwise, we create the control bin, we
+  -- set the topRec record type (to LDT) and we praise the lord for yet
+  -- another miracle LDT birth.
+  if( topRec[REC_LDT_CTRL_BIN] == nil ) then
+    GP=F and trace("[DEBUG]<%s:%s>Creating Record LDT Map", MOD, meth );
+
+    -- If this record doesn't even exist yet -- then create it now.
+    -- Otherwise, things break.
+    if( not aerospike:exists( topRec ) ) then
+      GP=F and trace("[DEBUG]:<%s:%s>:Create Record()", MOD, meth );
+      rc = aerospike:create( topRec );
+    end
+
+    record.set_type( topRec, RT_LDT );
+    recPropMap = map();
+    -- vinfo will be a 5 byte value, but it will be easier for us to store
+    -- 6 bytes -- and just leave the high order one at zero.
+    -- Initialize the VINFO value to all zeros.
+    -- local vinfo = bytes(6);
+    -- bytes.put_int16(vinfo, 1, 0 );
+    -- bytes.put_int16(vinfo, 3, 0 );
+    -- bytes.put_int16(vinfo, 5, 0 );
+    local vinfo = 0;
+    recPropMap[RPM_VInfo] = vinfo; 
+    recPropMap[RPM_LdtCount] = 1; -- this is the first one.
+    recPropMap[RPM_Magic] = MAGIC;
+  else
+    -- Not much to do -- increment the LDT count for this record.
+    recPropMap = topRec[REC_LDT_CTRL_BIN];
+    local ldtCount = recPropMap[RPM_LdtCount];
+    recPropMap[RPM_LdtCount] = ldtCount + 1;
+    GP=F and trace("[DEBUG]<%s:%s>Record LDT Map Exists: Bump LDT Count(%d)",
+      MOD, meth, ldtCount + 1 );
+  end
+  topRec[REC_LDT_CTRL_BIN] = recPropMap;
+
+  -- Now that we've changed the top rec, do the update to make sure the
+  -- changes are saved.
+  rc = aerospike:update( topRec );
+
+  GP=E and trace("[EXIT]<%s:%s> rc(%d)", MOD, meth, rc );
+  return rc;
+end -- setLdtRecordType()
 
 -- ======================================================================
 -- adjustLSetMap:
@@ -676,6 +734,12 @@ local function initializeLSetMap(topRec, lsetBinName )
   GP=F and info("[DEBUG]: <%s:%s> : LSET Summary after Init(%s)",
       MOD, meth , lsetSummaryString(lsetList));
 
+  -- If the topRec already has an LDT CONTROL BIN (with a valid map in it),
+  -- then we know that the main LDT record type has already been set.
+  -- Otherwise, we should set it. This function will check, and if necessary,
+  -- set the control bin.
+  -- This method will also call record.set_type().
+  setLdtRecordType( topRec );
 
   GP=F and trace("[EXIT]:<%s:%s>:", MOD, meth );
   return lsetList;
@@ -1792,6 +1856,57 @@ function lset_create_and_insert( topRec, lsetBinName, newValue, createSpec )
   GP=F and info("\n\n >>>>>>>>> API[ LSET CREATE AND INSERT ] <<<<<<<<<< \n\n");
   return localLSetInsert( topRec, lsetBinName, newValue, createSpec )
 end -- lset_create_and_insert()
+
+-- ======================================================================
+-- lset_insert_all() -- with and without create
+-- ======================================================================
+function lset_insert_all( topRec, binName, valueList )
+  local meth = "lset_insert_all()";
+  GP=F and info("\n\n >>>>>>>>> API[ LSET INSERT ALL ] <<<<<<<<<< \n\n");
+
+  local rc = 0;
+  if( valueList ~= nil and list.size(valueList) > 0 ) then
+    local listSize = list.size( valueList );
+    for i = 1, listSize, 1 do
+      rc = localLSetInsert( topRec, binName, valueList[i], nil );
+      if( rc < 0 ) then
+        warn("[ERROR]<%s:%s> Problem Inserting Item #(%d) [%s]", MOD, meth, i,
+          tostring( valueList[i] ));
+          error(ldte.ERR_INSERT);
+      end
+    end
+  else
+    warn("[ERROR]<%s:%s> Invalid Input Value List(%s)",
+      MOD, meth, tostring(valueList));
+    error(ldte.ERR_INPUT_PARM);
+  end
+  return rc;
+end -- lset_insert()
+
+-- ======================================================================
+
+function lset_create_and_insert_all(topRec,lsetBinName,valueList,createSpec)
+  local meth = "lset_create_and_insert_all()";
+  GP=F and info("\n\n >>>>>>> API[ LSET CREATE AND INSERT ALL ] <<<<<<<< \n\n");
+
+  local rc = 0;
+  if( valueList ~= nil and list.size(valueList) > 0 ) then
+    local listSize = list.size( valueList );
+    for i = 1, listSize, 1 do
+      rc = localLSetInsert( topRec, binName, valueList[i], createSpec );
+      if( rc < 0 ) then
+        warn("[ERROR]<%s:%s> Problem Inserting Item #(%d) [%s]", MOD, meth, i,
+          tostring( valueList[i] ));
+          error(ldte.ERR_INSERT);
+      end
+    end
+  else
+    warn("[ERROR]<%s:%s> Invalid Input Value List(%s)",
+      MOD, meth, tostring(valueList));
+    error(ldte.ERR_INPUT_PARM);
+  end
+  return rc;
+end -- lset_insert()
 
 -- ======================================================================
 -- |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
