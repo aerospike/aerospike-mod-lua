@@ -1,8 +1,8 @@
 -- Large Stack Object (LSO or LSTACK) Operations
--- lmap.lua:  August 05, 2013
+-- lmap.lua:  August 13, 2013
 --
 -- Module Marker: Keep this in sync with the stated version
-local MOD="lmap_2013_08_05.f"; -- the module name used for tracing
+local MOD="lmap_2013_08_13.f"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -2853,17 +2853,6 @@ local function localLMapInsert( topRec, lmapBinName, newValue, createSpec )
 end -- function localLMapInsert()
 
 -- ======================================================================
--- lmap_insert() -- with and without create
--- ======================================================================
-function lmap_insert( topRec, lmapBinName, newValue )
-  return localLMapInsert( topRec, lmapBinName, newValue, nil );
-end -- lmap_insert()
-
-function lmap_create_and_insert( topRec, lmapBinName, newValue, createSpec )
-  return localLMapInsert( topRec, lmapBinName, newValue, createSpec )
-end -- lmap_create_and_insert()
-
--- ======================================================================
 -- ldrDeleteList( topLdrChunk, lMapList, listIndex,  insertList, filter, fargs )
 -- ======================================================================
 -- Insert (append) the LIST of values pointed to from the digest-list, 
@@ -3124,22 +3113,6 @@ local function localLMapDelete( topRec, lmapBinName, searchValue,
   end -- end of regular mode deleteion 
 
 end -- localLMapDelete()
-
--- ======================================================================
--- lmap_delete() -- with and without filter
--- Return resultList
--- (*) If successful: return deleted items (list.size( resultList ) > 0)
--- (*) If error: resultList will be an empty list.
--- ======================================================================
-function lmap_delete( topRec, lmapBinName, searchValue )
-  return localLMapDelete(topRec, lmapBinName, searchValue, nil, nil )
-end -- lset_delete()
-
-function lmap_delete_then_filter( topRec, lmapBinName, searchValue,
-                                  filter, fargs )
-  return localLMapDelete( topRec, lmapBinName, searchValue,
-                          filter, fargs )
-end -- lset_delete_then_filter()
 
 local function ldrSearchList(topRec, lmapBinName, resultList, ldrChunkRec, listIndex, entryList, filter, fargs)
 
@@ -3665,44 +3638,6 @@ local function localLMapSearch(resultList, topRec, lmapBinName, searchValue,
   return resultList;
 end -- function localLMapSearch()
 
-
--- ======================================================================
--- lmap_search() -- with and without filter
--- ======================================================================
-function lmap_search( topRec, lmapBinName, searchValue )
-  GP=F and trace("\n\n >>>>>>>>> API[ lmap_search ] <<<<<<<<<< \n\n");
-  resultList = list();
-  -- if we dont have a searchValue, get all the list elements.
-  -- Note that this means an empty searchValue which is not 
-  -- the same as a nil or a NULL searchValue
-
-  validateLmapParams( topRec, lmapBinName, true );
-  if( searchValue == nil ) then
-    -- if no search value, use the faster SCAN (searchALL)
-    return localLMapSearchAll(resultList,topRec,lmapBinName,nil,nil)
-  else
-	return localLMapSearch(resultList,topRec,lmapBinName,searchValue,nil,nil)
-  end
-end -- lmap_search()
-
--- ======================================================================
-function
-lmap_search_then_filter( topRec, lmapBinName, searchValue, filter, fargs )
-  GP=F and trace("\n\n >>>>>>>>> API[ lmap_search_then_filter ] <<<<<<<<<< \n\n");
-  resultList = list();
-  -- if we dont have a searchValue, get all the list elements.
-  -- Note that this means an empty searchValue which is not 
-  -- the same as a nil or a NULL searchValue
-
-  validateLmapParams( topRec, lmapBinName, true );
-  if( searchValue == nil ) then
-    -- if no search value, use the faster SCAN (searchALL)
-	return localLMapSearchAll(resultList,topRec,lmapBinName,filter,fargs)
-  else
-  	return localLMapSearch(resultList,topRec,lmapBinName,searchValue,filter,fargs)
-  end
-end -- lmap_search_then_filter()
-
 -- ========================================================================
 -- ldt_remove() -- Remove the LDT entirely from the record.
 -- NOTE: This could eventually be moved to COMMON, and be "ldt_remove()",
@@ -3782,6 +3717,133 @@ local function ldt_remove( topRec, lmapBinName )
 
   return rc;
 end -- ldt_remove()
+
+local function localLMapWalkThru(resultList,topRec,lmapBinName,filter,fargs)
+  
+  local meth = "localLMapWalkThru()";
+  rc = 0; -- start out OK.
+  GP=F and trace("[ENTER]: <%s:%s> Search for Value(%s)",
+                 MOD, meth, tostring( searchValue ) );
+                 
+  local lMapList = topRec[lmapBinName]; -- The main lmap
+  local propMap = lMapList[1]; 
+  local lmapCtrlInfo = lMapList[2]; 
+  local binName = lmapBinName;
+  
+  -- Validate the topRec, the bin and the map.  If anything is weird, then
+  -- this will kick out with a long jump error() call.
+  validateLmapParams( topRec, lmapBinName, true );
+
+  if lmapCtrlInfo[M_StoreState] == SS_COMPACT then 
+	  -- Find the appropriate bin for the Search value
+	  GP=F and trace(" !!!!!! Compact Mode LMAP Search !!!!!");
+	  local binList = lmapCtrlInfo[M_CompactList];
+          list.append( resultList, " =========== LMAP WALK-THRU COMPACT MODE \n ================" );
+	  
+	  if lmapCtrlInfo[M_KeyType] == KT_ATOMIC then
+		rc = simpleDumpListAll(topRec, resultList, lMapList, binName, filter, fargs) 
+	  else
+		rc = complexDumpListAll(topRec, resultList, lMapList, binName, filter, fargs)
+	  end
+	
+	  GP=F and trace("[EXIT]: <%s:%s>: Search Returns (%s)",
+	                 MOD, meth, tostring(result));
+  else -- regular searchAll
+	  -- HACK : TODO : Fix this number to list conversion  
+	  local digestlist = lmapCtrlInfo[M_DigestList];
+	  local src = createSubrecContext();
+	
+	  -- for each digest in the digest-list, open that subrec, send it to our 
+	  -- routine, then get the list-back and keep appending and building the
+	  -- final resultList. 
+	   
+          list.append( resultList, "\n =========== LMAP WALK-THRU REGULAR MODE \n ================" );
+	  for i = 1, list.size( digestlist ), 1 do
+	  
+	      if digestlist[i] ~= 0 then 
+		  local stringDigest = tostring( digestlist[i] );
+                  local digestentry = "DIGEST:" .. stringDigest; 
+        	  list.append( resultList, digestentry );
+	          local IndexLdrChunk = openSubrec( src, topRec, stringDigest );
+		  GP=F and trace("[DEBUG]: <%s:%s> Calling ldrSearchList: List(%s)",
+			           MOD, meth, tostring( entryList ));
+			  
+	          -- temporary list having result per digest-entry LDR 
+	          local ldrlist = list(); 
+		  local entryList  = list(); 
+		  -- The magical function that is going to fix our deletion :)
+	          rc = ldrSearchList(topRec, lmapBinName, ldrlist, IndexLdrChunk, 0, entryList, filter, fargs );
+		  if( rc == nil or rc == 0 ) then
+		  	GP=F and trace("AllSearch returned SUCCESS %s", tostring(ldrlist));
+        	        list.append( resultList, "LIST-ENTRIES:" );
+			for j = 1, list.size(ldrlist), 1 do 
+ 			  -- no need to filter here, results are already filtered in-routine
+        		  list.append( resultList, ldrlist[j] );
+    		        end
+		  end -- end of if-rc check 
+                  rc = closeSubrec( src, stringDigest )
+              else -- if digest-list is empty
+      		 list.append( resultList, "EMPTY ITEM")
+	      end -- end of digest-list if check  
+              list.append( resultList, "\n" );
+	  end -- end of digest-list for loop 
+          list.append( resultList, "\n =========== END :  LMAP WALK-THRU REGULAR MODE \n ================" );
+          -- Close ALL of the subrecs that might have been opened
+          rc = closeAllSubrecs( src );
+  end -- end of else 
+
+  return resultList;
+end
+ 
+local function localLMapInsertAll( topRec, binName, valueList, createSpec )
+  local meth = "localLMapInsertAll()";
+  for i = 1, list.size( valueList ), 1 do
+    local rc = localLMapInsert( topRec, lmapBinName, valueList[i], createSpec );
+    GP=F and trace("[DEBUG]: <%s:%s> : lmap insertion for %s  RC(%d)", MOD, meth, tostring(valueList[i]), rc );
+  end 
+end
+
+-- =======================================================================================================================
+-- OLD EXTERNAL FUNCTIONS
+-- =======================================================================================================================
+
+-- ======================================================================
+-- lmap_search() -- with and without filter
+-- ======================================================================
+function lmap_search( topRec, lmapBinName, searchValue )
+  GP=F and trace("\n\n >>>>>>>>> API[ lmap_search ] <<<<<<<<<< \n\n");
+  resultList = list();
+  -- if we dont have a searchValue, get all the list elements.
+  -- Note that this means an empty searchValue which is not 
+  -- the same as a nil or a NULL searchValue
+
+  validateLmapParams( topRec, lmapBinName, true );
+  if( searchValue == nil ) then
+    -- if no search value, use the faster SCAN (searchALL)
+    return localLMapSearchAll(resultList,topRec,lmapBinName,nil,nil)
+  else
+	return localLMapSearch(resultList,topRec,lmapBinName,searchValue,nil,nil)
+  end
+end -- lmap_search()
+
+-- ======================================================================
+
+function
+lmap_search_then_filter( topRec, lmapBinName, searchValue, filter, fargs )
+  GP=F and trace("\n\n >>>>>>>>> API[ lmap_search_then_filter ] <<<<<<<<<< \n\n");
+  resultList = list();
+  -- if we dont have a searchValue, get all the list elements.
+  -- Note that this means an empty searchValue which is not 
+  -- the same as a nil or a NULL searchValue
+
+  validateLmapParams( topRec, lmapBinName, true );
+  if( searchValue == nil ) then
+    -- if no search value, use the faster SCAN (searchALL)
+	return localLMapSearchAll(resultList,topRec,lmapBinName,filter,fargs)
+  else
+  	return localLMapSearch(resultList,topRec,lmapBinName,searchValue,filter,fargs)
+  end
+end -- lmap_search_then_filter()
 
 -- ========================================================================
 -- lmap_remove() -- Remove the LDT entirely from the record.
@@ -3878,93 +3940,32 @@ function lmap_config( topRec, lmapBinName )
   return config;
 end -- function lmap_config()
 
+-- ======================================================================
+-- lmap_delete() -- with and without filter
+-- Return resultList
+-- (*) If successful: return deleted items (list.size( resultList ) > 0)
+-- (*) If error: resultList will be an empty list.
+-- ======================================================================
+function lmap_delete( topRec, lmapBinName, searchValue )
+  return localLMapDelete(topRec, lmapBinName, searchValue, nil, nil )
+end -- lset_delete()
 
-local function localLMapWalkThru(resultList,topRec,lmapBinName,filter,fargs)
-  
-  local meth = "localLMapWalkThru()";
-  rc = 0; -- start out OK.
-  GP=F and trace("[ENTER]: <%s:%s> Search for Value(%s)",
-                 MOD, meth, tostring( searchValue ) );
-                 
-  local lMapList = topRec[lmapBinName]; -- The main lmap
-  local propMap = lMapList[1]; 
-  local lmapCtrlInfo = lMapList[2]; 
-  local binName = lmapBinName;
-  
-  -- Validate the topRec, the bin and the map.  If anything is weird, then
-  -- this will kick out with a long jump error() call.
-  validateLmapParams( topRec, lmapBinName, true );
+function lmap_delete_then_filter( topRec, lmapBinName, searchValue,
+                                  filter, fargs )
+  return localLMapDelete( topRec, lmapBinName, searchValue,
+                          filter, fargs )
+end -- lmap_delete_then_filter()
 
-  if lmapCtrlInfo[M_StoreState] == SS_COMPACT then 
-	  -- Find the appropriate bin for the Search value
-	  GP=F and trace(" !!!!!! Compact Mode LMAP Search !!!!!");
-	  local binList = lmapCtrlInfo[M_CompactList];
-          list.append( resultList, " =========== LMAP WALK-THRU COMPACT MODE \n ================" );
-	  
-	  if lmapCtrlInfo[M_KeyType] == KT_ATOMIC then
-		rc = simpleDumpListAll(topRec, resultList, lMapList, binName, filter, fargs) 
-	  else
-		rc = complexDumpListAll(topRec, resultList, lMapList, binName, filter, fargs)
-	  end
-	
-	  GP=F and trace("[EXIT]: <%s:%s>: Search Returns (%s)",
-	                 MOD, meth, tostring(result));
-  else -- regular searchAll
-	  -- HACK : TODO : Fix this number to list conversion  
-	  local digestlist = lmapCtrlInfo[M_DigestList];
-	  local src = createSubrecContext();
-	
-	  -- for each digest in the digest-list, open that subrec, send it to our 
-	  -- routine, then get the list-back and keep appending and building the
-	  -- final resultList. 
-	   
-          list.append( resultList, "\n =========== LMAP WALK-THRU REGULAR MODE \n ================" );
-	  for i = 1, list.size( digestlist ), 1 do
-	  
-	      if digestlist[i] ~= 0 then 
-		  local stringDigest = tostring( digestlist[i] );
-                  local digestentry = "DIGEST:" .. stringDigest; 
-        	  list.append( resultList, digestentry );
-	          local IndexLdrChunk = openSubrec( src, topRec, stringDigest );
-		  GP=F and trace("[DEBUG]: <%s:%s> Calling ldrSearchList: List(%s)",
-			           MOD, meth, tostring( entryList ));
-			  
-	          -- temporary list having result per digest-entry LDR 
-	          local ldrlist = list(); 
-		  local entryList  = list(); 
-		  -- The magical function that is going to fix our deletion :)
-	          rc = ldrSearchList(topRec, lmapBinName, ldrlist, IndexLdrChunk, 0, entryList, filter, fargs );
-		  if( rc == nil or rc == 0 ) then
-		  	GP=F and trace("AllSearch returned SUCCESS %s", tostring(ldrlist));
-        	        list.append( resultList, "LIST-ENTRIES:" );
-			for j = 1, list.size(ldrlist), 1 do 
- 			  -- no need to filter here, results are already filtered in-routine
-        		  list.append( resultList, ldrlist[j] );
-    		        end
-		  end -- end of if-rc check 
-                  rc = closeSubrec( src, stringDigest )
-              else -- if digest-list is empty
-      		 list.append( resultList, "EMPTY ITEM")
-	      end -- end of digest-list if check  
-              list.append( resultList, "\n" );
-	  end -- end of digest-list for loop 
-          list.append( resultList, "\n =========== END :  LMAP WALK-THRU REGULAR MODE \n ================" );
-          -- Close ALL of the subrecs that might have been opened
-          rc = closeAllSubrecs( src );
-  end -- end of else 
+-- ======================================================================
+-- lmap_insert() -- with and without create
+-- ======================================================================
+function lmap_insert( topRec, lmapBinName, newValue )
+  return localLMapInsert( topRec, lmapBinName, newValue, nil );
+end -- lmap_insert()
 
-  return resultList;
-end
- 
-local function localLMapInsertAll( topRec, binName, valueList, nil )
-  local meth = "localLMapInsertAll()";
-  for i = 1, list.size( valueList ), 1 do
-    local rc = localLMapInsert( topRec, lmapBinName, valueList[i], nil );
-    GP=F and trace("[DEBUG]: <%s:%s> : lmap insertion for %s  RC(%d)", MOD, meth, tostring(valueList[i]), rc );
-  end 
-end
- 
--- OLD EXTERNAL FUNCTIONS
+function lmap_create_and_insert( topRec, lmapBinName, newValue, createSpec )
+  return localLMapInsert( topRec, lmapBinName, newValue, createSpec )
+end -- lmap_create_and_insert()
 
 -- ======================================================================
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
@@ -4118,6 +4119,10 @@ end -- lmap_dump();
 -- ======================================================================
 -- lmap_insert_all() -- with and without create
 -- ======================================================================
-function lmap_insert_all( topRec, binName, valueList )
-  return localLMapInsertAll( topRec, binName, valueList, nil )
+function lmap_insert_all( topRec, binName, valueList, createSpec )
+  return localLMapInsertAll( topRec, binName, valueList, createSpec )
+end
+
+function lmap_create_and_insert_all( topRec, binName, valueList, createSpec )
+  return localLMapInsertAll( topRec, binName, valueList, createSpec )
 end
