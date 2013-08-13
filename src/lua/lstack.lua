@@ -1,8 +1,8 @@
 -- Large Stack Object (LSO or LSTACK) Operations
--- lstack.lua:  August 09, 2013
+-- lstack.lua:  August 12, 2013
 --
 -- Module Marker: Keep this in sync with the stated version
-local MOD="lstack_2013_08_09.d"; -- the module name used for tracing
+local MOD="lstack_2013_08_12.g"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -1008,6 +1008,8 @@ local function setLdtRecordType( topRec )
     recPropMap[RPM_VInfo] = vinfo; 
     recPropMap[RPM_LdtCount] = 1; -- this is the first one.
     recPropMap[RPM_Magic] = MAGIC;
+    -- Set this control bin as HIDDEN
+    record.set_flags(topRec, REC_LDT_CTRL_BIN, BF_LDT_CONTROL );
   else
     -- Not much to do -- increment the LDT count for this record.
     recPropMap = topRec[REC_LDT_CTRL_BIN];
@@ -4015,15 +4017,78 @@ local function localTrim( topRec, lsoList, searchPath )
   GP=E and trace("[EXIT]: <%s:%s>", MOD, meth );
 end -- localTrim()
 
--- ======================================================================
--- ======================================================================
--- ======================================================================
--- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
--- LSTACK Main Functions
--- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+
+-- ========================================================================
+-- This function is under construction.
+-- ========================================================================
+-- ========================================================================
+-- lstack_delete_subrecs() -- Delete the entire lstack -- in pieces.
+-- ========================================================================
+-- The real delete (above) will do the correct delete, which is to remove
+-- the ESR and the BIN.  THIS function is more of a test function, which
+-- will remove each SUBREC individually.
+-- Release all of the storage associated with this LDT and remove the
+-- control structure of the bin.  If this is the LAST LDT in the record,
+-- then ALSO remove the HIDDEN LDT CONTROL BIN.
 --
+-- First, fetch all of the digests of subrecords that go with this
+-- LDT, then iterate thru the list and delete them.
+-- Finally  -- Reset the record[lsoBinName] to NIL (does that work??)
+-- Parms:
+-- (1) topRec: the user-level record holding the LSO Bin
+-- (2) lsoBinName: The name of the LSO Bin
+-- Result:
+--   res = 0: all is well
+--   res = -1: Some sort of error
+-- ========================================================================
+function lstack_delete_subrecs( topRec, lsoBinName )
+  local meth = "lstack_delete()";
+
+  GP=E and trace("[ENTER]: <%s:%s> lsoBinName(%s)",
+    MOD, meth, tostring(lsoBinName));
+
+  trace("[ATTENTION!!!]::LSTACK_DELETE IS NOT YET IMPLEMENTED!!!");
+
+  local rc = 0; -- start off optimistic
+
+  -- Validate the lsoBinName before moving forward
+  validateRecBinAndMap( topRec, lsoBinName, true );
+
+  -- Extract the property map and lso control map from the lso bin list.
+  local lsoList = topRec[ lsoBinName ];
+  local propMap = lsoList[1];
+  local lsoMap  = lsoList[2];
+
+  -- TODO: Create buildSubRecList()
+  local deleteList = buildSubRecList( topRec, lsoList );
+  local listSize = list.size( deleteList );
+  local digestString;
+  local subrec;
+  for i = 1, listSize, 1 do
+      -- Open the Subrecord -- and then remove it.
+      digestString = tostring( deleteList[i] );
+      GP=F and trace("[SUBREC DELETE]<%s:%s> About to Open and Delete(%s)",
+        MOD, meth, digestString );
+      subrec = aerospike:open_subrec( topRec, digestString );
+      if( subrec ~= nil ) then
+        rc = aerospike:remove_subrec( subrec );
+        if( rc == nil or rc == 0 ) then
+          GP=F and trace("[STATUS]<%s:%s> Successful CREC REMOVE", MOD, meth );
+        else
+          warn("[SUB DELETE ERROR] RC(%d) Bin(%s)", MOD, meth, rc, binName);
+          error( ldte.ERR_SUBREC_DELETE );
+        end
+      else
+        warn("[ERROR]<%s:%s> Can't open Subrec: Digest(%s)", MOD, meth,
+          digestString );
+      end
+  end -- for each subrecord
+  return rc;
+
+end -- lstack_delete_subrecs()
+
 -- ======================================================================
--- || lstack_create ||
+-- || localCreate ||
 -- ======================================================================
 -- Create/Initialize a Stack structure in a bin, using a single LSO
 -- bin, using User's name, but Aerospike TYPE (AS_LSO)
@@ -4068,8 +4133,8 @@ end -- localTrim()
 --  -> Warm List Size
 --  -> Warm List Transfer amount
 -- ========================================================================
-function lstack_create( topRec, lsoBinName, createSpec )
-  local meth = "stackCreate()";
+local function localCreate( topRec, lsoBinName, createSpec )
+  local meth = "localCreate()";
 
   if createSpec == nil then
     GP=E and trace("[ENTER1]: <%s:%s> lsoBinName(%s) NULL createSpec",
@@ -4117,7 +4182,7 @@ function lstack_create( topRec, lsoBinName, createSpec )
     error( ldte.ERR_CREATE );
   end
   
-end -- function lstack_create()
+end -- function localCreate()
 -- ======================================================================
 
 -- ======================================================================
@@ -4146,7 +4211,6 @@ end -- function lstack_create()
 -- NOTE: When using info/trace calls, ALL parameters must be protected
 -- with "tostring()" so that we do not encounter a format error if the user
 -- passes in nil or any other incorrect value/type.
--- ======================================================================
 -- =======================================================================
 local function localStackPush( topRec, lsoBinName, newValue, createSpec )
   local meth = "localStackPush()";
@@ -4240,28 +4304,12 @@ local function localStackPush( topRec, lsoBinName, newValue, createSpec )
 end -- function localStackPush()
 
 -- =======================================================================
--- Stack Push -- with and without implicit create spec.
--- These are the globally visible calls -- that call the local UDF to do
--- all of the work.
--- NOTE: Any parameter that might be printed (for trace/debug purposes)
--- must be protected with "tostring()" so that we do not encounter a format
--- error if the user passes in nil or any other incorrect value/type.
--- =======================================================================
-function lstack_push( topRec, lsoBinName, newValue )
-  return localStackPush( topRec, lsoBinName, newValue, nil )
-end -- end lstack_push()
-
-function lstack_create_and_push( topRec, lsoBinName, newValue, createSpec )
-  return localStackPush( topRec, lsoBinName, newValue, createSpec );
-end -- lstack_create_and_push()
-
--- =======================================================================
--- Stack Push ALL
+-- Local Push ALL
 -- =======================================================================
 -- Iterate thru the list and call localStackPush on each element
 -- =======================================================================
-function lstack_push_all( topRec, lsoBinName, valueList, createSpec )
-  local meth = "lstack_push_all()";
+local function localPushAll( topRec, lsoBinName, valueList, createSpec )
+  local meth = "localPushAll()";
   GP=E and trace("[ENTER]:<%s:%s>LSO BIN(%s) valueList(%s) createSpec(%s)",
     MOD, meth, tostring(lsoBinName), tostring(valueList), tostring(createSpec));
 
@@ -4283,7 +4331,7 @@ function lstack_push_all( topRec, lsoBinName, valueList, createSpec )
   end
 
   return rc;
-end -- end lstack_push_all()
+end -- end localPushAll()
 
 -- ======================================================================
 -- |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
@@ -4439,23 +4487,8 @@ local function localStackPeek( topRec, lsoBinName, peekCount, func, fargs )
   return resultList;
 end -- function localStackPeek() 
 
--- =======================================================================
--- lstack_peek() -- with and without inner UDFs
--- These are the globally visible calls -- that call the local UDF to do
--- all of the work.
--- NOTE: Any parameter that might be printed (for trace/debug purposes)
--- must be protected with "tostring()" so that we do not encounter a format
--- error if the user passes in nil or any other incorrect value/type.
--- =======================================================================
-function lstack_peek( topRec, lsoBinName, peekCount )
-  return localStackPeek( topRec, lsoBinName, peekCount, nil, nil )
-end -- end lstack_peek()
-
-function lstack_peek_then_filter( topRec, lsoBinName, peekCount, func, fargs )
-  return localStackPeek( topRec, lsoBinName, peekCount, func, fargs );
-end -- lstack_peek_then_filter()
-
-
+-- ========================================================================
+-- This function is (still) under construction
 -- ========================================================================
 -- lstack_trim() -- Remove all but the top N elements
 -- Parms:
@@ -4497,7 +4530,7 @@ function lstack_trim( topRec, lsoBinName, trimCount )
 end -- function lstack_trim()
 
 -- ========================================================================
--- lstack_size() -- return the number of elements (item count) in the stack.
+-- localGetSize() -- return the number of elements (item count) in the stack.
 -- Parms:
 -- (1) topRec: the user-level record holding the LSO Bin
 -- (2) lsoBinName: The name of the LSO Bin
@@ -4508,8 +4541,8 @@ end -- function lstack_trim()
 -- must be protected with "tostring()" so that we do not encounter a format
 -- error if the user passes in nil or any other incorrect value/type.
 -- ========================================================================
-function lstack_size( topRec, lsoBinName )
-  local meth = "lstack_size()";
+local function localGetSize( topRec, lsoBinName )
+  local meth = "localGetSize()";
 
   GP=E and trace("[ENTER1]: <%s:%s> lsoBinName(%s)",
     MOD, meth, tostring(lsoBinName));
@@ -4534,11 +4567,10 @@ function lstack_size( topRec, lsoBinName )
   GP=E and trace("[EXIT]: <%s:%s> : size(%d)", MOD, meth, itemCount );
 
   return itemCount;
-end -- function lstack_size()
-
+end -- function localGetSize()
 
 -- ========================================================================
--- lstack_get_capacity() -- return the current capacity setting for LSTACK.
+-- localGetCapacity() -- return the current capacity setting for LSTACK.
 -- Parms:
 -- (1) topRec: the user-level record holding the LSO Bin
 -- (2) lsoBinName: The name of the LSO Bin
@@ -4549,8 +4581,8 @@ end -- function lstack_size()
 -- must be protected with "tostring()" so that we do not encounter a format
 -- error if the user passes in nil or any other incorrect value/type.
 -- ========================================================================
-function lstack_get_capacity( topRec, lsoBinName )
-  local meth = "lstack_get_capacity()";
+local function localGetCapacity( topRec, lsoBinName )
+  local meth = "localGetCapacity()";
 
   GP=E and trace("[ENTER]: <%s:%s> lsoBinName(%s)",
     MOD, meth, tostring(lsoBinName));
@@ -4567,7 +4599,7 @@ function lstack_get_capacity( topRec, lsoBinName )
   GP=E and trace("[EXIT]: <%s:%s> : size(%d)", MOD, meth, capacity );
 
   return capacity;
-end -- function lstack_get_capacity()
+end -- function localGetCapacity()
 
 -- ========================================================================
 -- lstack_config() -- return the config settings
@@ -4581,8 +4613,8 @@ end -- function lstack_get_capacity()
 -- must be protected with "tostring()" so that we do not encounter a format
 -- error if the user passes in nil or any other incorrect value/type.
 -- ========================================================================
-function lstack_config( topRec, lsoBinName )
-  local meth = "lstack_config()";
+local function localConfig( topRec, lsoBinName )
+  local meth = "localConfig()";
 
   GP=E and trace("[ENTER1]: <%s:%s> lsoBinName(%s)",
     MOD, meth, tostring(lsoBinName));
@@ -4597,9 +4629,11 @@ function lstack_config( topRec, lsoBinName )
   GP=E and trace("[EXIT]: <%s:%s> : config(%s)", MOD, meth, tostring(config));
 
   return config;
-end -- function lstack_config()
+end -- function localConfig()
 
 
+-- ========================================================================
+-- This function is (still) under construction.
 -- ========================================================================
 -- lstack_subrec_list() -- Return a list of subrecs
 -- Parms:
@@ -4672,9 +4706,7 @@ function lstack_subrec_list( topRec, lsoBinName )
       MOD, meth, tostring( resultList ) );
 
   return resultList
-
 end -- lstack_subrec_list()
-
 
 -- ========================================================================
 -- ldtRemove() -- Remove the LDT entirely from the record.
@@ -4759,100 +4791,6 @@ local function ldtRemove( topRec, binName )
     error( ldte.ERR_INTERNAL );
   end
 end -- ldtRemove()
-
-
--- ========================================================================
--- lstack_remove() -- Remove the LDT entirely from the record.
--- NOTE: This could eventually be moved to COMMON, and be "ldt_remove()",
--- since it will work the same way for all LDTs.
--- Remove the ESR, Null out the topRec bin.
--- ========================================================================
--- Release all of the storage associated with this LDT and remove the
--- control structure of the bin.  If this is the LAST LDT in the record,
--- then ALSO remove the HIDDEN LDT CONTROL BIN.
---
--- Question  -- Reset the record[lsoBinName] to NIL (does that work??)
--- Parms:
--- (1) topRec: the user-level record holding the LSO Bin
--- (2) binName: The name of the LSO Bin
--- Result:
---   res = 0: all is well
---   res = -1: Some sort of error
--- ========================================================================
-function lstack_remove( topRec, lsoBinName )
-  return ldtRemove( topRec, lsoBinName );
-end -- lstack_remove()
-
-function ldt_remove( topRec, lsoBinName )
-  return ldtRemove( topRec, lsoBinName );
-end -- ldt_remove()
-
--- ========================================================================
--- lstack_delete_subrecs() -- Delete the entire lstack -- in pieces.
--- ========================================================================
--- The real delete (above) will do the correct delete, which is to remove
--- the ESR and the BIN.  THIS function is more of a test function, which
--- will remove each SUBREC individually.
--- Release all of the storage associated with this LDT and remove the
--- control structure of the bin.  If this is the LAST LDT in the record,
--- then ALSO remove the HIDDEN LDT CONTROL BIN.
---
--- First, fetch all of the digests of subrecords that go with this
--- LDT, then iterate thru the list and delete them.
--- Finally  -- Reset the record[lsoBinName] to NIL (does that work??)
--- Parms:
--- (1) topRec: the user-level record holding the LSO Bin
--- (2) lsoBinName: The name of the LSO Bin
--- Result:
---   res = 0: all is well
---   res = -1: Some sort of error
--- ========================================================================
-function lstack_delete_subrecs( topRec, lsoBinName )
-  local meth = "lstack_delete()";
-
-  GP=E and trace("[ENTER]: <%s:%s> lsoBinName(%s)",
-    MOD, meth, tostring(lsoBinName));
-
-  trace("[ATTENTION!!!]::LSTACK_DELETE IS NOT YET IMPLEMENTED!!!");
-
-  local rc = 0; -- start off optimistic
-
-  -- Validate the lsoBinName before moving forward
-  validateRecBinAndMap( topRec, lsoBinName, true );
-
-  -- Extract the property map and lso control map from the lso bin list.
-  local lsoList = topRec[ lsoBinName ];
-  local propMap = lsoList[1];
-  local lsoMap  = lsoList[2];
-
-  -- TODO: Create buildSubRecList()
-  local deleteList = buildSubRecList( topRec, lsoList );
-  local listSize = list.size( deleteList );
-  local digestString;
-  local subrec;
-  for i = 1, listSize, 1 do
-      -- Open the Subrecord -- and then remove it.
-      digestString = tostring( deleteList[i] );
-      GP=F and trace("[SUBREC DELETE]<%s:%s> About to Open and Delete(%s)",
-        MOD, meth, digestString );
-      subrec = aerospike:open_subrec( topRec, digestString );
-      if( subrec ~= nil ) then
-        rc = aerospike:remove_subrec( subrec );
-        if( rc == nil or rc == 0 ) then
-          GP=F and trace("[STATUS]<%s:%s> Successful CREC REMOVE", MOD, meth );
-        else
-          warn("[SUB DELETE ERROR] RC(%d) Bin(%s)", MOD, meth, rc, binName);
-          error( ldte.ERR_SUBREC_DELETE );
-        end
-      else
-        warn("[ERROR]<%s:%s> Can't open Subrec: Digest(%s)", MOD, meth,
-          digestString );
-      end
-  end -- for each subrecord
-  return rc;
-
-end -- lstack_delete_subrecs()
-
 
 -- ========================================================================
 -- localSetCapacity()
@@ -4993,34 +4931,8 @@ local function localSetCapacity( topRec, lsoBinName, newLimit )
   end
 end -- localSetCapacity();
 
-
 -- ========================================================================
--- lstack_set_storage_limit()
--- lstack_set_capacity()
--- ========================================================================
--- This is a special command to both set the new storage limit.  It does
--- NOT release storage, however.  That is done either lazily after a 
--- warm/cold insert or with an explit lstack_trim() command.
--- Parms:
--- (*) topRec: the user-level record holding the LSO Bin
--- (*) lsoBinName: The name of the LSO Bin
--- (*) newLimit: The new limit of the number of entries
--- Result:
---   res = 0: all is well
---   res = -1: Some sort of error
--- ========================================================================
-function lstack_set_storage_limit( topRec, lsoBinName, newLimit )
-  local meth = "lstack_set_storage_limit()";
-  return localSetCapacity( topRec, lsoBinName, newLimit );
-end
-
-function lstack_set_capacity( topRec, lsoBinName, newLimit )
-  local meth = "lstack_set_set_capacity()";
-  return localSetCapacity( topRec, lsoBinName, newLimit );
-end
-
--- ========================================================================
--- lstack_debug() -- Turn the debug setting on (1) or off (0)
+-- localDebug() -- Turn the debug setting on (1) or off (0)
 -- ========================================================================
 -- Turning the debug setting "ON" pushes LOTS of output to the console.
 -- It would be nice if we could figure out how to make this setting change
@@ -5032,8 +4944,8 @@ end
 --   res = 0: all is well
 --   res = -1: Some sort of error
 -- ========================================================================
-function lstack_debug( topRec, setting )
-  local meth = "lstack_debug()";
+local function localDebug( topRec, setting )
+  local meth = "localDebug()";
   local rc = 0;
 
   GP=E and trace("[ENTER]: <%s:%s> setting(%s)", MOD, meth, tostring(setting));
@@ -5053,8 +4965,281 @@ function lstack_debug( topRec, setting )
     rc = -1;
   end
   return rc;
-end -- lstack_debug()
+end -- localDebug()
 
+
+-- ======================================================================
+-- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- LSTACK External Functions
+-- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- ======================================================================
+
+-- ======================================================================
+-- || lstack_create ||
+-- ======================================================================
+-- Create/Initialize a Stack structure in a bin, using a single LSO
+-- bin, using User's name, but Aerospike TYPE (AS_LSO)
+--
+-- For this version of lstack, we will be using a LIST of two maps,
+-- which contain lots of metadata, plus one list:
+-- (*) Namespace Name (just one Namespace -- for now)
+-- (*) Set Name
+-- (*) Chunk Size (same for both namespaces)
+-- (*) Warm Chunk Count: Number of Warm Chunk Data Records
+-- (*) Cold Chunk Count: Number of Cold Chunk Data Records
+-- (*) Item Count (will NOT be tracked in Stoneman)
+-- (*) The List of Warm Chunks of data (each Chunk is a list)
+-- (*) The Head of the Cold Data Directory
+-- (*) Storage Mode (Compact or Regular) (0 for compact, 1 for regular)
+-- (*) Compact Item List
+--
+-- The LSO starts out in "Compact" mode, which allows the first 100 (or so)
+-- entries to be held directly in the record -- in the Hot List.  Once the
+-- Hot List overflows, the entries flow into the warm list, which is a
+-- list of LSO Data Records (each 2k record holds N values, where N is
+-- approximately (2k/rec size) ).
+-- Once the data overflows the warm list, it flows into the cold list,
+-- which is a linked list of directory pages -- where each directory page
+-- points to a list of LSO Data Record pages.  Each directory page holds
+-- roughly 100 page pointers (assuming a 2k page).
+-- Parms (inside argList)
+-- (1) topRec: the user-level record holding the LSO Bin
+-- (2) lsoBinName: The name of the LSO Bin
+-- (3) createSpec: The map (not list) of create parameters
+-- Result:
+--   rc = 0: ok
+--   rc < 0: Aerospike Errors
+--
+--  NOTE: 
+--  !!!! More parms needed here to appropriately configure the LSO
+--  -> Package (one of the pre-named packages that hold all the info)
+--  OR
+--  Individual entries (this is now less attractive)
+--  -> Hot List Size
+--  -> Hot List Transfer amount
+--  -> Warm List Size
+--  -> Warm List Transfer amount
+-- ========================================================================
+-- OLD EXTERNAL FUNCTIONS
+function lstack_create( topRec, lsoBinName )
+  return localCreate( topRec, lsoBinName );
+end
+
+-- NEW EXTERNAL FUNCTIONS
+function create( topRec, lsoBinName )
+  return localCreate( topRec, lsoBinName );
+end
+
+-- =======================================================================
+-- Stack Push -- with and without implicit create spec.
+-- These are the globally visible calls -- that call the local UDF to do
+-- all of the work.
+-- NOTE: Any parameter that might be printed (for trace/debug purposes)
+-- must be protected with "tostring()" so that we do not encounter a format
+-- error if the user passes in nil or any other incorrect value/type.
+-- =======================================================================
+-- OLD EXTERNAL FUNCTIONS
+function lstack_push( topRec, lsoBinName, newValue )
+  return localStackPush( topRec, lsoBinName, newValue, nil )
+end -- end lstack_push()
+
+function lstack_create_and_push( topRec, lsoBinName, newValue, createSpec )
+  return localStackPush( topRec, lsoBinName, newValue, createSpec );
+end -- lstack_create_and_push()
+
+-- NEW EXTERNAL FUNCTIONS
+function push( topRec, lsoBinName, newValue )
+  return localStackPush( topRec, lsoBinName, newValue, nil )
+end -- push()
+
+function create_and_push( topRec, lsoBinName, newValue, createSpec )
+  return localStackPush( topRec, lsoBinName, newValue, createSpec );
+end -- create_and_push()
+
+-- =======================================================================
+-- Stack Push ALL
+-- =======================================================================
+-- Iterate thru the list and call localStackPush on each element
+-- =======================================================================
+function lstack_push_all( topRec, lsoBinName, valueList, createSpec )
+  return localPushAll( topRec, lsoBinName, valueList, createSpec )
+end
+
+function push_all( topRec, lsoBinName, valueList, createSpec )
+  return localPushAll( topRec, lsoBinName, valueList, createSpec )
+end
+
+-- =======================================================================
+-- lstack_peek() -- with and without filters
+-- peek() -- with and without filters
+--
+-- These are the globally visible calls -- that call the local UDF to do
+-- all of the work.
+-- NOTE: Any parameter that might be printed (for trace/debug purposes)
+-- must be protected with "tostring()" so that we do not encounter a format
+-- error if the user passes in nil or any other incorrect value/type.
+-- =======================================================================
+-- OLD EXTERNAL FUNCTIONS
+function lstack_peek( topRec, lsoBinName, peekCount )
+  return localStackPeek( topRec, lsoBinName, peekCount, nil, nil )
+end -- lstack_peek()
+
+function lstack_peek_then_filter( topRec, lsoBinName, peekCount, func, fargs )
+  return localStackPeek( topRec, lsoBinName, peekCount, func, fargs );
+end -- lstack_peek_then_filter()
+
+-- NEW EXTERNAL FUNCTIONS
+function peek( topRec, lsoBinName, peekCount )
+  return localStackPeek( topRec, lsoBinName, peekCount, nil, nil )
+end -- peek()
+
+function peek_then_filter( topRec, lsoBinName, peekCount, func, fargs )
+  return localStackPeek( topRec, lsoBinName, peekCount, func, fargs );
+end -- peek_then_filter()
+
+-- ========================================================================
+-- get_size() -- return the number of elements (item count) in the stack.
+-- Parms:
+-- (1) topRec: the user-level record holding the LSO Bin
+-- (2) lsoBinName: The name of the LSO Bin
+-- Result:
+--   rc >= 0  (the size)
+--   rc < 0: Aerospike Errors
+-- NOTE: Any parameter that might be printed (for trace/debug purposes)
+-- must be protected with "tostring()" so that we do not encounter a format
+-- error if the user passes in nil or any other incorrect value/type.
+-- ========================================================================
+function get_size( topRec, lsoBinName )
+  return localGetSize( topRec, lsoBinName );
+end -- function get_size()
+
+-- ========================================================================
+-- get_capacity() -- return the current capacity setting for LSTACK.
+-- Parms:
+-- (1) topRec: the user-level record holding the LSO Bin
+-- (2) lsoBinName: The name of the LSO Bin
+-- Result:
+--   rc >= 0  (the current capacity)
+--   rc < 0: Aerospike Errors
+-- NOTE: Any parameter that might be printed (for trace/debug purposes)
+-- must be protected with "tostring()" so that we do not encounter a format
+-- error if the user passes in nil or any other incorrect value/type.
+-- ========================================================================
+function get_capacity( topRec, lsoBinName )
+  return localGetCapacity( topRec, lsoBinName );
+end
+
+-- ========================================================================
+-- get_config() -- return the lstack config settings.
+-- Parms:
+-- (1) topRec: the user-level record holding the LSO Bin
+-- (2) lsoBinName: The name of the LSO Bin
+-- Result:
+--   res = (when successful) config Map 
+--   res = (when error) nil
+-- NOTE: Any parameter that might be printed (for trace/debug purposes)
+-- must be protected with "tostring()" so that we do not encounter a format
+-- error if the user passes in nil or any other incorrect value/type.
+-- ========================================================================
+function get_config( topRec, lsoBinName )
+  return localConfig( topRec, lsoBinNam );
+end
+
+-- ========================================================================
+-- lstack_remove() -- Remove the LDT entirely from the record.
+-- remove() -- Remove the LDT entirely from the record.
+--
+-- NOTE: This could eventually be moved to COMMON, and be "ldt_remove()",
+-- since it will work the same way for all LDTs.
+-- Remove the ESR, Null out the topRec bin.
+-- ========================================================================
+-- Release all of the storage associated with this LDT and remove the
+-- control structure of the bin.  If this is the LAST LDT in the record,
+-- then ALSO remove the HIDDEN LDT CONTROL BIN.
+--
+-- Question  -- Reset the record[lsoBinName] to NIL (does that work??)
+-- Parms:
+-- (1) topRec: the user-level record holding the LSO Bin
+-- (2) binName: The name of the LSO Bin
+-- Result:
+--   res = 0: all is well
+--   res = -1: Some sort of error
+-- ========================================================================
+-- OLD EXTERNAL FUNCTIONS
+function lstack_remove( topRec, lsoBinName )
+  return ldtRemove( topRec, lsoBinName );
+end -- lstack_remove()
+
+function ldt_remove( topRec, lsoBinName )
+  return ldtRemove( topRec, lsoBinName );
+end -- ldt_remove()
+
+-- NEW EXTERNAL FUNCTIONS
+function remove( topRec, lsoBinName )
+  return ldtRemove( topRec, lsoBinName );
+end -- lstack_remove()
+
+-- ========================================================================
+-- lstack_set_storage_limit()
+-- lstack_set_capacity()
+-- set_storage_limit()
+-- set_capacity()
+-- ========================================================================
+-- This is a special command to both set the new storage limit.  It does
+-- NOT release storage, however.  That is done either lazily after a 
+-- warm/cold insert or with an explit lstack_trim() command.
+-- Parms:
+-- (*) topRec: the user-level record holding the LSO Bin
+-- (*) lsoBinName: The name of the LSO Bin
+-- (*) newLimit: The new limit of the number of entries
+-- Result:
+--   res = 0: all is well
+--   res = -1: Some sort of error
+-- ========================================================================
+-- OLD EXTERNAL FUNCTIONS
+function lstack_set_storage_limit( topRec, lsoBinName, newLimit )
+  return localSetCapacity( topRec, lsoBinName, newLimit );
+end
+
+function set_storage_limit( topRec, lsoBinName, newLimit )
+  return localSetCapacity( topRec, lsoBinName, newLimit );
+end
+
+-- NEW EXTERNAL FUNCTIONS
+function lstack_set_capacity( topRec, lsoBinName, newLimit )
+  return localSetCapacity( topRec, lsoBinName, newLimit );
+end
+
+function set_capacity( topRec, lsoBinName, newLimit )
+  return localSetCapacity( topRec, lsoBinName, newLimit );
+end
+
+-- ========================================================================
+-- lstack_debug() -- Turn the debug setting on (1) or off (0)
+-- debug()        -- Turn the debug setting on (1) or off (0)
+-- ========================================================================
+-- Turning the debug setting "ON" pushes LOTS of output to the console.
+-- It would be nice if we could figure out how to make this setting change
+-- PERSISTENT. Until we do that, this will be a no-op.
+-- Parms:
+-- (1) topRec: the user-level record holding the LSO Bin
+-- (2) setting: 0 turns it off, anything else turns it on.
+-- Result:
+--   res = 0: all is well
+--   res = -1: Some sort of error
+-- ========================================================================
+-- OLD EXTERNAL FUNCTIONS
+function lstack_debug( topRec, setting )
+  return localDebug( topRec, setting );
+end
+
+-- NEW EXTERNAL FUNCTIONS
+function set_debug( topRec, setting )
+  return localDebug( topRec, setting );
+end
+
+-- ========================================================================
+-- ========================================================================
 
 -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> --
 -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> --

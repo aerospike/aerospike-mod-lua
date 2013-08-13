@@ -1,8 +1,8 @@
 -- AS Large Set (LSET) Operations
--- Last Update August 9, 2013: TJL
+-- Last Update August 12, 2013: TJL
 --
 -- Keep this in sync with the version above.
-local MOD="lset_2013_08_09.d"; -- the module name used for tracing
+local MOD="lset_2013_08_12.g"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -22,7 +22,30 @@ local G_LDT_VERSION = 1.1;
 -- ======================================================================
 local GP=true; -- Leave this set to true.
 local F=true; -- Set F (flag) to true to turn ON global print
+local E=true; -- Set E (ENTER/EXIT) to true to turn ON Enter/Exit print
 
+-- ======================================================================
+-- Aerospike Server Functions:
+-- ======================================================================
+-- Aerospike Record Functions:
+-- status = aerospike:create( topRec )
+-- status = aerospike:update( topRec )
+-- status = aerospike:remove( rec ) (not currently used)
+--
+--
+-- Aerospike SubRecord Functions:
+-- newRec = aerospike:create_subrec( topRec )
+-- rec    = aerospike:open_subrec( topRec, childRecDigest)
+-- status = aerospike:update_subrec( childRec )
+-- status = aerospike:close_subrec( childRec )
+-- status = aerospike:remove_subrec( subRec )  
+--
+-- Record Functions:
+-- digest = record.digest( childRec )
+-- status = record.set_type( topRec, recType )
+-- status = record.set_flags( topRec, binName, binFlags )
+-- ======================================================================
+--
 -- ===========================================
 -- || GLOBAL VALUES -- Local to this module ||
 -- ===========================================
@@ -71,9 +94,23 @@ local SS_REGULAR ='R'; -- Using "Regular Storage" (regular) mode
 local KT_ATOMIC  ='A'; -- the set value is just atomic (number or string)
 local KT_COMPLEX ='C'; -- the set value is complex. Use Function to get key.
 
+-- Bin Flag Types -- to show the various types of bins.
+local BF_LDT_BIN     = 1; -- Main LDT Bin
+local BF_LDT_HIDDEN  = 2; -- LDT Bin::Set the Hidden Flag on this bin
+local BF_LDT_CONTROL = 4; -- Main LDT Control Bin (one per record)
+--
 -- HashType (HT) values
 local HT_STATIC  ='S'; -- Use a FIXED set of bins for hash lists
 local HT_DYNAMIC ='D'; -- Use a DYNAMIC set of bins for hash lists
+
+-- SetType (ST) values
+local ST_RECORD = 'R'; -- Store values (lists) directly in the Top Record
+local ST_SUBRECORD = 'S'; -- Store values (lists) in Sub-Records
+local ST_HYBRID = 'H'; -- Store values (lists) Hybrid Style
+-- NOTE: Hybrid style means that we'll use subrecords, but for any hash
+-- value that is less than "SUBRECORD_THRESHOLD", we'll store the value(s)
+-- in the top record.  It is likely that very short lists will waste a lot
+-- of subrecord storage.
 
 -- Key Compare Function for Complex Objects
 -- By default, a complex object will have a "KEY" field, which the
@@ -89,14 +126,15 @@ local KC_DEFAULT="keyCompareEqual"; -- Key Compare used only in complex mode
 local KH_DEFAULT="keyHash";         -- Key Hash used only in complex mode
 
 -- AS LSET Bin Names
-local LSET_CONTROL_BIN       = "LSetCtrlBin";
+-- local LSET_CONTROL_BIN       = "LSetCtrlBin";
+local LSET_CONTROL_BIN       = "DO NOT USE";
 local LSET_DATA_BIN_PREFIX   = "LSetBin_";
 
 -- ++===============++
 -- || Package Names ||
 -- ++===============++
 -- Specific Customer Names (to be moved out of the System Table)
-local PackageStumbleUpon     = "StumbleUpon";
+local PackageCompressInteger     = "CompressInteger";
 
 -- Standard, Test and Debug Packages
 local PackageStandardList    = "StandardList";
@@ -172,6 +210,7 @@ local M_Transform              = 't'; -- Transform object to Binary form
 local M_UnTransform            = 'u'; -- UnTransform object from Binary form
 local M_KeyCompare             = 'k'; -- User Supplied Key Compare Function
 local M_StoreState             = 'S'; -- Store State (Compect or List)
+local M_SetTypeStore           = 'T'; -- Type of the Set Store (Rec/SubRec)
 local M_HashType               = 'h'; -- Hash Type (static or dynamic)
 local M_BinaryStoreSize        = 'B'; -- Size of Object when in Binary form
 local M_KeyType                = 'K'; -- Key Type: Atomic or Complex
@@ -204,7 +243,7 @@ local M_KeyFunction            = 'F'; -- User Supplied Key Extract Function
 -- Q:                         q:
 -- R:                         r:                     
 -- S:M_StoreLimit             s:                     
--- T:                         t:M_Transform
+-- T:M_SetTypeStore           t:M_Transform
 -- U:                         u:M_UnTransform
 -- V:                         v:
 -- W:                         w:                     
@@ -274,7 +313,6 @@ local function packageStandardList( lsetMap )
   lsetMap[M_StoreMode] = SM_LIST; -- Use List Mode
   lsetMap[M_BinaryStoreSize] = nil; -- Don't waste room if we're not using it
   lsetMap[M_KeyType] = KT_ATOMIC; -- Atomic Keys
-  lsetMap[M_BinName] = LSET_CONTROL_BIN;
   lsetMap[M_Modulo]= DEFAULT_DISTRIB;
   lsetMap[M_ThreshHold] = DEFAULT_THRESHHOLD; -- Rehash after this many inserts
  
@@ -292,7 +330,6 @@ local function packageTestModeNumber( lsetMap )
   lsetMap[M_StoreMode] = SM_LIST; -- Use List Mode
   lsetMap[M_BinaryStoreSize] = nil; -- Don't waste room if we're not using it
   lsetMap[M_KeyType] = KT_ATOMIC; -- Atomic Keys
-  lsetMap[M_BinName] = LSET_CONTROL_BIN;
   lsetMap[M_Modulo] = DEFAULT_DISTRIB;
   lsetMap[M_ThreshHold] = DEFAULT_THRESHHOLD; -- Rehash after this many inserts
  
@@ -312,7 +349,6 @@ local function packageTestModeObject( lsetMap )
   lsetMap[M_BinaryStoreSize] = nil; -- Don't waste room if we're not using it
   lsetMap[M_KeyType] = KT_COMPLEX; -- Complex Object (need key function)
   lsetMap[M_KeyFunction] = "keyExtract"; -- Defined in UdfFunctionTable
-  lsetMap[M_BinName] = LSET_CONTROL_BIN;
   lsetMap[M_Modulo] = DEFAULT_DISTRIB;
   lsetMap[M_ThreshHold] = DEFAULT_THRESHHOLD; -- Rehash after this many inserts
  
@@ -331,7 +367,6 @@ local function packageTestModeList( lsetMap )
   lsetMap[M_StoreMode] = SM_LIST; -- Use List Mode
   lsetMap[M_BinaryStoreSize] = nil; -- Don't waste room if we're not using it
   lsetMap[M_KeyType] = KT_COMPLEX; -- Complex Object (need key function)
-  lsetMap[M_BinName] = LSET_CONTROL_BIN;
   lsetMap[M_Modulo] = DEFAULT_DISTRIB;
   lsetMap[M_ThreshHold] = DEFAULT_THRESHHOLD; -- Rehash after this many inserts
  
@@ -349,7 +384,6 @@ local function packageTestModeBinary( lsetMap )
   lsetMap[M_StoreMode] = SM_LIST; -- Use List Mode
   lsetMap[M_BinaryStoreSize] = nil; -- Don't waste room if we're not using it
   lsetMap[M_KeyType] = KT_COMPLEX; -- Complex Object (need key function)
-  lsetMap[M_BinName] = LSET_CONTROL_BIN;
   lsetMap[M_Modulo] = DEFAULT_DISTRIB;
   lsetMap[M_ThreshHold] = DEFAULT_THRESHHOLD; -- Rehash after this many inserts
 
@@ -371,7 +405,6 @@ local function packageDebugModeObject( lsetMap )
   lsetMap[M_BinaryStoreSize] = nil; -- Don't waste room if not using it
   lsetMap[M_KeyType] = KT_COMPLEX; -- Complex Key (must be extracted)
   lsetMap[M_KeyFunction] = "keyExtract"; -- Defined in UdfFunctionTable
-  lsetMap[M_BinName] = LSET_CONTROL_BIN;
   lsetMap[M_Modulo] = DEFAULT_DISTRIB;
   lsetMap[M_ThreshHold] = 4; -- Rehash after this many inserts
 
@@ -392,7 +425,6 @@ local function packageDebugModeList( lsetMap )
   lsetMap[M_StoreMode] = SM_LIST; -- Use List Mode
   lsetMap[M_BinaryStoreSize] = nil; -- Don't waste room if not using it
   lsetMap[M_KeyType] = KT_ATOMIC; -- Atomic Keys
-  lsetMap[M_BinName] = LSET_CONTROL_BIN;
   lsetMap[M_Modulo] = DEFAULT_DISTRIB;
   lsetMap[M_ThreshHold] = 4; -- Rehash after this many inserts
 
@@ -412,7 +444,6 @@ local function packageDebugModeBinary( lsetMap )
   lsetMap[M_StoreMode] = SM_LIST; -- Use List Mode
   lsetMap[M_BinaryStoreSize] = 16; -- Set to the exact fixed size
   lsetMap[M_KeyType] = KT_COMPLEX; -- special function for list compare.
-  lsetMap[M_BinName] = LSET_CONTROL_BIN;
   lsetMap[M_Modulo] = DEFAULT_DISTRIB;
   lsetMap[M_ThreshHold] = 4; -- Rehash after this many inserts
 
@@ -424,8 +455,7 @@ end -- packageDebugModeBinary( lsetMap )
 -- ======================================================================
 local function packageDebugModeNumber( lsetMap )
   local meth = "packageDebugModeNumber()";
-  GP=F and trace("[ENTER]: <%s:%s>:: CtrlMap(%s)",
-    MOD, meth, tostring( lsetMap ));
+  GP=E and trace("[ENTER]<%s:%s>::CtrlMap(%s)", MOD, meth, tostring(lsetMap));
   
   -- General Parameters
   lsetMap[M_Transform] = nil;
@@ -435,22 +465,21 @@ local function packageDebugModeNumber( lsetMap )
   lsetMap[M_StoreMode ]= SM_LIST; -- Use List Mode
   lsetMap[M_BinaryStoreSize] = 0; -- Don't waste room if we're not using it
   lsetMap[M_KeyType] = KT_ATOMIC; -- Simple Number (atomic) compare
-  lsetMap[M_BinName] = LSET_CONTROL_BIN;
   lsetMap[M_Modulo] = DEFAULT_DISTRIB;
   lsetMap[M_ThreshHold] = 4; -- Rehash after this many inserts
 
-  GP=F and trace("[EXIT]: <%s:%s>:: CtrlMap(%s)",
+  GP=E and trace("[EXIT]: <%s:%s>:: CtrlMap(%s)",
     MOD, meth, tostring( lsetMap ));
 end -- packageDebugModeNumber( lsetMap )
 
 -- ======================================================================
--- Package = "StumbleUpon"
--- StumbleUpon uses a compacted representation.
+-- Package = "CompressInteger"
+-- CompressInteger uses a compacted representation.
 -- NOTE: This will eventually move to the UDF Function Table, or to a
 -- separate Configuration file.  For the moment it is included here for
 -- convenience. 
 -- ======================================================================
-local function packageStumbleUpon( lsetMap )
+local function packageCompressInteger( lsetMap )
   
   -- General Parameters
   lsetMap[M_Transform] = "compress4ByteInteger";
@@ -459,11 +488,10 @@ local function packageStumbleUpon( lsetMap )
   lsetMap[M_StoreMode] = SM_BINARY; -- Use a Byte Array
   lsetMap[M_BinaryStoreSize] = 4; -- Storing a single 4 byte integer
   lsetMap[M_KeyType] = KT_ATOMIC; -- Atomic Keys (a number)
-  lsetMap[M_BinName] = LSET_CONTROL_BIN;
   lsetMap[M_Modulo] = DEFAULT_DISTRIB;
   lsetMap[M_ThreshHold] = 100; -- Rehash after this many inserts
   
-end -- packageStumbleUpon( lsetMap )
+end -- packageCompressInteger( lsetMap )
 --
 -- ======================================================================
 -- When we create the initial LDT Control Bin for the entire record (the
@@ -505,6 +533,8 @@ local function setLdtRecordType( topRec )
     recPropMap[RPM_VInfo] = vinfo; 
     recPropMap[RPM_LdtCount] = 1; -- this is the first one.
     recPropMap[RPM_Magic] = MAGIC;
+    -- Set this control bin as HIDDEN
+    record.set_flags(topRec, REC_LDT_CTRL_BIN, BF_LDT_CONTROL );
   else
     -- Not much to do -- increment the LDT count for this record.
     recPropMap = topRec[REC_LDT_CTRL_BIN];
@@ -534,7 +564,7 @@ end -- setLdtRecordType()
 -- ======================================================================
 local function adjustLSetMap( lsetMap, argListMap )
   local meth = "adjustLSetMap()";
-  GP=F and trace("[ENTER]: <%s:%s>:: LsetMap(%s)::\n ArgListMap(%s)",
+  GP=E and trace("[ENTER]: <%s:%s>:: LSetMap(%s)::\n ArgListMap(%s)",
     MOD, meth, tostring(lsetMap), tostring( argListMap ));
 
   -- Iterate thru the argListMap and adjust (override) the map settings 
@@ -573,9 +603,9 @@ local function adjustLSetMap( lsetMap, argListMap )
           packageDebugModeBinary( lsetMap );
       elseif value == PackageDebugModeNumber then
           packageDebugModeNumber( lsetMap );
-      -- SPECIAL Cases (e.g. Stumble, etc)
-      elseif value == PackageStumbleUpon then
-          packageStumbleUpon( lsetMap );
+      -- SPECIAL Cases (e.g. CompressInteger, etc)
+      elseif value == PackageCompressInteger then
+          packageCompressInteger( lsetMap );
       end
     elseif name == "KeyType" and type( value ) == "string" then
       -- Use only valid values (default to ATOMIC if not specifically complex)
@@ -598,7 +628,7 @@ local function adjustLSetMap( lsetMap, argListMap )
     end
   end -- for each argument
 
-  GP=F and trace("[EXIT]: <%s:%s> : CTRL Map after Adjust(%s)",
+  GP=E and trace("[EXIT]: <%s:%s> : CTRL Map after Adjust(%s)",
     MOD, meth , tostring(lsetMap));
       
   return lsetMap
@@ -644,6 +674,7 @@ local function lsetSummary( lsetList )
   -- General LSO Parms:
   resultMap.StoreMode            = lsetMap[M_StoreMode];
   resultMap.StoreState           = lsetMap[M_StoreState];
+  resultMap.SetTypeStore         = lsetMap[M_SetTypeStore];
   resultMap.StoreLimit           = lsetMap[M_StoreLimit];
   resultMap.Transform            = lsetMap[M_Transform];
   resultMap.UnTransform          = lsetMap[M_UnTransform];
@@ -665,7 +696,7 @@ end -- lsetSummary()
 -- as a string that can be printed.
 -- ======================================================================
 local function lsetSummaryString( lsetList )
-   GP=F and info("Calling lsetSummaryString "); 
+   GP=F and trace("Calling lsetSummaryString "); 
   return tostring( lsetSummary( lsetList ));
 end -- lsetSummaryString()
 
@@ -688,7 +719,7 @@ end -- lsetSummaryString()
 -- ======================================================================
 local function initializeLSetMap(topRec, lsetBinName )
   local meth = "initializeLSetMap()";
-  GP=F and trace("[ENTER]: <%s:%s>::Bin(%s)",MOD, meth, tostring(lsetBinName));
+  GP=E and trace("[ENTER]: <%s:%s>::Bin(%s)",MOD, meth, tostring(lsetBinName));
   
   -- Create the two maps and fill them in.  There's the General Property Map
   -- and the LDT specific Lso Map.
@@ -712,26 +743,27 @@ local function initializeLSetMap(topRec, lsetBinName )
 
   -- LSO Data Record Chunk Settings: Passed into "Chunk Create"
   lsetMap[M_LdrEntryCountMax]= 100;  -- Max # of Data Chunk items (List Mode)
-  lsetMap[M_LdrByteEntrySize]=  0;  -- Byte size of a fixed size Byte Entry
+  lsetMap[M_LdrByteEntrySize]=   0;  -- Byte size of a fixed size Byte Entry
   lsetMap[M_LdrByteCountMax] =   0; -- Max # of Data Chunk Bytes (binary mode)
 
   lsetMap[M_Transform]        = nil; -- applies only to complex lmap
   lsetMap[M_UnTransform]      = nil; -- applies only to complex lmap
   lsetMap[M_KeyCompare]       = nil; -- applies only to complex lmap
   lsetMap[M_StoreState]       = SS_COMPACT; -- SM_LIST or SM_BINARY:
+  lsetMap[M_SetTypeStore]     = ST_RECORD; -- default is Top Record Store.
   lsetMap[M_HashType]         = HT_STATIC; -- Static or Dynamic
   lsetMap[M_BinaryStoreSize]  = nil; 
   lsetMap[M_KeyType]          = KT_ATOMIC; -- assume "atomic" values for now.
-  lsetMap[M_TotalCount] = 0; -- Count of both valid and deleted elements
-  lsetMap[M_Modulo] = DEFAULT_DISTRIB;
-  lsetMap[M_ThreshHold] = 101; -- Rehash after this many inserts
+  lsetMap[M_TotalCount]       = 0; -- Count of both valid and deleted elements
+  lsetMap[M_Modulo]           = DEFAULT_DISTRIB;
+  lsetMap[M_ThreshHold]       = 101; -- Rehash after this many inserts
 
   -- Put our new maps in a list, in the record, then store the record.
   list.append( lsetList, propMap );
   list.append( lsetList, lsetMap );
-  topRec[LSET_CONTROL_BIN]            = lsetList;
+  topRec[lsetBinName]            = lsetList;
 
-  GP=F and info("[DEBUG]: <%s:%s> : LSET Summary after Init(%s)",
+  GP=F and trace("[DEBUG]: <%s:%s> : LSET Summary after Init(%s)",
       MOD, meth , lsetSummaryString(lsetList));
 
   -- If the topRec already has an LDT CONTROL BIN (with a valid map in it),
@@ -741,7 +773,7 @@ local function initializeLSetMap(topRec, lsetBinName )
   -- This method will also call record.set_type().
   setLdtRecordType( topRec );
 
-  GP=F and trace("[EXIT]:<%s:%s>:", MOD, meth );
+  GP=E and trace("[EXIT]:<%s:%s>:", MOD, meth );
   return lsetList;
 
 end -- initializeLSetMap()
@@ -777,7 +809,7 @@ local function numberHash( value, modulo )
     -- math.randomseed( value ); return math.random( modulo );
     result = CRC32.Hash( value ) % modulo;
   end
-  GP=F and trace("[EXIT]:<%s:%s>HashResult(%s)", MOD, meth, tostring(result))
+  GP=E and trace("[EXIT]:<%s:%s>HashResult(%s)", MOD, meth, tostring(result))
   return result
 end -- numberHash
 
@@ -800,13 +832,18 @@ end
 -- ======================================================================
 local function setupNewBin( topRec, binNum )
   local meth = "setupNewBin()";
-  GP=F and trace("[ENTER]: <%s:%s> Bin(%d) ", MOD, meth, binNum );
+  GP=E and trace("[ENTER]: <%s:%s> Bin(%d) ", MOD, meth, binNum );
 
   local binName = getBinName( binNum );
-  -- create the first LsetBin_n LDT bin
+  -- create the first LSetBin_n LDT bin
   topRec[binName] = list(); -- Create a new list for this new bin
 
-  GP=F and trace("[EXIT]: <%s:%s> BinNum(%d) BinName(%s)",
+  -- This bin must now be considered HIDDEN:
+  GP=E and trace("[DEBUG]: <%s:%s> Setting BinName(%s) as HIDDEN",
+                 MOD, meth, binName );
+  record.set_flags(topRec, binName, BF_LDT_HIDDEN );
+
+  GP=E and trace("[EXIT]: <%s:%s> BinNum(%d) BinName(%s)",
                  MOD, meth, binNum, binName );
 
   return binName;
@@ -820,7 +857,7 @@ end -- setupNewBin
 -- ======================================================================
 local function getKeyValue( ldtMap, value )
   local meth = "getKeyValue()";
-  GP=F and trace("[ENTER]<%s:%s> value(%s) KeyType(%s)",
+  GP=E and trace("[ENTER]<%s:%s> value(%s) KeyType(%s)",
     MOD, meth, tostring(value), tostring(ldtMap[M_KeyType]) );
 
   local keyValue;
@@ -840,7 +877,7 @@ local function getKeyValue( ldtMap, value )
     end
   end
 
-  GP=F and trace("[EXIT]<%s:%s> Result(%s)", MOD, meth, tostring(keyValue) );
+  GP=E and trace("[EXIT]<%s:%s> Result(%s)", MOD, meth, tostring(keyValue) );
   return keyValue;
 end -- getKeyValue();
 
@@ -856,7 +893,7 @@ end -- getKeyValue();
 -- ======================================================================
 local function computeSetBin( key, lsetMap )
   local meth = "computeSetBin()";
-  GP=F and trace("[ENTER]: <%s:%s> val(%s) Map(%s) ",
+  GP=E and trace("[ENTER]: <%s:%s> val(%s) Map(%s) ",
                  MOD, meth, tostring(key), tostring(lsetMap) );
 
   -- Check StoreState:  If we're in single bin mode, it's easy. Everything
@@ -877,7 +914,7 @@ local function computeSetBin( key, lsetMap )
     end
   end
 
-  GP=F and trace("[EXIT]: <%s:%s> Key(%s) BinNumber (%d) ",
+  GP=E and trace("[EXIT]: <%s:%s> Key(%s) BinNumber (%d) ",
                  MOD, meth, tostring(key), binNumber );
 
   return binNumber;
@@ -913,7 +950,7 @@ end -- listAppend()
 -- =======================================================================
 local function applyTransform( transformFunc, newValue )
   local meth = "applyTransform()";
-  GP=F and trace("[ENTER]: <%s:%s> transform(%s) type(%s) Value(%s)",
+  GP=E and trace("[ENTER]: <%s:%s> transform(%s) type(%s) Value(%s)",
  MOD, meth, tostring(transformFunc), type(transformFunc), tostring(newValue));
 
   local storeValue = newValue;
@@ -974,7 +1011,7 @@ end -- unTransformSimpleCompare()
 local function unTransformComplexCompare(lsetMap, unTransform, dbValue, searchKey)
   local meth = "unTransformComplexCompare()";
 
-  GP=F and trace("[ENTER]: <%s:%s> unTransform(%s) dbVal(%s) key(%s)",
+  GP=E and trace("[ENTER]: <%s:%s> unTransform(%s) dbVal(%s) key(%s)",
      MOD, meth, tostring(unTransform), tostring(dbValue), tostring(searchKey));
 
   local modValue = dbValue;
@@ -1022,7 +1059,7 @@ end -- unTransformComplexCompare()
 local function simpleScanList(resultList, lsetList, binList, value, flag, 
                filter, fargs ) 
   local meth = "simpleScanList()";
-  GP=F and trace("[ENTER]: <%s:%s> Looking for Value(%s) in List(%s)",
+  GP=E and trace("[ENTER]: <%s:%s> Looking for Value(%s) in List(%s)",
      MOD, meth, tostring(value), tostring(binList))
                  
   local propMap = lsetList[1]; 
@@ -1055,7 +1092,7 @@ local function simpleScanList(resultList, lsetList, binList, value, flag,
 
           -- APPLY FILTER HERE 
           
-        GP=F and trace("[EARLY EXIT]: <%s:%s> Found(%s)",
+        GP=E and trace("[EARLY EXIT]: <%s:%s> Found(%s)",
           MOD, meth, tostring(resultValue));
         if( flag == FV_DELETE ) then
 --        binList[i] = FV_EMPTY; -- the value is NO MORE
@@ -1088,13 +1125,13 @@ local function simpleScanList(resultList, lsetList, binList, value, flag,
   -- make the list longer.
   -- TODO: Fill in holes if we notice a lot of gas in the lists.
   if flag == FV_INSERT then
-    GP=F and trace("[EXIT]: <%s:%s> Inserting(%s)",
+    GP=E and trace("[EXIT]: <%s:%s> Inserting(%s)",
                    MOD, meth, tostring(value));
     local storeValue = applyTransform( transform, value );
     list.append( binList, storeValue );
     return 1 -- show caller we did an insert
   end
-  GP=F and trace("[LATE EXIT]: <%s:%s> Did NOT Find(%s)",
+  GP=E and trace("[LATE EXIT]: <%s:%s> Did NOT Find(%s)",
                  MOD, meth, tostring(value));
   return ERR_NOT_FOUND; -- All is well, but NOT FOUND.
 end -- simpleScanList
@@ -1132,7 +1169,7 @@ local function complexScanList(resultList, lsetList, objList, key, value, flag,
   local propMap = lsetList[1]; 
   local lsetMap = lsetList[2];
 
-  GP=F and trace("[ENTER]<%s:%s> ObjList(%s) Key(%s) Val(%s) Flg(%s)", MOD,
+  GP=E and trace("[ENTER]<%s:%s> ObjList(%s) Key(%s) Val(%s) Flg(%s)", MOD,
     meth, tostring(objList), tostring(key), tostring(value), tostring(flag));
 
   local transform = nil;
@@ -1162,7 +1199,7 @@ local function complexScanList(resultList, lsetList, objList, key, value, flag,
 
           -- APPLY FILTER HERE 
           
-        GP=F and trace("[EARLY EXIT]: <%s:%s> Found(%s)",
+        GP=E and trace("[EARLY EXIT]: <%s:%s> Found(%s)",
           MOD, meth, tostring(resultValue));
         if( flag == FV_DELETE ) then
 --        objList[i] = FV_EMPTY; -- the value is NO MORE
@@ -1200,7 +1237,7 @@ local function complexScanList(resultList, lsetList, objList, key, value, flag,
     return 1 -- show caller we did an insert
   end
 
-  GP=F and trace("[LATE EXIT]: <%s:%s> Did NOT Find(%s)",
+  GP=E and trace("[LATE EXIT]: <%s:%s> Did NOT Find(%s)",
     MOD, meth, tostring(value));
   return ERR_NOT_FOUND; -- All is well, but NOT FOUND.
 end -- complexScanList
@@ -1219,7 +1256,7 @@ end -- complexScanList
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 local function simpleScanListAll(topRec, resultList, lsetList, filter, fargs) 
   local meth = "simpleScanListAll()";
-  GP=F and trace("[ENTER]: <%s:%s> Appending all the elements of List ",
+  GP=E and trace("[ENTER]: <%s:%s> Appending all the elements of List ",
                  MOD, meth)
 
   local propMap = lsetList[1]; 
@@ -1242,7 +1279,7 @@ local function simpleScanListAll(topRec, resultList, lsetList, filter, fargs)
   -- Loop through all the modulo n lset-record bins 
   local distrib = lsetMap[M_Modulo];
 
-  GP=F and trace(" Number of Lset bins to parse: %d ", distrib)
+  GP=F and trace(" Number of LSet bins to parse: %d ", distrib)
 
   for j = 0, (distrib - 1), 1 do
 	local binName = getBinName( j );
@@ -1276,7 +1313,7 @@ local function simpleScanListAll(topRec, resultList, lsetList, filter, fargs)
     end -- end of topRec null check 
   end -- end for distrib list for-loop 
 
-  GP=F and trace("[EXIT]: <%s:%s> Appending %d elements to ResultList ",
+  GP=E and trace("[EXIT]: <%s:%s> Appending %d elements to ResultList ",
                  MOD, meth, listCount)
 
   return 0; 
@@ -1301,7 +1338,7 @@ end -- simpleScanListAll
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 local function complexScanListAll(topRec, resultList, lsetList, filter, fargs) 
   local meth = "complexScanListAll()";
-  GP=F and trace("[ENTER]: <%s:%s> Appending all the elements of List ",
+  GP=E and trace("[ENTER]: <%s:%s> Appending all the elements of List ",
                  MOD, meth)
 
   local propMap = lsetList[1]; 
@@ -1322,7 +1359,7 @@ local function complexScanListAll(topRec, resultList, lsetList, filter, fargs)
   -- Loop through all the modulo n lset-record bins 
   local distrib = lsetMap[M_Modulo];
   
-  GP=F and trace(" Number of Lset bins to parse: %d ", distrib)
+  GP=F and trace(" Number of LSet bins to parse: %d ", distrib)
 
   for j = 0, (distrib - 1), 1 do
 	local binName = getBinName( j );
@@ -1352,7 +1389,7 @@ local function complexScanListAll(topRec, resultList, lsetList, filter, fargs)
     end -- end of topRec null check 
   end -- end for distrib list for-loop 
 
- GP=F and trace("[EXIT]: <%s:%s> Appending %d elements to ResultList ",
+ GP=E and trace("[EXIT]: <%s:%s> Appending %d elements to ResultList ",
                  MOD, meth, listCount)
 
   return 0; 
@@ -1380,7 +1417,7 @@ local function
 scanList( resultList, lsetList, binList, key, object, flag, filter, fargs ) 
   local meth = "scanList()";
 
-  GP=F and trace("[ENTER]<%s:%s> BL(%s) Ky(%s) Ob(%s) Flg(%s) Ftr(%s)Frg(%s)",
+  GP=E and trace("[ENTER]<%s:%s> BL(%s) Ky(%s) Ob(%s) Flg(%s) Ftr(%s)Frg(%s)",
     MOD, meth, tostring(binList), tostring(key), tostring(object),
     tostring( flag ), tostring(filter), tostring(fargs));
   
@@ -1411,7 +1448,7 @@ end
 local function localInsert( topRec, lsetList, newValue, stats )
   local meth = "localInsert()";
   
-  GP=F and info("[ENTER]:<%s:%s>Insert(%s)", MOD, meth, tostring(newValue));
+  GP=E and trace("[ENTER]:<%s:%s>Insert(%s)", MOD, meth, tostring(newValue));
 
   local propMap = lsetList[1];  
   local lsetMap = lsetList[2];
@@ -1450,9 +1487,9 @@ local function localInsert( topRec, lsetList, newValue, stats )
     GP=F and trace("[STATUS]<%s:%s>NOT updating stats (%d)", MOD, meth, stats);
   end
 
-  topRec[LSET_CONTROL_BIN] = lsetList;
+  topRec[lsetBinName] = lsetList;
  
-  GP=F and trace("[EXIT]: <%s:%s>Storing Record() with New Value(%s): Map(%s)",
+  GP=E and trace("[EXIT]: <%s:%s>Storing Record() with New Value(%s): Map(%s)",
                  MOD, meth, tostring( newValue ), tostring( lsetMap ) );
   -- No need to return anything
 end -- localInsert
@@ -1473,8 +1510,8 @@ end -- localInsert
 -- ======================================================================
 local function rehashSet( topRec, lsetBinName, lsetList )
   local meth = "rehashSet()";
-  GP=F and trace("[ENTER]:<%s:%s> !!!! REHASH !!!! ", MOD, meth );
-  GP=F and trace("[ENTER]:<%s:%s> !!!! REHASH !!!! ", MOD, meth );
+  GP=E and trace("[ENTER]:<%s:%s> !!!! REHASH !!!! ", MOD, meth );
+  GP=E and trace("[ENTER]:<%s:%s> !!!! REHASH !!!! ", MOD, meth );
 
   local propMap = lsetList[1];  
   local lsetMap = lsetList[2];
@@ -1504,60 +1541,51 @@ local function rehashSet( topRec, lsetBinName, lsetList )
     localInsert( topRec, lsetList, listCopy[i], 0 ); -- do NOT update counts.
   end
 
-  GP=F and trace("[EXIT]: <%s:%s>", MOD, meth );
+  GP=E and trace("[EXIT]: <%s:%s>", MOD, meth );
 end -- rehashSet()
-
 
 -- ======================================================================
 -- validateBinName(): Validate that the user's bin name for this large
 -- object complies with the rules of Aerospike. Currently, a bin name
 -- cannot be larger than 14 characters (a seemingly low limit).
--- NOTE: Not needed while we're still hard-coding the LSET_CONTROL_BIN
--- name.
 -- ======================================================================
 local function validateBinName( binName )
   local meth = "validateBinName()";
-  GP=F and trace("[ENTER]: <%s:%s> validate Bin Name(%s)",
-    MOD, meth, tostring(binName));
+  GP=E and trace("[ENTER]: <%s:%s> validate Bin Name(%s)",
+  MOD, meth, tostring(binName));
 
   if binName == nil  then
+    warn("[ERROR EXIT]:<%s:%s> Null Bin Name", MOD, meth );
     error( ldte.ERR_NULL_BIN_NAME );
   elseif type( binName ) ~= "string"  then
+    warn("[ERROR EXIT]:<%s:%s> Bin Name Not a String", MOD, meth );
     error( ldte.ERR_BIN_NAME_NOT_STRING );
   elseif string.len( binName ) > 14 then
+    warn("[ERROR EXIT]:<%s:%s> Bin Name Too Long", MOD, meth );
     error( ldte.ERR_BIN_NAME_TOO_LONG );
   end
+  GP=E and trace("[EXIT]:<%s:%s> Ok", MOD, meth );
 end -- validateBinName
 
 -- ======================================================================
 -- validateRecBinAndMap():
 -- Check that the topRec, the lsetBinName and lsetMap are valid, otherwise
 -- jump out with an error() call.
--- NOTE: In this version of Large Set, there is a SINGLE dedicated
--- Set bin and it is hard coded:  LSET_CONTROL_BIN => 'LSetControlBin'
--- So -- there's no point in checking that the CONTROL BIN name is ok,
--- since it MUST be (it's defined in this code).
--- Also -- we don't check the user's supplied bin name since that is not
--- used -- the bin name is hard-coded (for now).  We only care about the
--- existence of the Record, the control bin and the Map Integrity.
 --
 -- Parms:
 -- (*) topRec:
--- (*) userBinName: User's Name -- not currently used
+-- (*) lsetBinName: User's Name -- not currently used
 -- ======================================================================
-local function validateRecBinAndMap( topRec, userBinName, mustExist )
+local function validateRecBinAndMap( topRec, lsetBinName, mustExist )
   local meth = "validateRecBinAndMap()";
 
-  GP=F and trace("[ENTER]: <%s:%s>  ", MOD, meth );
+  GP=E and trace("[ENTER]: <%s:%s>  ", MOD, meth );
 
   -- Validate that the user's supplied BinName will work:
   -- ==========================================================
-  -- NOTE: -- No need to check LSET Control bin name (for now) because
-  -- we're not using the user's name -- only our own preset name.  Later,
-  -- when we change to a single bin (named by the user), THEN we'll need
-  -- to validate the user's name.
-  -- validateBinName( binName );
-  -- ==========================================================
+  -- Now that we have changed to using the user's name, we need to validate
+  -- the user's bin name.
+  validateBinName( lsetBinName );
 
   -- If "mustExist" is true, then several things must be true or we will
   -- throw an error.
@@ -1575,35 +1603,35 @@ local function validateRecBinAndMap( topRec, userBinName, mustExist )
     end
       
     -- Control Bin Must Exist, in this case, lsetList is what we check
-    if( topRec[LSET_CONTROL_BIN] == nil ) then
+    if( topRec[lsetBinName] == nil ) then
       warn("[ERROR EXIT]: <%s:%s> LSET_BIN (%s) DOES NOT Exists",
-            MOD, meth, tostring(LSET_CONTROL_BIN) );
+            MOD, meth, tostring(lsetBinName) );
       error( ldte.ERR_BIN_DOES_NOT_EXIST );
     end
 
     -- check that our bin is (mostly) there
-    local lsetList = topRec[LSET_CONTROL_BIN]; -- The main lset map
+    local lsetList = topRec[lsetBinName]; -- The main lset map
     local propMap = lsetList[1];
     local lsetMap  = lsetList[2];
     
     if(propMap[PM_Magic] ~= MAGIC) or propMap[PM_LdtType] ~= LDT_TYPE_LSET then
-      GP=F and warn("[ERROR EXIT]:<%s:%s>LSET_BIN(%s) Corrupted:No magic:1",
-            MOD, meth, LSET_CONTROL_BIN );
+      GP=E and warn("[ERROR EXIT]:<%s:%s>LSET_BIN(%s) Corrupted:No magic:1",
+            MOD, meth, lsetBinName );
       error( ldte.ERR_BIN_DAMAGED );
     end
   else
     -- OTHERWISE, we're just checking that nothing looks bad, but nothing
     -- is REQUIRED to be there.  Basically, if a control bin DOES exist
     -- then it MUST have magic.
-    if topRec ~= nil and topRec[LSET_CONTROL_BIN] ~= nil then
-    
-       local lsetList = topRec[LSET_CONTROL_BIN]; -- The main lset map
+    if topRec ~= nil and topRec[lsetBinName] ~= nil then
+       local lsetList = topRec[lsetBinName]; -- The main lset map
        local propMap = lsetList[1];
        local lsetMap  = lsetList[2];
     
-       if( propMap[PM_Magic] ~= MAGIC ) or propMap[PM_LdtType] ~= LDT_TYPE_LSET then
-        GP=F and warn("[ERROR EXIT]:<%s:%s>LSET_BIN<%s:%s>Corrupted:No magic:2",
-              MOD, meth, LSET_CONTROL_BIN, tostring( lsetMap ));
+       if( propMap[PM_Magic] ~= MAGIC ) or propMap[PM_LdtType] ~= LDT_TYPE_LSET
+         then
+        GP=E and warn("[ERROR EXIT]:<%s:%s>LSET_BIN<%s:%s>Corrupted:No magic:2",
+              MOD, meth, lsetBinName, tostring( lsetMap ));
         error( ldte.ERR_BIN_DAMAGED );
       end
     end
@@ -1611,14 +1639,10 @@ local function validateRecBinAndMap( topRec, userBinName, mustExist )
 end -- validateRecBinAndMap()
 
 -- ======================================================================
--- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
--- AS Large Set Main Functions
--- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
--- Requirements/Restrictions (this version).
--- (1) One Set Per Record
+-- ======================================================================
 --
 -- ======================================================================
--- || lset_create ||
+-- || localLSetCreate ||
 -- ======================================================================
 -- Create/Initialize a AS LSet structure in a record, using multiple bins
 --
@@ -1638,27 +1662,26 @@ end -- validateRecBinAndMap()
 -- (*) createSpec: A map of create specifications:  Most likely including
 --               :: a package name with a set of config parameters.
 --
-function lset_create( topRec, lsetBinName, createSpec )
-  local meth = "lset_create()";
-  GP=F and trace("[ENTER]: <%s:%s> Bin(%s) createSpec(%s)",
+local function localLSetCreate( topRec, lsetBinName, createSpec )
+  local meth = "localLSetCreate()";
+  GP=E and trace("[ENTER]: <%s:%s> Bin(%s) createSpec(%s)",
                  MOD, meth, tostring(lsetBinName), tostring(createSpec) );
 
-  GP=F and info("\n\n >>>>>>>>> API[ LSET CREATE ] <<<<<<<<<< \n\n");
+  GP=F and trace("\n\n >>>>>>>>> API[ LSET CREATE ] <<<<<<<<<< \n");
 
   -- Check to see if Set Structure (or anything) is already there,
   -- and if so, error.  We don't check for topRec already existing,
   -- because that is NOT an error.  We may be adding an LSET field to an
   -- existing record.
-  if( topRec[LSET_CONTROL_BIN] ~= nil ) then
-    GP=F and warn("[ERROR EXIT]: <%s:%s> LSET CONTROL BIN Already Exists",
+  if( topRec[lsetBinName] ~= nil ) then
+    GP=E and warn("[ERROR EXIT]: <%s:%s> LSET CONTROL BIN Already Exists",
                    MOD, meth );
     error( ldte.ERR_BIN_ALREADY_EXISTS );
   end
   -- NOTE: Do NOT call validateRecBinAndMap().  Not needed here.
   
   -- This will throw and error and jump out of Lua if binName is bad.
-  -- NOTE: Not needed until we switch to using a SINGLE BIN for LSET.
-  -- validateBinName( lsetBinName );
+  validateBinName( lsetBinName );
 
   GP=F and trace("[DEBUG]: <%s:%s> : Initialize SET CTRL Map", MOD, meth );
  
@@ -1673,21 +1696,16 @@ function lset_create( topRec, lsetBinName, createSpec )
   -- (createSpec) then apply them now.
   if createSpec ~= nil then 
     adjustLSetMap( lsetMap, createSpec );
-    -- Changes to the map need to be re-appended to topRec  
---     local NewlsetList = list();
---     list.append( NewlsetList, propMap );
---     list.append( NewlsetList, lsetMap );
---     topRec[LSET_CONTROL_BIN] = NewlsetList;
   end
 
   GP=F and trace("[DEBUG]: <%s:%s> : CTRL Map after Adjust(%s)",
                  MOD, meth , tostring(lsetMap));
 
   -- Sets the topRec control bin attribute to point to the 2 item list
-  -- we created from InitializeLsetMap() : 
+  -- we created from InitializeLSetMap() : 
   -- Item 1 :  the property map & Item 2 : the lsetMap
   
-  topRec[LSET_CONTROL_BIN] = lsetList; -- store in the record
+  topRec[lsetBinName] = lsetList; -- store in the record
 
   -- initializeLSetMap always sets lsetMap[M_StoreState] to SS_COMPACT
   -- At this point there is only one bin.
@@ -1704,13 +1722,13 @@ function lset_create( topRec, lsetBinName, createSpec )
     rc = aerospike:update( topRec );
   end
 
-  GP=F and trace("[EXIT]: <%s:%s> : Done.  RC(%d)", MOD, meth, rc );
+  GP=E and trace("[EXIT]: <%s:%s> : Done.  RC(%d)", MOD, meth, rc );
   if( rc == nil or rc == 0 ) then
-      return 0;
+    return 0;
   else
-      error( ldte.ERR_CREATE );
+    error( ldte.ERR_CREATE );
   end
-end -- lset_create()
+end -- localLSetCreate()
 
 -- ======================================================================
 -- |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
@@ -1756,7 +1774,7 @@ end -- lset_create()
 local function localLSetInsert( topRec, lsetBinName, newValue, createSpec )
   local meth = "localLSetInsert()";
   
-  GP=F and trace("[ENTER]:<%s:%s> SetBin(%s) NewValue(%s) createSpec(%s)",
+  GP=E and trace("[ENTER]:<%s:%s> SetBin(%s) NewValue(%s) createSpec(%s)",
                  MOD, meth, tostring(lsetBinName), tostring( newValue ),
                  tostring( createSpec ));
 
@@ -1768,14 +1786,14 @@ local function localLSetInsert( topRec, lsetBinName, newValue, createSpec )
   local lsetMap;
 
   -- Check that the Set Structure is already there, otherwise, error
-  if( topRec[LSET_CONTROL_BIN] == nil ) then
+  if( topRec[lsetBinName] == nil ) then
     warn("[WARNING]: <%s:%s> LSET CONTROL BIN does not Exist:Creating",
          MOD, meth );
           
     lsetList = initializeLSetMap( topRec, lsetBinName );
     propMap     = lsetList[1]; 
     lsetMap = lsetList[2]; 
-    topRec[LSET_CONTROL_BIN] = lsetList; -- store in the record
+    topRec[lsetBinName] = lsetList; -- store in the record
     
     -- If the user has passed in some settings that override our defaults
     -- (createSpce) then apply them now.
@@ -1788,7 +1806,7 @@ local function localLSetInsert( topRec, lsetBinName, newValue, createSpec )
     setupNewBin( topRec, 0 ); -- set up Bin ZERO
     
   else
-    lsetList = topRec[LSET_CONTROL_BIN]; -- The main lset control structure
+    lsetList = topRec[lsetBinName]; -- The main lset control structure
     propMap = lsetList[1];
     lsetMap  = lsetList[2];
   end
@@ -1796,7 +1814,7 @@ local function localLSetInsert( topRec, lsetBinName, newValue, createSpec )
   -- When we're in "Compact" mode, before each insert, look to see if 
   -- it's time to rehash our single bin into all bins.
   -- These should already be set
-  -- lsetList = topRec[LSET_CONTROL_BIN]; -- The main lset map
+  -- lsetList = topRec[lsetBinName]; -- The main lset map
   -- propMap = lsetList[1];
   -- lsetMap  = lsetList[2];
 
@@ -1818,9 +1836,12 @@ local function localLSetInsert( topRec, lsetBinName, newValue, createSpec )
   -- happens so no return code (or checking) needed here.
   localInsert( topRec, lsetList, newValue, 1 );
 
-  -- NOTE: the update of the TOP RECORD (LSET_CONTROL_BIN) has already
+  -- NOTE: the update of the TOP RECORD has already
   -- been taken care of in localInsert, so we don't need to do it here.
-  -- topRec[LSET_CONTROL_BIN] = lsetList;
+  --
+  -- Do it again here -- for now.
+  --
+  topRec[lsetBinName] = lsetList;
   -- Also -- in Lua -- all data (like the maps and lists) are inked by
   -- reference -- so they do not need to be "re-updated".  However, the
   -- record itself, must have the object re-assigned to the BIN.
@@ -1835,7 +1856,7 @@ local function localLSetInsert( topRec, lsetBinName, newValue, createSpec )
     rc = aerospike:update( topRec );
   end
 
-  GP=F and trace("[EXIT]: <%s:%s> : Done.  RC(%d)", MOD, meth, rc );
+  GP=E and trace("[EXIT]: <%s:%s> : Done.  RC(%d)", MOD, meth, rc );
   if( rc == nil or rc == 0 ) then
       return 0;
   else
@@ -1845,49 +1866,12 @@ end -- function localLSetInsert()
 
 
 -- ======================================================================
--- lset_insert() -- with and without create
+-- localLSetInsertAll() -- with and without create
 -- ======================================================================
-function lset_insert( topRec, lsetBinName, newValue )
-  GP=F and info("\n\n >>>>>>>>> API[ LSET INSERT ] <<<<<<<<<< \n\n");
-  return localLSetInsert( topRec, lsetBinName, newValue, nil )
-end -- lset_insert()
-
-function lset_create_and_insert( topRec, lsetBinName, newValue, createSpec )
-  GP=F and info("\n\n >>>>>>>>> API[ LSET CREATE AND INSERT ] <<<<<<<<<< \n\n");
-  return localLSetInsert( topRec, lsetBinName, newValue, createSpec )
-end -- lset_create_and_insert()
-
 -- ======================================================================
--- lset_insert_all() -- with and without create
--- ======================================================================
-function lset_insert_all( topRec, binName, valueList )
+local function localLSetInsertAll( topRec, binName, valueList, createSpec )
   local meth = "lset_insert_all()";
-  GP=F and info("\n\n >>>>>>>>> API[ LSET INSERT ALL ] <<<<<<<<<< \n\n");
-
-  local rc = 0;
-  if( valueList ~= nil and list.size(valueList) > 0 ) then
-    local listSize = list.size( valueList );
-    for i = 1, listSize, 1 do
-      rc = localLSetInsert( topRec, binName, valueList[i], nil );
-      if( rc < 0 ) then
-        warn("[ERROR]<%s:%s> Problem Inserting Item #(%d) [%s]", MOD, meth, i,
-          tostring( valueList[i] ));
-          error(ldte.ERR_INSERT);
-      end
-    end
-  else
-    warn("[ERROR]<%s:%s> Invalid Input Value List(%s)",
-      MOD, meth, tostring(valueList));
-    error(ldte.ERR_INPUT_PARM);
-  end
-  return rc;
-end -- lset_insert()
-
--- ======================================================================
-
-function lset_create_and_insert_all(topRec,lsetBinName,valueList,createSpec)
-  local meth = "lset_create_and_insert_all()";
-  GP=F and info("\n\n >>>>>>> API[ LSET CREATE AND INSERT ALL ] <<<<<<<< \n\n");
+  GP=F and trace("\n\n >>>>>>>>> API[ LSET INSERT ALL ] <<<<<<<<<< \n");
 
   local rc = 0;
   if( valueList ~= nil and list.size(valueList) > 0 ) then
@@ -1906,7 +1890,7 @@ function lset_create_and_insert_all(topRec,lsetBinName,valueList,createSpec)
     error(ldte.ERR_INPUT_PARM);
   end
   return rc;
-end -- lset_insert()
+end -- localLSetInsertAll()
 
 -- ======================================================================
 -- |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
@@ -1921,7 +1905,7 @@ end -- lset_insert()
 -- ======================================================================
 local function localLSetExists(topRec,lsetBinName,searchKey,filter,fargs )
   local meth = "localLSetExists()";
-  GP=F and trace("[ENTER]: <%s:%s> Search for Value(%s)",
+  GP=E and trace("[ENTER]: <%s:%s> Search for Value(%s)",
                  MOD, meth, tostring( searchKey ) );
 
   -- Validate the topRec, the bin and the map.  If anything is weird, then
@@ -1929,7 +1913,7 @@ local function localLSetExists(topRec,lsetBinName,searchKey,filter,fargs )
   validateRecBinAndMap( topRec, lsetBinName, true );
 
   -- Find the appropriate bin for the Search value
-  local lsetList = topRec[LSET_CONTROL_BIN];
+  local lsetList = topRec[lsetBinName];
   local propMap = lsetList[1]; 
   local lsetMap = lsetList[2];  
   local binNumber = computeSetBin( searchKey, lsetMap );
@@ -1950,22 +1934,6 @@ local function localLSetExists(topRec,lsetBinName,searchKey,filter,fargs )
   end
   
 end -- function localLSetExists()
-
--- ======================================================================
--- lset_exists() -- with and without filter
--- ======================================================================
-function lset_exists( topRec, lsetBinName, searchKey )
-  GP=F and info("\n\n >>>>>>>>> API[ LSET EXISTS ] <<<<<<<<<< \n\n");
-  return localLSetExists( topRec, lsetBinName, searchKey, nil, nil )
-end -- lset_exists()
-
-function lset_exists_then_filter( topRec, lsetBinName, searchKey,
-                                  filter, fargs )
-  GP=F and info("\n\n >>>>>>>>> API[ LSET EXISTS Then FILTER] <<<<<<<<<< \n\n");
-  return localLSetExists( topRec, lsetBinName, searchKey, filter, fargs );
-end -- lset_exists_then_filter()
-
-
 -- ======================================================================
 -- |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- || as Large Set Search
@@ -1977,12 +1945,11 @@ end -- lset_exists_then_filter()
 -- Then, scan the bin's list for that item (linear scan).
 --
 -- ======================================================================
-local function localLSetSearch(resultList, topRec, lsetBinName, searchKey,
-                filter, fargs)
-
+local function localLSetSearch(topRec, lsetBinName, searchKey, filter, fargs)
   local meth = "localLSetSearch()";
   rc = 0; -- start out OK.
-  GP=F and trace("[ENTER]: <%s:%s> Search for Key(%s)",
+
+  GP=E and trace("[ENTER]: <%s:%s> Search for Key(%s)",
                  MOD, meth, tostring( searchKey ) );
 
   -- Validate the topRec, the bin and the map.  If anything is weird, then
@@ -1990,15 +1957,16 @@ local function localLSetSearch(resultList, topRec, lsetBinName, searchKey,
   validateRecBinAndMap( topRec, lsetBinName, true );
 
   -- Find the appropriate bin for the Search value
-  local lsetList = topRec[LSET_CONTROL_BIN];
+  local lsetList = topRec[lsetBinName];
   local propMap = lsetList[1]; 
   local lsetMap = lsetList[2];
   local binNumber = computeSetBin( searchKey, lsetMap );
   local binName = getBinName( binNumber );
   local binList = topRec[binName];
+  local resultList = list();
   rc = scanList(resultList,lsetList,binList,searchKey,nil,FV_SCAN,filter,fargs);
 
-  GP=F and trace("[EXIT]: <%s:%s>: Search Returns (%s)",
+  GP=E and trace("[EXIT]: <%s:%s>: Search Returns (%s)",
                  MOD, meth, tostring(result));
 
   return resultList;
@@ -2015,12 +1983,11 @@ end -- function localLSetSearch()
 -- This is basically a nested for-loop version of localLSetSearch() 
 --
 -- ======================================================================
-local function localLSetSearchAll(resultList, topRec, lsetBinName,
-                filter, fargs)
+local function localLSetScan(topRec, lsetBinName, filter, fargs)
 
-  local meth = "localLSetSearchAll()";
+  local meth = "localLSetScan()";
   rc = 0; -- start out OK.
-  GP=F and info("[ENTER]<%s:%s> Null SV: return all . Name(%s)",
+  GP=E and trace("[ENTER]<%s:%s> Null SV: return all . Name(%s)",
                  MOD, meth, tostring(lsetBinName) );
 
   -- Validate the topRec, the bin and the map.  If anything is weird, then
@@ -2028,10 +1995,11 @@ local function localLSetSearchAll(resultList, topRec, lsetBinName,
   validateRecBinAndMap( topRec, lsetBinName, true );
 
   -- Find the appropriate bin for the Search value
-  local lsetList = topRec[LSET_CONTROL_BIN];
+  local lsetList = topRec[lsetBinName];
   local propMap = lsetList[1]; 
   local lsetMap = lsetList[2];
   
+  local resultList = list();
  
   if lsetMap[M_KeyType] == KT_ATOMIC then
 	rc = simpleScanListAll(topRec, resultList, lsetList, filter, fargs) 
@@ -2039,60 +2007,11 @@ local function localLSetSearchAll(resultList, topRec, lsetBinName,
 	rc = complexScanListAll(topRec, resultList, lsetList, filter, fargs)
   end
 
-  GP=F and info("[EXIT]: <%s:%s>: Search Returns (%s) Size : %d",
+  GP=E and trace("[EXIT]: <%s:%s>: Search Returns (%s) Size : %d",
                  MOD, meth, tostring(resultList), list.size(resultList));
 
   return resultList; 
-end -- function localLSetSearchAll()
-
-
--- ======================================================================
--- lset_search() -- with and without filter
--- ======================================================================
-function lset_search( topRec, lsetBinName, searchKey )
-  GP=F and info("\n\n >>>>>>>>> API[ LSET SEARCH ] <<<<<<<<<< \n\n");
-  resultList = list();
-  -- if we dont have a searchKey, get all the list elements.
-  -- Note that this means an empty searchKey which is not 
-  -- the same as a nil or a NULL searchKey
-  if( searchKey == nil ) then
-    -- if no search value, use the faster SCAN (searchALL)
-    return localLSetSearchAll(resultList,topRec,lsetBinName,nil,nil)
-  else
-	  return localLSetSearch(resultList,topRec,lsetBinName,searchKey,nil,nil)
-  end
-end -- lset_search()
-
--- ======================================================================
-function
-lset_search_then_filter( topRec, lsetBinName, searchKey, filter, fargs )
-  GP=F and info("\n\n >>>>>>>>> API[ LSET SEARCH Then FILTER] <<<<<<<<<< \n\n");
-  resultList = list();
-  -- if we dont have a searchKey, get all the list elements.
-  -- Note that this means an empty searchKey which is not 
-  -- the same as a nil or a NULL searchKey
-  if( searchKey == nil ) then
-    -- if no search value, use the faster SCAN (searchALL)
-	return localLSetSearchAll(resultList,topRec,lsetBinName,filter,fargs)
-  else
-  	return localLSetSearch(resultList,topRec,lsetBinName,searchKey,filter,fargs)
-  end
-end -- lset_search_then_filter()
-
--- ======================================================================
--- lset_scan() -- with and without filter
--- ======================================================================
-function lset_scan( topRec, lsetBinName )
-  GP=F and info("\n\n >>>>>>>>> API[ LSET SCAN ] <<<<<<<<<< \n\n");
-  resultList = list();
-  return localLSetSearchAll(resultList,topRec,lsetBinName,nil,nil)
-end -- lset_search()
-
-function lset_scan_then_filter(topRec, lsetBinName, filter, fargs)
-  GP=F and info("\n\n >>>>>>>>> API[ LSET SCAN THEN FILTER] <<<<<<<<<< \n\n");
-  resultList = list();
-  return localLSetSearchAll(resultList,topRec,lsetBinName,filter,fargs)
-end -- lset_search_then_filter()
+end -- function localLSetScan()
 
 -- ======================================================================
 -- |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
@@ -2112,7 +2031,7 @@ local function localLSetDelete( topRec, lsetBinName, deleteKey,
         filter, fargs)
 
   local meth = "localLSetDelete()";
-  GP=F and trace("[ENTER]: <%s:%s> Delete Value(%s)",
+  GP=E and trace("[ENTER]: <%s:%s> Delete Value(%s)",
                  MOD, meth, tostring( deleteKey ) );
 
   local rc = 0; -- Start out ok.
@@ -2124,14 +2043,14 @@ local function localLSetDelete( topRec, lsetBinName, deleteKey,
 
 
   -- Check that the Set Structure is already there, otherwise, error
-  if( topRec[LSET_CONTROL_BIN] == nil ) then
-    GP=F and trace("[ERROR EXIT]: <%s:%s> LSetCtrlBin does not Exist",
+  if( topRec[lsetBinName] == nil ) then
+    GP=E and trace("[ERROR EXIT]: <%s:%s> LSetCtrlBin does not Exist",
                    MOD, meth );
     error( ldte.ERR_BIN_DOES_NOT_EXIST );
   end
 
   -- Find the appropriate bin for the Search value
-  local lsetList = topRec[LSET_CONTROL_BIN];
+  local lsetList = topRec[lsetBinName];
   local propMap = lsetList[1]; 
   local lsetMap = lsetList[2];
   local binNumber = computeSetBin( deleteKey, lsetMap );
@@ -2163,77 +2082,59 @@ local function localLSetDelete( topRec, lsetBinName, deleteKey,
     error( ldte.ERR_DELETE );
   end
 
-  GP=F and trace("[EXIT]: <%s:%s>: Delete RC(%d) ResultList(%s)",
+  GP=E and trace("[EXIT]: <%s:%s>: Delete RC(%d) ResultList(%s)",
                  MOD, meth, rc, tostring( resultList ));
 
   return resultList;
 end -- function localLSetDelete()
 
--- ======================================================================
--- lset_delete() -- with and without filter
--- Return resultList
--- (*) If successful: return deleted items (list.size( resultList ) > 0)
--- (*) If error: resultList will be an empty list.
--- ======================================================================
-function lset_delete( topRec, lsetBinName, searchKey )
-  GP=F and info("\n\n >>>>>>>>> API[ LSET DELETE ] <<<<<<<<<< \n\n");
-  return localLSetDelete(topRec, lsetBinName, searchKey, nil, nil )
-end -- lset_delete()
-
--- ======================================================================
-function
-lset_delete_then_filter( topRec, lsetBinName, searchKey, filter, fargs )
-  GP=F and info("\n\n >>>>>>>>> API[ LSET DELETE Then Filter] <<<<<<<<<< \n\n");
-  return localLSetDelete( topRec, lsetBinName, searchKey, filter, fargs )
-end -- lset_delete_then_filter()
-
 -- ========================================================================
--- lset_size() -- return the number of elements (item count) in the set.
+-- localGetSize() -- return the number of elements (item count) in the set.
 -- ========================================================================
-function lset_size( topRec, lsetBinName )
+local function localGetSize( topRec, lsetBinName )
   local meth = "lset_size()";
 
-  GP=F and trace("[ENTER1]: <%s:%s> lsetBinName(%s)",
+  GP=E and trace("[ENTER1]: <%s:%s> lsetBinName(%s)",
   MOD, meth, tostring(lsetBinName));
 
-  GP=F and info("\n\n >>>>>>>>> API[ LSET SIZE ] <<<<<<<<<< \n\n");
+  GP=F and trace("\n\n >>>>>>>>> API[ GET LSET SIZE ] <<<<<<<<<< \n");
 
   -- Validate the topRec, the bin and the map.  If anything is weird, then
   -- this will kick out with a long jump error() call.
   validateRecBinAndMap( topRec, lsetBinName, true );
 
-  local lsetList = topRec[LSET_CONTROL_BIN]; -- The main lset control structure
+  local lsetList = topRec[lsetBinName]; -- The main lset control structure
   local propMap = lsetList[1];
   local lsetMap  = lsetList[2];
 
   local itemCount = propMap[PM_ItemCount];
 
-  GP=F and trace("[EXIT]: <%s:%s> : size(%d)", MOD, meth, itemCount );
+  GP=E and trace("[EXIT]: <%s:%s> : size(%d)", MOD, meth, itemCount );
 
   return itemCount;
-end -- function lset_size()
+end -- function localGetSize()
 
 -- ========================================================================
--- lset_config() -- return the config settings
+-- localGetConfig() -- return the config settings
 -- ========================================================================
-function lset_config( topRec, lsetBinName )
-  local meth = "lset_config()";
+local function localGetConfig( topRec, lsetBinName )
+  local meth = "localGetConfig()";
 
-  GP=F and trace("[ENTER1]: <%s:%s> lsetBinName(%s)",
-  MOD, meth, tostring(lsetBinName));
+  GP=E and trace("[ENTER1]: <%s:%s> lsetBinName(%s)",
+      MOD, meth, tostring(lsetBinName));
 
-  GP=F and info("\n\n >>>>>>>>> API[ LSET CONFIG ] <<<<<<<<<< \n\n");
+  GP=F and trace("\n\n >>>>>>>>> API[ LSET CONFIG ] <<<<<<<<<< \n");
 
   -- Validate the topRec, the bin and the map.  If anything is weird, then
   -- this will kick out with a long jump error() call.
   validateRecBinAndMap( topRec, lsetBinName, true );
 
-  local config = lsetSummary( topRec[ LSET_CONTROL_BIN ] );
+  local config = lsetSummary( topRec[ lsetBinName ] );
 
-  GP=F and trace("[EXIT]:<%s:%s>:config(%s)", MOD, meth, tostring(config));
+  GP=E and trace("[EXIT]:<%s:%s>:config(%s)", MOD, meth, tostring(config));
 
   return config;
-end -- function lset_config()
+end -- function localGetConfig()
 
 -- ========================================================================
 -- lset_dump()
@@ -2242,12 +2143,12 @@ end -- function lset_config()
 -- shown in the result.
 -- Return a LIST of lists -- with Each List marked with it's Hash Name.
 -- ========================================================================
-function lset_dump( topRec, binName )
-  local meth = "lset_dump()";
-  GP=F and trace("[ENTER]<%s:%s> ", MOD, meth)
-  GP=F and info("\n\n >>>>>>>>> API[ LSET DUMP ] <<<<<<<<<< \n\n");
+local function localDump( topRec, binName )
+  local meth = "localDump()";
+  GP=E and trace("[ENTER]<%s:%s> ", MOD, meth)
+  GP=F and trace("\n\n >>>>>>>>> API[ LSET DUMP ] <<<<<<<<<< \n");
 
-  local lsetList = topRec[LSET_CONTROL_BIN];
+  local lsetList = topRec[lsetBinName];
   local propMap = lsetList[1]; 
   local lsetMap = lsetList[2];
 
@@ -2270,7 +2171,7 @@ function lset_dump( topRec, binName )
   -- Loop through all the modulo n lset-record bins 
   local distrib = lsetMap[M_Modulo];
 
-  GP=F and trace(" Number of Lset bins to parse: %d ", distrib)
+  GP=F and trace(" Number of LSet bins to parse: %d ", distrib)
 
   local tempList;
   local binList;
@@ -2284,19 +2185,19 @@ function lset_dump( topRec, binName )
     else
       listAppend( binList, tempList );
     end
-    info("[DEBUG]<%s:%s> BIN(%s) TList(%s) B List(%s)", MOD, meth, binName,
+    trace("[DEBUG]<%s:%s> BIN(%s) TList(%s) B List(%s)", MOD, meth, binName,
       tostring(tempList), tostring(binList));
   end -- end for distrib list for-loop 
 
-  GP=F and trace("[EXIT]<%s:%s>ResultList(%s)",MOD,meth,tostring(resultList));
+  GP=E and trace("[EXIT]<%s:%s>ResultList(%s)",MOD,meth,tostring(resultList));
 
-  local ret = " \n Lset bin contents dumped to server-logs \n"; 
+  local ret = " \n LSet bin contents dumped to server-logs \n"; 
   return ret; 
-end -- lset_dump();
+end -- localDump();
 
 -- ========================================================================
--- ldt_remove() -- Remove the LDT entirely from the record.
--- NOTE: This could eventually be moved to COMMON, and be "ldt_remove()",
+-- localLdtRemove() -- Remove the LDT entirely from the record.
+-- NOTE: This could eventually be moved to COMMON, and be "localLdtRemove()",
 -- since it will work the same way for all LDTs.
 -- Remove the ESR, Null out the topRec bin.
 -- ========================================================================
@@ -2312,10 +2213,12 @@ end -- lset_dump();
 --   res = 0: all is well
 --   res = -1: Some sort of error
 -- ========================================================================
-local function ldt_remove( topRec, lsetBinName )
-  local meth = "ldt_remove()";
+local function localLdtRemove( topRec, lsetBinName )
+  local meth = "localLdtRemove()";
 
-  GP=F and trace("[ENTER]: <%s:%s> binName(%s)",
+  GP=F and trace("\n\n >>>>>>>>> API[ LMAP REMOVE ] <<<<<<<<<< \n");
+
+  GP=E and trace("[ENTER]: <%s:%s> binName(%s)",
     MOD, meth, tostring(lsetBinName));
   local rc = 0; -- start off optimistic
 
@@ -2325,22 +2228,220 @@ local function ldt_remove( topRec, lsetBinName )
 
   -- Extract the property map and lso control map from the lso bin list.
 
-  local lsetList = topRec[LSET_CONTROL_BIN]; -- The main lset map
+  local lsetList = topRec[lsetBinName]; -- The main lset map
   local propMap = lsetList[1];
   local lsetMap  = lsetList[2];
   
   -- Mark the enitre control-info structure nil 
-  topRec[LSET_CONTROL_BIN] = nil;
+  topRec[lsetBinName] = nil;
 
   rc = aerospike:update( topRec );
-  GP=F and trace("[EXIT]: <%s:%s> : Done.  RC(%s)", MOD, meth, tostring(rc));
+  GP=E and trace("[EXIT]: <%s:%s> : Done.  RC(%s)", MOD, meth, tostring(rc));
 
   return rc;
-end -- ldt_remove()
+end -- localLdtRemove()
+
+-- ======================================================================
+-- ======================================================================
+-- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- AS Large Set Main Functions
+-- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- ======================================================================
+-- NOTE: Requirements/Restrictions (this version).
+-- (1) One Set Per Record
+-- ======================================================================
+-- ======================================================================
+--
+-- ======================================================================
+-- || lset_create ||
+-- || create      ||
+-- ======================================================================
+-- Create/Initialize a AS LSet structure in a record, using multiple bins
+--
+-- We will use predetermined BIN names for this initial prototype:
+-- 'LSetCtrlBin' will be the name of the bin containing the control info
+-- 'LSetBin_XX' will be the individual bins that hold lists of set data
+-- There can be ONLY ONE set in a record, as we are using preset fixed names
+-- for the bin.
+-- +========================================================================+
+-- | Usr Bin 1 | Usr Bin 2 | o o o | Usr Bin N | Set CTRL BIN | Set Bins... |
+-- +========================================================================+
+-- Set Ctrl Bin is a Map -- containing control info and the list of
+-- bins (each of which has a list) that we're using.
+-- Parms:
+-- (*) topRec: The Aerospike Server record on which we operate
+-- (*) lsetBinName: The name of the bin for the AS Large Set
+-- (*) createSpec: A map of create specifications:  Most likely including
+--               :: a package name with a set of config parameters.
+-- ======================================================================
+function lset_create( topRec, lsetBinName, createSpec )
+  return localLSetCreate( topRec, lsetBinName, createSpec );
+end
+
+function create( topRec, lsetBinName, createSpec )
+  return localLSetCreate( topRec, lsetBinName, createSpec );
+end
+
+-- ======================================================================
+-- lset_insert() -- with and without create
+-- ======================================================================
+function lset_insert( topRec, lsetBinName, newValue )
+  return localLSetInsert( topRec, lsetBinName, newValue, nil )
+end -- lset_insert()
+
+function lset_create_and_insert( topRec, lsetBinName, newValue, createSpec )
+  return localLSetInsert( topRec, lsetBinName, newValue, createSpec )
+end -- lset_create_and_insert()
+
+function insert( topRec, lsetBinName, newValue )
+  return localLSetInsert( topRec, lsetBinName, newValue, nil )
+end -- lset_insert()
+
+function create_and_insert( topRec, lsetBinName, newValue, createSpec )
+  return localLSetInsert( topRec, lsetBinName, newValue, createSpec )
+end -- lset_create_and_insert()
+
+-- ======================================================================
+-- lset_insert_all() -- with and without create
+-- ======================================================================
+function lset_insert_all( topRec, binName, valueList )
+  return localLSetInsertAll( topRec, lsetBinName, newValue, nil )
+end
+
+function lset_create_and_insert_all( topRec, binName, valueList )
+  return localLSetInsertAll( topRec, lsetBinName, newValue, createSpec )
+end
+
+function insert_all( topRec, binName, valueList )
+  return localLSetInsertAll( topRec, lsetBinName, newValue, nil )
+end
+
+function create_and_insert_all( topRec, binName, valueList )
+  return localLSetInsertAll( topRec, lsetBinName, newValue, createSpec )
+end
+
+
+-- ======================================================================
+-- lset_exists() -- with and without filter
+-- exists() -- with and without filter
+-- ======================================================================
+function lset_exists( topRec, lsetBinName, searchKey )
+  return localLSetExists( topRec, lsetBinName, searchKey, nil, nil )
+end -- lset_exists()
+
+function
+lset_exists_then_filter( topRec, lsetBinName, searchKey, filter, fargs )
+  return localLSetExists( topRec, lsetBinName, searchKey, filter, fargs );
+end -- lset_exists_then_filter()
+
+
+function exists( topRec, lsetBinName, searchKey )
+  return localLSetExists( topRec, lsetBinName, searchKey, nil, nil )
+end -- lset_exists()
+
+function exists_then_filter( topRec, lsetBinName, searchKey, filter, fargs )
+  return localLSetExists( topRec, lsetBinName, searchKey, filter, fargs );
+end -- lset_exists_then_filter()
+
+
+-- ======================================================================
+-- search()
+-- lset_search()
+-- ======================================================================
+function search( topRec, lsetBinName, searchKey )
+  return localLSetSearch( topRec, lsetBinName, searchKey, nil, nil);
+end -- lset_search()
+
+function lset_search( topRec, lsetBinName, searchKey )
+  return localLSetSearch( topRec, lsetBinName, searchKey, nil, nil);
+end -- lset_search()
+
+-- ======================================================================
+-- search_then_filter()
+-- ======================================================================
+function search_then_filter( topRec, lsetBinName, searchKey, filter, fargs )
+  return localLSetSearch(topRec, lsetBinName, searchKey, filter, fargs)
+end -- search_then_filter()
+
+function
+lset_search_then_filter( topRec, lsetBinName, searchKey, filter, fargs )
+  return localLSetSearch(topRec, lsetBinName, searchKey, filter, fargs)
+end -- lset_search_then_filter()
+
+-- ======================================================================
+-- scan() -- with and without filter
+-- lset_scan() -- with and without filter
+-- ======================================================================
+function scan( topRec, lsetBinName )
+  return localLSetScan(resultList,topRec,lsetBinName,nil,nil)
+end -- lset_search()
+
+function lset_scan( topRec, lsetBinName )
+  return localLSetScan(resultList,topRec,lsetBinName,nil,nil)
+end -- lset_search()
+-- ======================================================================
+
+function scan_then_filter(topRec, lsetBinName, filter, fargs)
+  return localLSetScan(resultList,topRec,lsetBinName,filter,fargs)
+end -- lset_search_then_filter()
+
+function lset_scan_then_filter(topRec, lsetBinName, filter, fargs)
+  return localLSetScan(resultList,topRec,lsetBinName,filter,fargs)
+end -- lset_search_then_filter()
+
+-- ======================================================================
+-- lset_delete() -- with and without filter
+-- Return resultList
+-- (*) If successful: return deleted items (list.size( resultList ) > 0)
+-- (*) If error: resultList will be an empty list.
+-- ======================================================================
+function lset_delete( topRec, lsetBinName, searchKey )
+  return localLSetDelete(topRec, lsetBinName, searchKey, nil, nil )
+end -- lset_delete()
+
+function delete( topRec, lsetBinName, searchKey )
+  return localLSetDelete(topRec, lsetBinName, searchKey, nil, nil )
+end -- delete()
+
+-- ======================================================================
+function
+lset_delete_then_filter( topRec, lsetBinName, searchKey, filter, fargs )
+  return localLSetDelete( topRec, lsetBinName, searchKey, filter, fargs )
+end -- lset_delete_then_filter()
+
+function delete_then_filter( topRec, lsetBinName, searchKey, filter, fargs )
+  return localLSetDelete( topRec, lsetBinName, searchKey, filter, fargs )
+end -- delete_then_filter()
 
 -- ========================================================================
+-- get_size()
+-- lset_size() -- return the number of elements (item count) in the set.
+-- ========================================================================
+function get_size( topRec, lsetBinName )
+  return localGetSize( topRec, lsetBinName );
+end
+
+function lset_size( topRec, lsetBinName )
+  return localGetSize( topRec, lsetBinName );
+end
+
+-- ========================================================================
+-- get_config() -- return the config settings in the form of a map
+-- lset_config() -- return the config settings in the form of a map
+-- ========================================================================
+function get_config( topRec, lsetBinName )
+  return localGetConfig( topRec, lsetBinName );
+end
+
+function lset_config( topRec, lsetBinName )
+  return localGetConfig( topRec, lsetBinName );
+end
+
+-- ========================================================================
+-- remove() -- Remove the LDT entirely from the record.
 -- lset_remove() -- Remove the LDT entirely from the record.
--- NOTE: This could eventually be moved to COMMON, and be "ldt_remove()",
+-- ========================================================================
+-- NOTE: This could eventually be moved to COMMON, and be "localLdtRemove()",
 -- since it will work the same way for all LDTs.
 -- Remove the ESR, Null out the topRec bin.
 -- ========================================================================
@@ -2356,11 +2457,28 @@ end -- ldt_remove()
 --   res = 0: all is well
 --   res = -1: Some sort of error
 -- ========================================================================
-function lset_remove( topRec, lmapBinName )
-  GP=F and info("\n\n >>>>>>>>> API[ LMAP REMOVE ] <<<<<<<<<< \n\n");
-  return ldt_remove( topRec, lmapBinName );
+function remove( topRec, lmapBinName )
+  return localLdtRemove( topRec, lmapBinName );
 end
+
+function lset_remove( topRec, lmapBinName )
+  return localLdtRemove( topRec, lmapBinName );
+end
+
 -- ========================================================================
+-- dump()
+-- lset_dump()
+-- ========================================================================
+-- Dump the full contents of the Large Set, with Separate Hash Groups
+-- shown in the result.
+-- Return a LIST of lists -- with Each List marked with it's Hash Name.
+-- ========================================================================
+function dump( topRec, binName )
+  return localDump( topRec, binName );
+end
+function lset_dump( topRec, binName )
+  return localDump( topRec, binName );
+end
 -- ========================================================================
 -- ========================================================================
 

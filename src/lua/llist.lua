@@ -1,8 +1,8 @@
 -- Large Ordered List (llist.lua)
--- Last Update August 09,  2013: tjl
+-- Last Update August 12,  2013: tjl
 --
 -- Keep this MOD value in sync with version above
-local MOD = "llist_2013_08_09.d"; -- module name used for tracing.  
+local MOD = "llist_2013_08_12.c"; -- module name used for tracing.  
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -658,6 +658,8 @@ local function setLdtRecordType( topRec )
     recPropMap[RPM_VInfo] = vinfo; -- to be replaced later - on the server side.
     recPropMap[RPM_LdtCount] = 1; -- this is the first one.
     recPropMap[RPM_Magic] = MAGIC;
+    -- Set this bin as HIDDEN
+    record.set_flags(topRec, REC_LDT_CTRL_BIN, BF_LDT_CONTROL );
   else
     -- Not much to do -- increment the LDT count for this record.
     recPropMap = topRec[REC_LDT_CTRL_BIN];
