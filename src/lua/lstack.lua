@@ -2,7 +2,7 @@
 -- lstack.lua:  August 13, 2013
 --
 -- Module Marker: Keep this in sync with the stated version
-local MOD="lstack_2013_08_13.d"; -- the module name used for tracing
+local MOD="lstack_2013_08_13.f"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -5167,12 +5167,12 @@ end
 -- ========================================================================
 -- NEW EXTERNAL FUNCTIONS
 function get_config( topRec, lsoBinName )
-  return localConfig( topRec, lsoBinNam );
+  return localConfig( topRec, lsoBinName );
 end
 
 -- OLD EXTERNAL FUNCTIONS
 function lstack_config( topRec, lsoBinName )
-  return localConfig( topRec, lsoBinNam );
+  return localConfig( topRec, lsoBinName );
 end
 
 -- ========================================================================
