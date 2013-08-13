@@ -1,8 +1,8 @@
 -- AS Large Set (LSET) Operations
--- Last Update August 12, 2013: TJL
+-- Last Update August 13, 2013: TJL
 --
 -- Keep this in sync with the version above.
-local MOD="lset_2013_08_12.j"; -- the module name used for tracing
+local MOD="lset_2013_08_13.b"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -746,9 +746,9 @@ local function initializeLSetMap(topRec, lsetBinName )
   lsetMap[M_LdrByteEntrySize]=   0;  -- Byte size of a fixed size Byte Entry
   lsetMap[M_LdrByteCountMax] =   0; -- Max # of Data Chunk Bytes (binary mode)
 
-  lsetMap[M_Transform]        = nil; -- applies only to complex lmap
-  lsetMap[M_UnTransform]      = nil; -- applies only to complex lmap
-  lsetMap[M_KeyCompare]       = nil; -- applies only to complex lmap
+  lsetMap[M_Transform]        = nil; -- applies only to complex objects
+  lsetMap[M_UnTransform]      = nil; -- applies only to complex objects
+  lsetMap[M_KeyCompare]       = nil; -- applies only to complex objects
   lsetMap[M_StoreState]       = SS_COMPACT; -- SM_LIST or SM_BINARY:
   lsetMap[M_SetTypeStore]     = ST_RECORD; -- default is Top Record Store.
   lsetMap[M_HashType]         = HT_STATIC; -- Static or Dynamic
@@ -1067,56 +1067,63 @@ local function simpleScanList(resultList, lsetList, binList, value, flag,
   local rc = 0;
   -- Check once for the transform/untransform functions -- so we don't need
   -- to do it inside the loop.
-  local transform = nil;
-  local unTransform = nil;
-  if lsetMap[M_Transform] ~= nil then
-    transform = functionTable[lsetMap[M_Transform]];
+  local transformFunc = nil;
+  local unTransformFunc = nil;
+  local transName = lsetMap[M_Transform];
+  if ( transName ~= nil and functionTable[transName] ~= nil ) then
+    transformFunc = functionTable[ transName ];
   end
 
-  if lsetMap[M_UnTransform] ~= nil then
-    unTransform = functionTable[lsetMap[M_UnTransform]];
+  local untransName =  lsetMap[M_UnTransform];
+  if ( untransName ~= nil and functionTable[untransName] ~= nil ) then
+    unTransformFunc = functionTable[untransName];
+  end
+
+  local filterFunction = nil;
+  if( filter ~= nil and functionTable[filter] ~= nil ) then
+    filterFunction = functionTable[filter];
   end
 
   -- Scan the list for the item, return true if found,
   -- Later, we may return a set of things 
   local resultValue = nil;
+  local resultFiltered = nil;
   for i = 1, list.size( binList ), 1 do
     GP=F and trace("[DEBUG]: <%s:%s> It(%d) Comparing SV(%s) with BinV(%s)",
                    MOD, meth, i, tostring(value), tostring(binList[i]));
     -- a value that does not exist, will have a nil binList 
     -- so we'll skip this if-loop for it completely                  
---  if binList[i] ~= nil and binList[i] ~= FV_EMPTY then
     if binList[i] ~= nil then
-      resultValue = unTransformSimpleCompare(unTransform, binList[i], value);
+      resultValue = unTransformSimpleCompare(unTransformFunc,binList[i],value);
       if resultValue ~= nil then
-
-          -- APPLY FILTER HERE 
-          
-        GP=E and trace("[EARLY EXIT]: <%s:%s> Found(%s)",
-          MOD, meth, tostring(resultValue));
-        if( flag == FV_DELETE ) then
---        binList[i] = FV_EMPTY; -- the value is NO MORE
-          binList[i] = nil; -- the value is NO MORE
-          -- Decrement ItemCount (valid entries) but TotalCount stays the same
-          local itemCount = propMap[PM_ItemCount];
-          propMap[PM_ItemCount] = itemCount - 1;
-          lsetList[1] = propMap; 
-        elseif flag == FV_INSERT then
-          return 0 -- show caller nothing got inserted (don't count it)
+        -- Found it.  -- APPLY FILTER HERE, if we have one.
+        resultFiltered = resultValue;
+        if( filterFunction ~= nil ) then
+          GP=F and trace("[FILTER]<%s:%s> Applying filter(%s)",
+             MOD, meth, filter );
+          resultFiltered = filterFunction( resultValue, fargs );
+          GP=F and trace("[FILTER]<%s:%s> filter(%s) results(%s)",
+             MOD, meth, filter, tostring( resultsFiltered));
         end
-        -- Found it -- return result (only for scan and delete, not insert)
+        if( resultFiltered ~= nil ) then
+          GP=E and trace("[EARLY EXIT]: <%s:%s> Found(%s)",
+            MOD, meth, tostring(resultFiltered));
+          if( flag == FV_DELETE ) then
+            binList[i] = nil; -- the value is NO MORE
+            -- Decrement ItemCount (valid entries) but TotalCount stays the same
+            local itemCount = propMap[PM_ItemCount];
+            propMap[PM_ItemCount] = itemCount - 1;
+            lsetList[1] = propMap; 
+          elseif flag == FV_INSERT then
+            -- If found, then we cannot insert it -- unique elements only.
+            return 0 -- show caller nothing got inserted (don't count it)
+          end
 
-        local resultFiltered;
-
-        if filter ~= nil and fargs ~= nil then
-                resultFiltered = functionTable[func]( resultValue, fargs );
-        else
-                resultFiltered = resultValue;
-        end
-
-        list.append( resultList, resultFiltered );
-        return 0; -- Found it. Return with success.
-      end -- end if found it
+          -- Found it -- return result (only for scan and delete, not insert)
+          list.append( resultList, resultFiltered );
+          return 0; -- Found it. Return with success.
+        end -- end if it passed the filter
+      end -- end if found it (before filter)
     end -- end if not null and not empty
   end -- end for each item in the list
 
@@ -1127,7 +1134,7 @@ local function simpleScanList(resultList, lsetList, binList, value, flag,
   if flag == FV_INSERT then
     GP=E and trace("[EXIT]: <%s:%s> Inserting(%s)",
                    MOD, meth, tostring(value));
-    local storeValue = applyTransform( transform, value );
+    local storeValue = applyTransform( transformFunc, value );
     list.append( binList, storeValue );
     return 1 -- show caller we did an insert
   end
@@ -1287,23 +1294,22 @@ local function simpleScanListAll(topRec, resultList, lsetList, filter, fargs)
     GP=F and trace(" Parsing through :%s ", tostring(binName))
 
 	if topRec[binName] ~= nil then
-		local objList = topRec[binName];
-		for i = 1, list.size( objList ), 1 do
---          if objList[i] ~= nil and objList[i] ~= FV_EMPTY then
-			if objList[i] ~= nil then
-				retValue = objList[i]; 
-				if unTransform ~= nil then
-					retValue = unTransform( objList[i] );
-				end
+      local objList = topRec[binName];
+      for i = 1, list.size( objList ), 1 do
+        if objList[i] ~= nil then
+          retValue = objList[i]; 
+          if unTransform ~= nil then
+            retValue = unTransform( objList[i] );
+          end
 
-	                	-- APPLY FILTER HERE
-			        local resultFiltered;
+          -- APPLY FILTER HERE
+          local resultFiltered;
 
-			        if filter ~= nil and fargs ~= nil then
-	                	resultFiltered = functionTable[func]( retValue, fargs );
-        			else
-                		resultFiltered = retValue;
-        			end
+          if filter ~= nil and fargs ~= nil then
+              resultFiltered = functionTable[func]( retValue, fargs );
+          else
+              resultFiltered = retValue;
+          end
 
         			list.append( resultList, resultFiltered );
                 
@@ -2219,7 +2225,7 @@ end -- localDump();
 local function localLdtRemove( topRec, lsetBinName )
   local meth = "localLdtRemove()";
 
-  GP=F and trace("\n\n >>>>>>>>> API[ LMAP REMOVE ] <<<<<<<<<< \n");
+  GP=F and trace("\n\n >>>>>>>>> API[ LSET REMOVE ] <<<<<<<<<< \n");
 
   GP=E and trace("[ENTER]: <%s:%s> lsetBinName(%s)",
     MOD, meth, tostring(lsetBinName));
@@ -2234,14 +2240,51 @@ local function localLdtRemove( topRec, lsetBinName )
   local lsetList = topRec[lsetBinName]; -- The main lset map
   local propMap = lsetList[1];
   local lsetMap  = lsetList[2];
+
+  -- Get the Common LDT (Hidden) bin, and update the LDT count.  If this
+  -- is the LAST LDT in the record, then remove the Hidden Bin entirely.
+  local recPropMap = topRec[REC_LDT_CTRL_BIN];
+  if( recPropMap == nil or recPropMap[RPM_Magic] ~= MAGIC ) then
+    warn("[INTERNAL ERROR]<%s:%s> Prop Map for LDT Hidden Bin invalid",
+      MOD, meth );
+    error( ldte.ERR_INTERNAL );
+  end
+  local ldtCount = recPropMap[RPM_LdtCount];
+  if( ldtCount <= 1 ) then
+    -- Remove this bin
+    topRec[REC_LDT_CTRL_BIN] = nil;
+  else
+    recPropMap[RPM_LdtCount] = ldtCount - 1;
+    topRec[REC_LDT_CTRL_BIN] = recPropMap;
+  end
   
-  -- Mark the enitre control-info structure nil 
+  -- Check to see which type of LSET we have -- TopRecord bins or
+  -- Control structure directory.
+  -- TODO: Add support for subrecords.
+  --
+  -- Address the TopRecord version here.
+  -- Loop through all the modulo n lset-record bins 
+  -- Go thru and remove (mark nil) all of the LSET LIST bins.
+  local distrib = lsetMap[M_Modulo];
+  for j = 0, (distrib - 1), 1 do
+	local binName = getBinName( j );
+    topRec[binName] = nil;
+  end -- end for distrib list for-loop 
+
+  -- Mark the enitre control-info structure nil.
   topRec[lsetBinName] = nil;
 
+  -- Update the Top Record.  Not sure if this returns nil or ZERO for ok,
+  -- so just turn any NILs into zeros.
   rc = aerospike:update( topRec );
-  GP=E and trace("[EXIT]: <%s:%s> : Done.  RC(%s)", MOD, meth, tostring(rc));
+  if( rc == nil or rc == 0 ) then
+    GP=E and trace("[Normal EXIT]:<%s:%s> Return(0)", MOD, meth );
+    return 0;
+  else
+    GP=E and trace("[ERROR EXIT]:<%s:%s> Return(%s)", MOD, meth,tostring(rc));
+    error( ldte.ERR_INTERNAL );
+  end
 
-  return rc;
 end -- localLdtRemove()
 
 -- ======================================================================
@@ -2308,19 +2351,19 @@ end -- lset_create_and_insert()
 -- lset_insert_all() -- with and without create
 -- ======================================================================
 function lset_insert_all( topRec, lsetBinName, valueList )
-  return localLSetInsertAll( topRec, lsetBinName, newValue, nil )
+  return localLSetInsertAll( topRec, lsetBinName, valueList, nil )
 end
 
 function lset_create_and_insert_all( topRec, lsetBinName, valueList )
-  return localLSetInsertAll( topRec, lsetBinName, newValue, createSpec )
+  return localLSetInsertAll( topRec, lsetBinName, valueList, createSpec )
 end
 
 function insert_all( topRec, lsetBinName, valueList )
-  return localLSetInsertAll( topRec, lsetBinName, newValue, nil )
+  return localLSetInsertAll( topRec, lsetBinName, valueList, nil )
 end
 
 function create_and_insert_all( topRec, lsetBinName, valueList )
-  return localLSetInsertAll( topRec, lsetBinName, newValue, createSpec )
+  return localLSetInsertAll( topRec, lsetBinName, valueList, createSpec )
 end
 
 
@@ -2328,22 +2371,22 @@ end
 -- lset_exists() -- with and without filter
 -- exists() -- with and without filter
 -- ======================================================================
-function lset_exists( topRec, lsetBinName, searchKey )
-  return localLSetExists( topRec, lsetBinName, searchKey, nil, nil )
+function lset_exists( topRec, lsetBinName, searchValue )
+  return localLSetExists( topRec, lsetBinName, searchValue, nil, nil )
 end -- lset_exists()
 
 function
-lset_exists_then_filter( topRec, lsetBinName, searchKey, filter, fargs )
-  return localLSetExists( topRec, lsetBinName, searchKey, filter, fargs );
+lset_exists_then_filter( topRec, lsetBinName, searchValue, filter, fargs )
+  return localLSetExists( topRec, lsetBinName, searchValue, filter, fargs );
 end -- lset_exists_then_filter()
 
 
-function exists( topRec, lsetBinName, searchKey )
-  return localLSetExists( topRec, lsetBinName, searchKey, nil, nil )
+function exists( topRec, lsetBinName, searchValue )
+  return localLSetExists( topRec, lsetBinName, searchValue, nil, nil )
 end -- lset_exists()
 
-function exists_then_filter( topRec, lsetBinName, searchKey, filter, fargs )
-  return localLSetExists( topRec, lsetBinName, searchKey, filter, fargs );
+function exists_then_filter( topRec, lsetBinName, searchValue, filter, fargs )
+  return localLSetExists( topRec, lsetBinName, searchValue, filter, fargs );
 end -- lset_exists_then_filter()
 
 
@@ -2351,24 +2394,24 @@ end -- lset_exists_then_filter()
 -- search()
 -- lset_search()
 -- ======================================================================
-function search( topRec, lsetBinName, searchKey )
-  return localLSetSearch( topRec, lsetBinName, searchKey, nil, nil);
+function search( topRec, lsetBinName, searchValue )
+  return localLSetSearch( topRec, lsetBinName, searchValue, nil, nil);
 end -- lset_search()
 
-function lset_search( topRec, lsetBinName, searchKey )
-  return localLSetSearch( topRec, lsetBinName, searchKey, nil, nil);
+function lset_search( topRec, lsetBinName, searchValue )
+  return localLSetSearch( topRec, lsetBinName, searchValue, nil, nil);
 end -- lset_search()
 
 -- ======================================================================
 -- search_then_filter()
 -- ======================================================================
-function search_then_filter( topRec, lsetBinName, searchKey, filter, fargs )
-  return localLSetSearch(topRec, lsetBinName, searchKey, filter, fargs)
+function search_then_filter( topRec, lsetBinName, searchValue, filter, fargs )
+  return localLSetSearch(topRec, lsetBinName, searchValue, filter, fargs)
 end -- search_then_filter()
 
 function
-lset_search_then_filter( topRec, lsetBinName, searchKey, filter, fargs )
-  return localLSetSearch(topRec, lsetBinName, searchKey, filter, fargs)
+lset_search_then_filter( topRec, lsetBinName, searchValue, filter, fargs )
+  return localLSetSearch(topRec, lsetBinName, searchValue, filter, fargs)
 end -- lset_search_then_filter()
 
 -- ======================================================================
@@ -2398,22 +2441,22 @@ end -- lset_search_then_filter()
 -- (*) If successful: return deleted items (list.size( resultList ) > 0)
 -- (*) If error: resultList will be an empty list.
 -- ======================================================================
-function lset_delete( topRec, lsetBinName, searchKey )
-  return localLSetDelete(topRec, lsetBinName, searchKey, nil, nil )
+function lset_delete( topRec, lsetBinName, searchValue )
+  return localLSetDelete(topRec, lsetBinName, searchValue, nil, nil )
 end -- lset_delete()
 
-function delete( topRec, lsetBinName, searchKey )
-  return localLSetDelete(topRec, lsetBinName, searchKey, nil, nil )
+function delete( topRec, lsetBinName, searchValue )
+  return localLSetDelete(topRec, lsetBinName, searchValue, nil, nil )
 end -- delete()
 
 -- ======================================================================
 function
-lset_delete_then_filter( topRec, lsetBinName, searchKey, filter, fargs )
-  return localLSetDelete( topRec, lsetBinName, searchKey, filter, fargs )
+lset_delete_then_filter( topRec, lsetBinName, searchValue, filter, fargs )
+  return localLSetDelete( topRec, lsetBinName, searchValue, filter, fargs )
 end -- lset_delete_then_filter()
 
-function delete_then_filter( topRec, lsetBinName, searchKey, filter, fargs )
-  return localLSetDelete( topRec, lsetBinName, searchKey, filter, fargs )
+function delete_then_filter( topRec, lsetBinName, searchValue, filter, fargs )
+  return localLSetDelete( topRec, lsetBinName, searchValue, filter, fargs )
 end -- delete_then_filter()
 
 -- ========================================================================
