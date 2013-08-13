@@ -2,7 +2,7 @@
 -- lstack.lua:  August 13, 2013
 --
 -- Module Marker: Keep this in sync with the stated version
-local MOD="lstack_2013_08_13.c"; -- the module name used for tracing
+local MOD="lstack_2013_08_13.d"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -4776,8 +4776,8 @@ local function localLdtRemove( topRec, binName )
   -- is the LAST LDT in the record, then remove the Hidden Bin entirely.
   local recPropMap = topRec[REC_LDT_CTRL_BIN];
   if( recPropMap == nil or recPropMap[RPM_Magic] ~= MAGIC ) then
-    warn("[INTERNAL ERROR]<%s:%s> Prop Map for LDT Hidden Bin invalid",
-    MOD, meth );
+    warn("[INTERNAL ERROR]<%s:%s> Prop Map for LDT Hidden Bin(%s) invalid",
+      MOD, meth, REC_LDT_CTRL_BIN );
     error( ldte.ERR_INTERNAL );
   end
   local ldtCount = recPropMap[RPM_LdtCount];

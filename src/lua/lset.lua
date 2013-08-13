@@ -2,7 +2,7 @@
 -- Last Update August 13, 2013: TJL
 --
 -- Keep this in sync with the version above.
-local MOD="lset_2013_08_13.c"; -- the module name used for tracing
+local MOD="lset_2013_08_13.d"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -1679,8 +1679,8 @@ local function localLSetCreate( topRec, lsetBinName, createSpec )
   -- because that is NOT an error.  We may be adding an LSET field to an
   -- existing record.
   if( topRec[lsetBinName] ~= nil ) then
-    GP=E and warn("[ERROR EXIT]: <%s:%s> LSET CONTROL BIN Already Exists",
-                   MOD, meth );
+    warn("[ERROR EXIT]: <%s:%s> LDT BIN (%s) Already Exists",
+                   MOD, meth, lsetBinName );
     error( ldte.ERR_BIN_ALREADY_EXISTS );
   end
   -- NOTE: Do NOT call validateRecBinAndMap().  Not needed here.
@@ -2250,7 +2250,7 @@ local function localLdtRemove( topRec, lsetBinName )
   end
   local ldtCount = recPropMap[RPM_LdtCount];
   if( ldtCount <= 1 ) then
-    -- Remove this bin
+    -- This is the last LDT -- remove the LDT Control Property Bin
     topRec[REC_LDT_CTRL_BIN] = nil;
   else
     recPropMap[RPM_LdtCount] = ldtCount - 1;
@@ -2267,7 +2267,11 @@ local function localLdtRemove( topRec, lsetBinName )
   local distrib = lsetMap[M_Modulo];
   for j = 0, (distrib - 1), 1 do
 	local binName = getBinName( j );
-    topRec[binName] = nil;
+    -- Remove this bin -- assuming it is not already nil.  Setting a 
+    -- non-existent bin to nil seems to piss off the lower layers. 
+    if( topRec[binName] ~= nil ) then
+        topRec[binName] = nil;
+    end
   end -- end for distrib list for-loop 
 
   -- Mark the enitre control-info structure nil.
