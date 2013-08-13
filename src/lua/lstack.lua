@@ -2,7 +2,7 @@
 -- lstack.lua:  August 12, 2013
 --
 -- Module Marker: Keep this in sync with the stated version
-local MOD="lstack_2013_08_12.g"; -- the module name used for tracing
+local MOD="lstack_2013_08_12.h"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -5113,6 +5113,10 @@ function get_size( topRec, lsoBinName )
   return localGetSize( topRec, lsoBinName );
 end -- function get_size()
 
+function lstack_size( topRec, lsoBinName )
+  return localGetSize( topRec, lsoBinName );
+end -- function get_size()
+
 -- ========================================================================
 -- get_capacity() -- return the current capacity setting for LSTACK.
 -- Parms:
@@ -5129,6 +5133,10 @@ function get_capacity( topRec, lsoBinName )
   return localGetCapacity( topRec, lsoBinName );
 end
 
+function lstack_get_capacity( topRec, lsoBinName )
+  return localGetCapacity( topRec, lsoBinName );
+end
+
 -- ========================================================================
 -- get_config() -- return the lstack config settings.
 -- Parms:
@@ -5142,6 +5150,10 @@ end
 -- error if the user passes in nil or any other incorrect value/type.
 -- ========================================================================
 function get_config( topRec, lsoBinName )
+  return localConfig( topRec, lsoBinNam );
+end
+
+function lstack_config( topRec, lsoBinName )
   return localConfig( topRec, lsoBinNam );
 end
 
