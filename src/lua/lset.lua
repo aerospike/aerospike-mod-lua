@@ -2,7 +2,7 @@
 -- Last Update August 13, 2013: TJL
 --
 -- Keep this in sync with the version above.
-local MOD="lset_2013_08_13.b"; -- the module name used for tracing
+local MOD="lset_2013_08_13.c"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -1467,18 +1467,17 @@ local function localInsert( topRec, lsetList, newValue, stats )
   local binList = topRec[binName];
   local insertResult = 0;
   
+  -- We're doing "Lazy Insert", so if a bin is not there, then we have not
+  -- had any values for that bin (yet).  Allocate the list now.
   if binList == nil then
-    GP=F and warn("[INTERNAL ERROR]:<%s:%s> binList is nil: binName(%s)",
+    GP=F and trace("[DEBUG]:<%s:%s> Creating List for binName(%s)",
                  MOD, meth, tostring( binName ) );
-    error( ldte.ERR_INSERT );
-  else
-    GP=F and trace("[INTERNAL DUMP]:<%s:%s> binList is NOT nil: binName(%s)",
-                 MOD, meth, tostring( binName ) );
-    -- Look for the value, and insert if it is not there.
-    insertResult =
+    binList = list();
+  end
+  -- Look for the value, and insert if it is not there.
+  insertResult =
       scanList( nil, lsetList, binList, key, newValue, FV_INSERT, nil, nil );
     topRec[binName] = binList; 
-  end
                 
   -- update stats if appropriate.
   if stats == 1 and insertResult == 1 then -- Update Stats if success
