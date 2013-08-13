@@ -1,8 +1,8 @@
 -- Large Stack Object (LSO or LSTACK) Operations
--- lstack.lua:  August 12, 2013
+-- lstack.lua:  August 13, 2013
 --
 -- Module Marker: Keep this in sync with the stated version
-local MOD="lstack_2013_08_12.h"; -- the module name used for tracing
+local MOD="lstack_2013_08_13.d"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -1267,7 +1267,6 @@ local function initializeLdrMap(src,topRec,ldrRec,ldrPropMap,ldrMap,lsoList)
 
   local lsoPropMap = lsoList[1];
   local lsoMap     = lsoList[2];
-  local binName = lsoPropMap[PM_BinName];
 
   ldrPropMap[PM_RecType]      = RT_SUB;
   ldrPropMap[PM_ParentDigest] = record.digest( topRec );
@@ -2856,6 +2855,9 @@ local function releaseStorage( topRec, lsoList, digestList )
 
     local subrec;
     local digestString;
+    local propMap = lsoList[1];
+    local lsoMap  = lsoList[2];
+    local binName = propMap[PM_BinName];
 
     if( digestList == nil or list.size( digestList ) == 0 ) then
       warn("[INTERNAL ERROR]<%s:%s> DigestList is nil or empty", MOD, meth );
@@ -3022,6 +3024,7 @@ local function coldDirHeadCreate( src, topRec, lsoList, spaceEstimate )
     while( coldDirCount > 0 ) do
       if( tailDigestString == nil or tailDigestString == 0 ) then
         -- Something is wrong -- don't continue.
+        warn("[INTERNAL ERROR]<%s:%s> Tail is broken", MOD, meth );
         break;
       else
         -- Open the Cold Dir Record, add the digest list to the delete
@@ -3084,7 +3087,6 @@ local function coldDirHeadCreate( src, topRec, lsoList, spaceEstimate )
   -- Now -- whether or not we removed some old storage above, NOW are are
   -- going to add a new Cold Directory HEAD.
   if( createNewHead == true ) then
-
     GP=F and trace("[DEBUG]<%s:%s>Regular Cold Head Case", MOD, meth );
 
     -- Create the Cold Head Record, initialize the bins: Ctrl, List
@@ -3747,6 +3749,7 @@ local function buildSubRecList( topRec, lsoList, position )
   if( warmListStart == 0 or warmListStart > warmListSize ) then
     trace("[REC LIST]<%s:%s> Skipping over warm list: Size(%d) Pos(%d)",
       MOD, meth, warmListSize, warmListStart );
+    resultList = list(); -- add only cold list items
   elseif( warmListStart == 1 ) then
     -- Take it all
     resultList = list.take( wdList, warmListSize );
@@ -3783,6 +3786,7 @@ local function buildSubRecList( topRec, lsoList, position )
   local coldDirRecDigest = lsoMap[M_ColdDirListHead];
 
   -- LEFT OFF HERE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  -- Note that we're not using this function in production (whew)
   info("\n\n LEFT OFF HERE<%s:%s>!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n",MOD, meth);
   info("\n\n LEFT OFF HERE<%s:%s>!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n",MOD, meth);
 
@@ -3951,7 +3955,7 @@ local function locatePosition( topRec, lsoList, sp, position )
   GP=E and trace("[ENTER]:<%s:%s> LDT(%s) Position(%d)",
     MOD, meth, ldtSummaryString( lsoList ), position );
 
-    -- TODO: Finish this
+    -- TODO: Finish this later -- if needed at all.
   warn("[WARNING!!]<%s:%s> FUNCTION UNDER CONSTRUCTION!!! ", MOD, meth );
 
   -- Extract the property map and lso control map from the lso bin list.
@@ -4013,6 +4017,9 @@ local function localTrim( topRec, lsoList, searchPath )
   local meth = "localTrim()";
   GP=E and trace("[ENTER]:<%s:%s> LsoSummary(%s) SearchPath(%s)",
     MOD, meth, lsoSummaryString(lsoList), tostring(searchPath));
+    
+  -- TODO: Finish this later -- if needed at all.
+  warn("[WARNING!!]<%s:%s> FUNCTION UNDER CONSTRUCTION!!! ", MOD, meth );
 
   GP=E and trace("[EXIT]: <%s:%s>", MOD, meth );
 end -- localTrim()
@@ -4047,7 +4054,8 @@ function lstack_delete_subrecs( topRec, lsoBinName )
   GP=E and trace("[ENTER]: <%s:%s> lsoBinName(%s)",
     MOD, meth, tostring(lsoBinName));
 
-  trace("[ATTENTION!!!]::LSTACK_DELETE IS NOT YET IMPLEMENTED!!!");
+  -- Not sure if we'll ever use this function -- we took a different direction
+  warn("[WARNING!!!]::LSTACK_DELETE_SUBRECS IS NOT YET IMPLEMENTED!!!");
 
   local rc = 0; -- start off optimistic
 
@@ -4709,8 +4717,8 @@ function lstack_subrec_list( topRec, lsoBinName )
 end -- lstack_subrec_list()
 
 -- ========================================================================
--- ldtRemove() -- Remove the LDT entirely from the record.
--- NOTE: This could eventually be moved to COMMON, and be "ldtRemove()",
+-- localLdtRemove() -- Remove the LDT entirely from the record.
+-- NOTE: This could eventually be moved to COMMON, and be "localLdtRemove()",
 -- since it will work the same way for all LDTs.
 -- Remove the ESR, Null out the topRec bin.
 -- ========================================================================
@@ -4726,8 +4734,10 @@ end -- lstack_subrec_list()
 --   res = 0: all is well
 --   res = -1: Some sort of error
 -- ========================================================================
-local function ldtRemove( topRec, binName )
-  local meth = "ldtRemove()";
+local function localLdtRemove( topRec, binName )
+  local meth = "localLdtRemove()";
+
+  GP=F and trace("\n\n >>>>>>>>> API[ LSTACK REMOVE ] <<<<<<<<<< \n");
 
   GP=E and trace("[ENTER]<%s:%s> binName(%s)", MOD, meth, tostring(binName));
   local rc = 0; -- start off optimistic
@@ -4758,17 +4768,16 @@ local function ldtRemove( topRec, binName )
       warn("[ESR DELETE ERROR]<%s:%s> ERROR on ESR Open", MOD, meth );
     end
   else
-    info("[ESR DELETE]<%s:%s> LDT ESR is not yet set.", MOD, meth );
+    info("[INFO]<%s:%s> LDT ESR is not yet set, so remove not needed. Bin(%s)",
+      MOD, meth, binName );
   end
-
-  topRec[binName] = nil;
 
   -- Get the Common LDT (Hidden) bin, and update the LDT count.  If this
   -- is the LAST LDT in the record, then remove the Hidden Bin entirely.
   local recPropMap = topRec[REC_LDT_CTRL_BIN];
   if( recPropMap == nil or recPropMap[RPM_Magic] ~= MAGIC ) then
-    warn("[INTERNAL ERROR]<%s:%s> Prop Map for LDT Hidden Bin invalid",
-    MOD, meth );
+    warn("[INTERNAL ERROR]<%s:%s> Prop Map for LDT Hidden Bin(%s) invalid",
+      MOD, meth, REC_LDT_CTRL_BIN );
     error( ldte.ERR_INTERNAL );
   end
   local ldtCount = recPropMap[RPM_LdtCount];
@@ -4780,6 +4789,9 @@ local function ldtRemove( topRec, binName )
     topRec[REC_LDT_CTRL_BIN] = recPropMap;
   end
 
+  -- Null out the LDT bin and update the record.
+  topRec[binName] = nil;
+
   -- Update the Top Record.  Not sure if this returns nil or ZERO for ok,
   -- so just turn any NILs into zeros.
   rc = aerospike:update( topRec );
@@ -4790,7 +4802,7 @@ local function ldtRemove( topRec, binName )
     GP=E and trace("[ERROR EXIT]:<%s:%s> Return(%s)", MOD, meth,tostring(rc));
     error( ldte.ERR_INTERNAL );
   end
-end -- ldtRemove()
+end -- localLdtRemove()
 
 -- ========================================================================
 -- localSetCapacity()
@@ -4973,8 +4985,14 @@ end -- localDebug()
 -- LSTACK External Functions
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- ======================================================================
+-- Notice the namechange -- we're no longer using the name convention:
+-- lstack_xxx(), e.g. lstack_create()
+-- we're now using just the name without the "lstack_" prefix.
+-- So, lstack_create() now becomes create().
+-- ======================================================================
 
 -- ======================================================================
+-- || create        ||
 -- || lstack_create ||
 -- ======================================================================
 -- Create/Initialize a Stack structure in a bin, using a single LSO
@@ -5010,43 +5028,26 @@ end -- localDebug()
 --   rc = 0: ok
 --   rc < 0: Aerospike Errors
 --
---  NOTE: 
---  !!!! More parms needed here to appropriately configure the LSO
---  -> Package (one of the pre-named packages that hold all the info)
---  OR
---  Individual entries (this is now less attractive)
---  -> Hot List Size
---  -> Hot List Transfer amount
---  -> Warm List Size
---  -> Warm List Transfer amount
 -- ========================================================================
--- OLD EXTERNAL FUNCTIONS
-function lstack_create( topRec, lsoBinName )
-  return localCreate( topRec, lsoBinName );
+-- NEW EXTERNAL FUNCTIONS
+function create( topRec, lsoBinName, createSpec )
+  return localCreate( topRec, lsoBinName, createSpec );
 end
 
--- NEW EXTERNAL FUNCTIONS
-function create( topRec, lsoBinName )
-  return localCreate( topRec, lsoBinName );
+-- OLD EXTERNAL FUNCTIONS
+function lstack_create( topRec, lsoBinName, createSpec )
+  return localCreate( topRec, lsoBinName, createSpec );
 end
 
 -- =======================================================================
--- Stack Push -- with and without implicit create spec.
+-- push()
+-- lstack_push()
+-- =======================================================================
+-- Push a value on the stack, with the optional parm to set the LDT in case
+-- we have to create the LDT before calling the push.
 -- These are the globally visible calls -- that call the local UDF to do
 -- all of the work.
--- NOTE: Any parameter that might be printed (for trace/debug purposes)
--- must be protected with "tostring()" so that we do not encounter a format
--- error if the user passes in nil or any other incorrect value/type.
 -- =======================================================================
--- OLD EXTERNAL FUNCTIONS
-function lstack_push( topRec, lsoBinName, newValue )
-  return localStackPush( topRec, lsoBinName, newValue, nil )
-end -- end lstack_push()
-
-function lstack_create_and_push( topRec, lsoBinName, newValue, createSpec )
-  return localStackPush( topRec, lsoBinName, newValue, createSpec );
-end -- lstack_create_and_push()
-
 -- NEW EXTERNAL FUNCTIONS
 function push( topRec, lsoBinName, newValue )
   return localStackPush( topRec, lsoBinName, newValue, nil )
@@ -5056,16 +5057,27 @@ function create_and_push( topRec, lsoBinName, newValue, createSpec )
   return localStackPush( topRec, lsoBinName, newValue, createSpec );
 end -- create_and_push()
 
+-- OLD EXTERNAL FUNCTIONS
+function lstack_push( topRec, lsoBinName, newValue )
+  return localStackPush( topRec, lsoBinName, newValue, nil )
+end -- end lstack_push()
+
+function lstack_create_and_push( topRec, lsoBinName, newValue, createSpec )
+  return localStackPush( topRec, lsoBinName, newValue, createSpec );
+end -- lstack_create_and_push()
+
 -- =======================================================================
 -- Stack Push ALL
 -- =======================================================================
 -- Iterate thru the list and call localStackPush on each element
 -- =======================================================================
-function lstack_push_all( topRec, lsoBinName, valueList, createSpec )
+-- NEW EXTERNAL FUNCTIONS
+function push_all( topRec, lsoBinName, valueList, createSpec )
   return localPushAll( topRec, lsoBinName, valueList, createSpec )
 end
 
-function push_all( topRec, lsoBinName, valueList, createSpec )
+-- OLD EXTERNAL FUNCTIONS
+function lstack_push_all( topRec, lsoBinName, valueList, createSpec )
   return localPushAll( topRec, lsoBinName, valueList, createSpec )
 end
 
@@ -5079,15 +5091,6 @@ end
 -- must be protected with "tostring()" so that we do not encounter a format
 -- error if the user passes in nil or any other incorrect value/type.
 -- =======================================================================
--- OLD EXTERNAL FUNCTIONS
-function lstack_peek( topRec, lsoBinName, peekCount )
-  return localStackPeek( topRec, lsoBinName, peekCount, nil, nil )
-end -- lstack_peek()
-
-function lstack_peek_then_filter( topRec, lsoBinName, peekCount, func, fargs )
-  return localStackPeek( topRec, lsoBinName, peekCount, func, fargs );
-end -- lstack_peek_then_filter()
-
 -- NEW EXTERNAL FUNCTIONS
 function peek( topRec, lsoBinName, peekCount )
   return localStackPeek( topRec, lsoBinName, peekCount, nil, nil )
@@ -5096,6 +5099,15 @@ end -- peek()
 function peek_then_filter( topRec, lsoBinName, peekCount, func, fargs )
   return localStackPeek( topRec, lsoBinName, peekCount, func, fargs );
 end -- peek_then_filter()
+
+-- OLD EXTERNAL FUNCTIONS
+function lstack_peek( topRec, lsoBinName, peekCount )
+  return localStackPeek( topRec, lsoBinName, peekCount, nil, nil )
+end -- lstack_peek()
+
+function lstack_peek_then_filter( topRec, lsoBinName, peekCount, func, fargs )
+  return localStackPeek( topRec, lsoBinName, peekCount, func, fargs );
+end -- lstack_peek_then_filter()
 
 -- ========================================================================
 -- get_size() -- return the number of elements (item count) in the stack.
@@ -5109,10 +5121,12 @@ end -- peek_then_filter()
 -- must be protected with "tostring()" so that we do not encounter a format
 -- error if the user passes in nil or any other incorrect value/type.
 -- ========================================================================
+-- NEW EXTERNAL FUNCTIONS
 function get_size( topRec, lsoBinName )
   return localGetSize( topRec, lsoBinName );
 end -- function get_size()
 
+-- OLD EXTERNAL FUNCTIONS
 function lstack_size( topRec, lsoBinName )
   return localGetSize( topRec, lsoBinName );
 end -- function get_size()
@@ -5129,10 +5143,12 @@ end -- function get_size()
 -- must be protected with "tostring()" so that we do not encounter a format
 -- error if the user passes in nil or any other incorrect value/type.
 -- ========================================================================
+-- NEW EXTERNAL FUNCTIONS
 function get_capacity( topRec, lsoBinName )
   return localGetCapacity( topRec, lsoBinName );
 end
 
+-- OLD EXTERNAL FUNCTIONS
 function lstack_get_capacity( topRec, lsoBinName )
   return localGetCapacity( topRec, lsoBinName );
 end
@@ -5149,10 +5165,12 @@ end
 -- must be protected with "tostring()" so that we do not encounter a format
 -- error if the user passes in nil or any other incorrect value/type.
 -- ========================================================================
+-- NEW EXTERNAL FUNCTIONS
 function get_config( topRec, lsoBinName )
   return localConfig( topRec, lsoBinNam );
 end
 
+-- OLD EXTERNAL FUNCTIONS
 function lstack_config( topRec, lsoBinName )
   return localConfig( topRec, lsoBinNam );
 end
@@ -5177,20 +5195,19 @@ end
 --   res = 0: all is well
 --   res = -1: Some sort of error
 -- ========================================================================
+-- NEW EXTERNAL FUNCTIONS
+function remove( topRec, lsoBinName )
+  return localLdtRemove( topRec, lsoBinName );
+end -- lstack_remove()
+
 -- OLD EXTERNAL FUNCTIONS
 function lstack_remove( topRec, lsoBinName )
-  return ldtRemove( topRec, lsoBinName );
+  return localLdtRemove( topRec, lsoBinName );
 end -- lstack_remove()
 
 function ldt_remove( topRec, lsoBinName )
-  return ldtRemove( topRec, lsoBinName );
+  return localLdtRemove( topRec, lsoBinName );
 end -- ldt_remove()
-
--- NEW EXTERNAL FUNCTIONS
-function remove( topRec, lsoBinName )
-  return ldtRemove( topRec, lsoBinName );
-end -- lstack_remove()
-
 -- ========================================================================
 -- lstack_set_storage_limit()
 -- lstack_set_capacity()
@@ -5208,21 +5225,21 @@ end -- lstack_remove()
 --   res = 0: all is well
 --   res = -1: Some sort of error
 -- ========================================================================
--- OLD EXTERNAL FUNCTIONS
-function lstack_set_storage_limit( topRec, lsoBinName, newLimit )
-  return localSetCapacity( topRec, lsoBinName, newLimit );
-end
-
-function set_storage_limit( topRec, lsoBinName, newLimit )
-  return localSetCapacity( topRec, lsoBinName, newLimit );
-end
-
 -- NEW EXTERNAL FUNCTIONS
 function lstack_set_capacity( topRec, lsoBinName, newLimit )
   return localSetCapacity( topRec, lsoBinName, newLimit );
 end
 
 function set_capacity( topRec, lsoBinName, newLimit )
+  return localSetCapacity( topRec, lsoBinName, newLimit );
+end
+
+-- OLD EXTERNAL FUNCTIONS
+function lstack_set_storage_limit( topRec, lsoBinName, newLimit )
+  return localSetCapacity( topRec, lsoBinName, newLimit );
+end
+
+function set_storage_limit( topRec, lsoBinName, newLimit )
   return localSetCapacity( topRec, lsoBinName, newLimit );
 end
 
@@ -5240,13 +5257,13 @@ end
 --   res = 0: all is well
 --   res = -1: Some sort of error
 -- ========================================================================
--- OLD EXTERNAL FUNCTIONS
-function lstack_debug( topRec, setting )
+-- NEW EXTERNAL FUNCTIONS
+function set_debug( topRec, setting )
   return localDebug( topRec, setting );
 end
 
--- NEW EXTERNAL FUNCTIONS
-function set_debug( topRec, setting )
+-- OLD EXTERNAL FUNCTIONS
+function lstack_debug( topRec, setting )
   return localDebug( topRec, setting );
 end
 
