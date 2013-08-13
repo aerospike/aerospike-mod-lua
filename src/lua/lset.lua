@@ -2,7 +2,7 @@
 -- Last Update August 12, 2013: TJL
 --
 -- Keep this in sync with the version above.
-local MOD="lset_2013_08_12.g"; -- the module name used for tracing
+local MOD="lset_2013_08_12.j"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -21,8 +21,8 @@ local G_LDT_VERSION = 1.1;
 -- the trace() call is NOT executed (regardless of the value of GP)
 -- ======================================================================
 local GP=true; -- Leave this set to true.
-local F=true; -- Set F (flag) to true to turn ON global print
-local E=true; -- Set E (ENTER/EXIT) to true to turn ON Enter/Exit print
+local F=false; -- Set F (flag) to true to turn ON global print
+local E=false; -- Set E (ENTER/EXIT) to true to turn ON Enter/Exit print
 
 -- ======================================================================
 -- Aerospike Server Functions:
@@ -1533,7 +1533,7 @@ local function rehashSet( topRec, lsetBinName, lsetList )
   -- Our "indexing" starts with ZERO, to match the modulo arithmetic.
   local distrib = lsetMap[M_Modulo];
   for i = 0, (distrib - 1), 1 do
-    -- assign topRec[binName]  to LDR list
+    -- assign a new list to topRec[binName]
     setupNewBin( topRec, i );
   end -- for each new bin
 
@@ -1680,7 +1680,7 @@ local function localLSetCreate( topRec, lsetBinName, createSpec )
   end
   -- NOTE: Do NOT call validateRecBinAndMap().  Not needed here.
   
-  -- This will throw and error and jump out of Lua if binName is bad.
+  -- This will throw and error and jump out of Lua if lsetBinName is bad.
   validateBinName( lsetBinName );
 
   GP=F and trace("[DEBUG]: <%s:%s> : Initialize SET CTRL Map", MOD, meth );
@@ -1869,7 +1869,7 @@ end -- function localLSetInsert()
 -- localLSetInsertAll() -- with and without create
 -- ======================================================================
 -- ======================================================================
-local function localLSetInsertAll( topRec, binName, valueList, createSpec )
+local function localLSetInsertAll( topRec, lsetBinName, valueList, createSpec )
   local meth = "lset_insert_all()";
   GP=F and trace("\n\n >>>>>>>>> API[ LSET INSERT ALL ] <<<<<<<<<< \n");
 
@@ -1877,7 +1877,7 @@ local function localLSetInsertAll( topRec, binName, valueList, createSpec )
   if( valueList ~= nil and list.size(valueList) > 0 ) then
     local listSize = list.size( valueList );
     for i = 1, listSize, 1 do
-      rc = localLSetInsert( topRec, binName, valueList[i], createSpec );
+      rc = localLSetInsert( topRec, lsetBinName, valueList[i], createSpec );
       if( rc < 0 ) then
         warn("[ERROR]<%s:%s> Problem Inserting Item #(%d) [%s]", MOD, meth, i,
           tostring( valueList[i] ));
@@ -1986,6 +1986,9 @@ end -- function localLSetSearch()
 local function localLSetScan(topRec, lsetBinName, filter, fargs)
 
   local meth = "localLSetScan()";
+
+  GP=F and trace("\n\n >>>>>>>>> API[ LSET SCAN ] <<<<<<<<<< \n");
+
   rc = 0; -- start out OK.
   GP=E and trace("[ENTER]<%s:%s> Null SV: return all . Name(%s)",
                  MOD, meth, tostring(lsetBinName) );
@@ -2143,9 +2146,9 @@ end -- function localGetConfig()
 -- shown in the result.
 -- Return a LIST of lists -- with Each List marked with it's Hash Name.
 -- ========================================================================
-local function localDump( topRec, binName )
+local function localDump( topRec, lsetBinName )
   local meth = "localDump()";
-  GP=E and trace("[ENTER]<%s:%s> ", MOD, meth)
+  GP=E and trace("[ENTER]<%s:%s> Bin(%s)", MOD, meth,tostring(lsetBinName));
   GP=F and trace("\n\n >>>>>>>>> API[ LSET DUMP ] <<<<<<<<<< \n");
 
   local lsetList = topRec[lsetBinName];
@@ -2208,7 +2211,7 @@ end -- localDump();
 -- Question  -- Reset the record[binName] to NIL (does that work??)
 -- Parms:
 -- (1) topRec: the user-level record holding the LSO Bin
--- (2) binName: The name of the LDT Bin
+-- (2) lsetBinName: The name of the LDT Bin
 -- Result:
 --   res = 0: all is well
 --   res = -1: Some sort of error
@@ -2218,7 +2221,7 @@ local function localLdtRemove( topRec, lsetBinName )
 
   GP=F and trace("\n\n >>>>>>>>> API[ LMAP REMOVE ] <<<<<<<<<< \n");
 
-  GP=E and trace("[ENTER]: <%s:%s> binName(%s)",
+  GP=E and trace("[ENTER]: <%s:%s> lsetBinName(%s)",
     MOD, meth, tostring(lsetBinName));
   local rc = 0; -- start off optimistic
 
@@ -2304,19 +2307,19 @@ end -- lset_create_and_insert()
 -- ======================================================================
 -- lset_insert_all() -- with and without create
 -- ======================================================================
-function lset_insert_all( topRec, binName, valueList )
+function lset_insert_all( topRec, lsetBinName, valueList )
   return localLSetInsertAll( topRec, lsetBinName, newValue, nil )
 end
 
-function lset_create_and_insert_all( topRec, binName, valueList )
+function lset_create_and_insert_all( topRec, lsetBinName, valueList )
   return localLSetInsertAll( topRec, lsetBinName, newValue, createSpec )
 end
 
-function insert_all( topRec, binName, valueList )
+function insert_all( topRec, lsetBinName, valueList )
   return localLSetInsertAll( topRec, lsetBinName, newValue, nil )
 end
 
-function create_and_insert_all( topRec, binName, valueList )
+function create_and_insert_all( topRec, lsetBinName, valueList )
   return localLSetInsertAll( topRec, lsetBinName, newValue, createSpec )
 end
 
@@ -2373,20 +2376,20 @@ end -- lset_search_then_filter()
 -- lset_scan() -- with and without filter
 -- ======================================================================
 function scan( topRec, lsetBinName )
-  return localLSetScan(resultList,topRec,lsetBinName,nil,nil)
+  return localLSetScan(topRec,lsetBinName,nil,nil)
 end -- lset_search()
 
 function lset_scan( topRec, lsetBinName )
-  return localLSetScan(resultList,topRec,lsetBinName,nil,nil)
+  return localLSetScan(topRec,lsetBinName,nil,nil)
 end -- lset_search()
 -- ======================================================================
 
 function scan_then_filter(topRec, lsetBinName, filter, fargs)
-  return localLSetScan(resultList,topRec,lsetBinName,filter,fargs)
+  return localLSetScan(topRec,lsetBinName,filter,fargs)
 end -- lset_search_then_filter()
 
 function lset_scan_then_filter(topRec, lsetBinName, filter, fargs)
-  return localLSetScan(resultList,topRec,lsetBinName,filter,fargs)
+  return localLSetScan(topRec,lsetBinName,filter,fargs)
 end -- lset_search_then_filter()
 
 -- ======================================================================
@@ -2449,20 +2452,20 @@ end
 -- control structure of the bin.  If this is the LAST LDT in the record,
 -- then ALSO remove the HIDDEN LDT CONTROL BIN.
 --
--- Question  -- Reset the record[lsoBinName] to NIL (does that work??)
+-- Question  -- Reset the record[lsetBinName] to NIL (does that work??)
 -- Parms:
--- (1) topRec: the user-level record holding the LSO Bin
--- (2) lsoBinName: The name of the LSO Bin
+-- (1) topRec: the user-level record holding the LSET Bin
+-- (2) lsetBinName: The name of the LSET Bin
 -- Result:
 --   res = 0: all is well
 --   res = -1: Some sort of error
 -- ========================================================================
-function remove( topRec, lmapBinName )
-  return localLdtRemove( topRec, lmapBinName );
+function remove( topRec, lsetBinName )
+  return localLdtRemove( topRec, lsetBinName );
 end
 
-function lset_remove( topRec, lmapBinName )
-  return localLdtRemove( topRec, lmapBinName );
+function lset_remove( topRec, lsetBinName )
+  return localLdtRemove( topRec, lsetBinName );
 end
 
 -- ========================================================================
@@ -2473,11 +2476,11 @@ end
 -- shown in the result.
 -- Return a LIST of lists -- with Each List marked with it's Hash Name.
 -- ========================================================================
-function dump( topRec, binName )
-  return localDump( topRec, binName );
+function dump( topRec, lsetBinName )
+  return localDump( topRec, lsetBinName );
 end
-function lset_dump( topRec, binName )
-  return localDump( topRec, binName );
+function lset_dump( topRec, lsetBinName )
+  return localDump( topRec, lsetBinName );
 end
 -- ========================================================================
 -- ========================================================================

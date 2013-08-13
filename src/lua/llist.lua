@@ -2,7 +2,7 @@
 -- Last Update August 12,  2013: tjl
 --
 -- Keep this MOD value in sync with version above
-local MOD = "llist_2013_08_12.c"; -- module name used for tracing.  
+local MOD = "llist_2013_08_12.d"; -- module name used for tracing.  
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -378,6 +378,11 @@ local RT_SUB  = 2; -- 0x2: Regular Sub Record (Node, Leaf)::Used for set_type
 local RT_LEAF = 3; -- xxx: Leaf Nodes:: Not used for set_type() 
 local RT_ESR  = 4; -- 0x4: Existence Sub Record
 
+-- Bin Flag Types
+local BF_LDT_BIN     = 1; -- Main LDT Bin
+local BF_LDT_HIDDEN  = 2; -- LDT Bin::Set the Hidden Flag on this bin
+local BF_LDT_CONTROL = 4; -- Main LDT Control Bin (one per record)
+--
 -- We maintain a pool, or "context", of subrecords that are open.  That allows
 -- us to look up subrecs and get the open reference, rather than bothering
 -- the lower level infrastructure.  There's also a limit to the number
