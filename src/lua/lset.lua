@@ -2,7 +2,7 @@
 -- Last Update August 13, 2013: TJL
 --
 -- Keep this in sync with the version above.
-local MOD="lset_2013_08_13.d"; -- the module name used for tracing
+local MOD="lset_2013_08_13.r"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -864,16 +864,16 @@ local function getKeyValue( ldtMap, value )
   if( ldtMap[M_KeyType] == KT_ATOMIC ) then
     keyValue = value;
   else
-    -- Employ the user's supplied function (keyFunction) and if that's not
-    -- there, look for the special case where the object has a field
-    -- called 'key'.  If not, then, well ... tough.  We tried.
-    local keyFunction = ldtMap[M_KeyFunction];
-    if( keyFunction ~= nil ) and functionTable[keyFunction] ~= nil then
+    local keyFuncName = ldtMap[M_KeyFunction];
+    if( keyFuncName ~= nil ) and functionTable[keyFuncName] ~= nil then
+      -- Employ the user's supplied function (keyFunction) and if that's not
+      -- there, look for the special case where the object has a field
+      -- called 'key'.  If not, then, well ... tough.  We tried.
       keyValue = functionTable[keyFunction]( value );
-    elseif value["key"] ~= nil then
-      keyValue = value["key"];
     else
-      keyValue = -1;
+      -- If there's no shortcut, then take the "longcut" to get an atomic
+      -- value that represents this entire object.
+      keyValue = tostring( value );
     end
   end
 
@@ -1030,6 +1030,69 @@ local function unTransformComplexCompare(lsetMap, unTransform, dbValue, searchKe
 
   return resultValue;
 end -- unTransformComplexCompare()
+
+-- =======================================================================
+-- searchList()
+-- =======================================================================
+-- Search a list for an item.  Each object (atomic or complex) is translated
+-- into a "searchKey".  That can be a hash, a tostring or any other result
+-- of a "uniqueIdentifier()" function.
+--
+-- (*) lsetList: Main LDT Control Structure
+-- (*) binList: the list of values from the record
+-- (*) searchKey: the "translated value"  we're searching for
+-- Return the position if found, else return ZERO.
+-- =======================================================================
+local function searchList(lsetList, binList, searchKey )
+  local meth = "searchList()";
+  GP=E and trace("[ENTER]: <%s:%s> Looking for searchKey(%s) in List(%s)",
+     MOD, meth, tostring(searchKey), tostring(binList));
+                 
+  local propMap = lsetList[1]; 
+  local lsetMap = lsetList[2];
+  local position = 0; 
+
+  -- Check once for the untransform function -- so we don't need
+  -- to do it inside the loop.
+  local unTransformFunc = nil;
+  local untransName =  lsetMap[M_UnTransform];
+  if ( untransName ~= nil and functionTable[untransName] ~= nil ) then
+    unTransformFunc = functionTable[untransName];
+  end
+
+  -- Nothing to search if the list is null or empty
+  if( binList == nil or list.size( binList ) == 0 ) then
+    GP=F and trace("[DEBUG]<%s:%s> EmptyList", MOD, meth );
+    return 0;
+  end
+
+  -- Search the list for the item (searchKey) return the position if found.
+  -- Note that searchKey may be the entire object, or it may be a subset.
+  local listSize = list.size(binList);
+  local item;
+  for i = 1, listSize, 1 do
+    item = binList[i];
+    GP=F and trace("[COMPARE]<%s:%s> index(%d) SV(%s) and ListVal(%s)",
+                   MOD, meth, i, tostring(searchKey), tostring(item));
+    -- a value that does not exist, will have a nil binList item
+    -- so we'll skip this if-loop for it completely                  
+    if item ~= nil then
+      if( unTransformFunc ~= nil ) then
+        modValue = unTransformFunc( item );
+      else
+        modValue = item;
+      end
+
+      if( searchKey == modValue ) then
+        position = i;
+        break;
+      end
+    end -- end if not null and not empty
+  end -- end for each item in the list
+
+  GP=E and trace("[EXIT]<%s:%s> Result: Position(%d)", MOD, meth, position );
+  return position;
+end -- searchList()
 
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- Scan a List for an item.  Return the item if found.
@@ -1250,8 +1313,8 @@ local function complexScanList(resultList, lsetList, objList, key, value, flag,
 end -- complexScanList
 
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
--- Scan a List, append all the items in the list to result. 
--- This is SIMPLE SCAN, where we are assuming ATOMIC values.
+-- Scan a List, append all the items in the list to result if they pass
+-- the filter.
 -- Parms:
 -- (*) topRec:
 -- (*) resultList: List holding search result
@@ -1261,145 +1324,66 @@ end -- complexScanList
 -- Return: resultlist 
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
-local function simpleScanListAll(topRec, resultList, lsetList, filter, fargs) 
-  local meth = "simpleScanListAll()";
-  GP=E and trace("[ENTER]: <%s:%s> Appending all the elements of List ",
-                 MOD, meth)
+local function scanListAll(topRec, resultList, lsetList, filter, fargs) 
+  local meth = "scanListAll()";
+  GP=E and trace("[ENTER]: <%s:%s> Scan all elements: filter(%s) fargs(%s)",
+                 MOD, meth, tostring(filter), tostring(fargs));
 
   local propMap = lsetList[1]; 
   local lsetMap = lsetList[2];
   local listCount = 0;
   local transform = nil;
   local unTransform = nil;
-  local retValue = nil;
+  local liveObject = nil; -- the object after "UnTransform"
+  local resultFiltered = nil;
 
   -- Check once for the transform/untransform functions -- so we don't need
   -- to do it inside the loop.
-  if lsetMap[M_Transform] ~= nil then
-    transform = functionTable[lsetMap[M_Transform]];
+  local unTransformFunc = nil;
+  local untransName =  lsetMap[M_UnTransform];
+  if ( untransName ~= nil and functionTable[untransName] ~= nil ) then
+    unTransformFunc = functionTable[untransName];
   end
 
-  if lsetMap[M_UnTransform] ~= nil then
-    unTransform = functionTable[lsetMap[M_UnTransform]];
+  local filterFunction = nil;
+  if( filter ~= nil and functionTable[filter] ~= nil ) then
+    filterFunction = functionTable[filter];
   end
 
   -- Loop through all the modulo n lset-record bins 
   local distrib = lsetMap[M_Modulo];
-
   GP=F and trace(" Number of LSet bins to parse: %d ", distrib)
-
   for j = 0, (distrib - 1), 1 do
 	local binName = getBinName( j );
-   
     GP=F and trace(" Parsing through :%s ", tostring(binName))
-
 	if topRec[binName] ~= nil then
       local objList = topRec[binName];
-      for i = 1, list.size( objList ), 1 do
-        if objList[i] ~= nil then
-          retValue = objList[i]; 
-          if unTransform ~= nil then
-            retValue = unTransform( objList[i] );
-          end
-
-          -- APPLY FILTER HERE
-          local resultFiltered;
-
-          if filter ~= nil and fargs ~= nil then
-              resultFiltered = functionTable[func]( retValue, fargs );
-          else
-              resultFiltered = retValue;
-          end
-
-        			list.append( resultList, resultFiltered );
-                
-				listCount = listCount + 1; 
-   			end -- end if not null and not empty
+      if( objList ~= nil ) then
+        for i = 1, list.size( objList ), 1 do
+          if objList[i] ~= nil then
+            if unTransformFunc ~= nil then
+              liveObject = unTransformFunc( objList[i] );
+            else
+              liveObject = objList[i]; 
+            end
+            -- APPLY FILTER HERE, if we have one.
+            if filterFunction ~= nil then
+              resultFiltered = filterFunction( liveObject, fargs );
+            else
+              resultFiltered = liveObject;
+            end
+            list.append( resultList, resultFiltered );
+          end -- end if not null and not empty
   		end -- end for each item in the list
+      end -- if bin list not nil
     end -- end of topRec null check 
   end -- end for distrib list for-loop 
 
   GP=E and trace("[EXIT]: <%s:%s> Appending %d elements to ResultList ",
-                 MOD, meth, listCount)
+                 MOD, meth, list.size(resultList));
 
   return 0; 
-end -- simpleScanListAll
-
--- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
--- Scan a List, append all the items in the list to result.
---
--- TODO :  
--- This is COMPLEX SCAN, currently an exact copy of the simpleScanListAll().
--- I need to first write an unTransformComplexCompare() which involves
--- using the compare function, to write a new complexScanListAll()  
---
--- Parms:
--- (*) topRec:
--- (*) resultList: List holding search result
--- (*) lsetList: The main LDT control structure
--- (*) filter:
--- (*) fargs:
--- Return: resultlist 
--- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
--- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
-local function complexScanListAll(topRec, resultList, lsetList, filter, fargs) 
-  local meth = "complexScanListAll()";
-  GP=E and trace("[ENTER]: <%s:%s> Appending all the elements of List ",
-                 MOD, meth)
-
-  local propMap = lsetList[1]; 
-  local lsetMap = lsetList[2];
-  local listCount = 0;
-  local transform = nil;
-  local unTransform = nil;
-  local retValue = nil;
-  
-  if lsetMap[M_Transform] ~= nil then
-    transform = functionTable[lsetMap[M_Transform]];
-  end
-
-  if lsetMap[M_UnTransform] ~= nil then
-    unTransform = functionTable[lsetMap[M_UnTransform]];
-  end
-
-  -- Loop through all the modulo n lset-record bins 
-  local distrib = lsetMap[M_Modulo];
-  
-  GP=F and trace(" Number of LSet bins to parse: %d ", distrib)
-
-  for j = 0, (distrib - 1), 1 do
-	local binName = getBinName( j );
-    GP=F and trace(" Parsing through :%s ", tostring(binName))
-	local binList = topRec[binName];
-	local resultValue = nil;
-    if topRec[binName] ~= nil then
-		for i = 1, list.size( binList ), 1 do
---			if binList[i] ~= nil and binList[i] ~= FV_EMPTY then
-			if binList[i] ~= nil then
-				retValue = binList[i]; 
-				if unTransform ~= nil then
-					retValue = unTransform( binList[i] );
-				end
-			        local resultFiltered;
-
-			        if filter ~= nil and fargs ~= nil then
-	                	resultFiltered = functionTable[func]( retValue, fargs );
-        			else
-                		resultFiltered = retValue;
-        			end
-
-        			list.append( resultList, resultFiltered );
-				listCount = listCount + 1; 
-   			end -- end if not null and not empty
-  		end -- end for each item in the list
-    end -- end of topRec null check 
-  end -- end for distrib list for-loop 
-
- GP=E and trace("[EXIT]: <%s:%s> Appending %d elements to ResultList ",
-                 MOD, meth, listCount)
-
-  return 0; 
-end -- complexScanListAll
+end -- scanListAll
 
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- Scan a List for an item.  Return the item if found.
@@ -1450,14 +1434,19 @@ end
 -- (*) lsetList: The LSet control map
 -- (*) newValue: Value to be inserted
 -- (*) stats: 1=Please update Counts, 0=Do NOT update counts (rehash)
+-- RETURN:
+--  0: ok
+-- -1: Unique Value violation
 -- ======================================================================
 local function localInsert( topRec, lsetList, newValue, stats )
   local meth = "localInsert()";
   
-  GP=E and trace("[ENTER]:<%s:%s>Insert(%s)", MOD, meth, tostring(newValue));
+  GP=E and trace("[ENTER]:<%s:%s>Insert(%s) stats(%s)",
+    MOD, meth, tostring(newValue), tostring(stats));
 
   local propMap = lsetList[1];  
   local lsetMap = lsetList[2];
+  local rc = 0;
   
   -- We'll get the key and use that to feed to the hash function, which will
   -- tell us what bin we're in.
@@ -1475,28 +1464,37 @@ local function localInsert( topRec, lsetList, newValue, stats )
     binList = list();
   end
   -- Look for the value, and insert if it is not there.
-  insertResult =
-      scanList( nil, lsetList, binList, key, newValue, FV_INSERT, nil, nil );
+  local position = searchList( lsetList, binList, key );
+  if( position == 0 ) then
+    list.append( binList, newValue );
+    insertResult = 1;
     topRec[binName] = binList; 
-                
-  -- update stats if appropriate.
-  if stats == 1 and insertResult == 1 then -- Update Stats if success
-    local itemCount = propMap[PM_ItemCount];
-    local totalCount = lsetMap[M_TotalCount];
+
+    -- Update stats if appropriate.
+    if( stats == 1 ) then -- Update Stats if success
+      local itemCount = propMap[PM_ItemCount];
+      local totalCount = lsetMap[M_TotalCount];
     
-    propMap[PM_ItemCount] = itemCount + 1; -- number of valid items goes up
-    lsetMap[M_TotalCount] = totalCount + 1; -- Total number of items goes up
-    GP=F and trace("[STATUS]<%s:%s>Updating Stats TC(%d) IC(%d)", MOD, meth,
-      lsetMap[M_TotalCount], propMap[PM_ItemCount] );
+      propMap[PM_ItemCount] = itemCount + 1; -- number of valid items goes up
+      lsetMap[M_TotalCount] = totalCount + 1; -- Total number of items goes up
+      topRec[lsetBinName] = lsetList;
+
+      GP=F and trace("[STATUS]<%s:%s>Updating Stats TC(%d) IC(%d)", MOD, meth,
+        lsetMap[M_TotalCount], propMap[PM_ItemCount] );
+    else
+      GP=F and trace("[STATUS]<%s:%s>NOT updating stats(%d)",MOD,meth,stats);
+    end
   else
-    GP=F and trace("[STATUS]<%s:%s>NOT updating stats (%d)", MOD, meth, stats);
+    rc = -1;
+    warn("[UNIQUENESS VIOLATION]<%s:%s> Attempt to insert duplicate value(%s)",
+      MOD, meth, tostring( newValue ));
+    error(ldte.ERR_UNIQUE_KEY);
   end
 
-  topRec[lsetBinName] = lsetList;
- 
-  GP=E and trace("[EXIT]: <%s:%s>Storing Record() with New Value(%s): Map(%s)",
-                 MOD, meth, tostring( newValue ), tostring( lsetMap ) );
-  -- No need to return anything
+  GP=E and trace("[EXIT]<%s:%s>Insert Results: RC(%d) Value(%s)",
+    MOD, meth, rc, tostring( newValue ));
+
+  return rc;
 end -- localInsert
 
 -- ======================================================================
@@ -1776,9 +1774,12 @@ end -- localLSetCreate()
 -- (*) lsetBinName: The name of the bin for the AS Large Set
 -- (*) newValue: Value to be inserted into the Large Set
 -- (*) createSpec: When in "Create Mode", use this Create Spec
+-- ======================================================================
 local function localLSetInsert( topRec, lsetBinName, newValue, createSpec )
   local meth = "localLSetInsert()";
   
+  GP=F and trace("\n\n >>>>>>>>> API[ LSET INSERT ] <<<<<<<<<< \n");
+
   GP=E and trace("[ENTER]:<%s:%s> SetBin(%s) NewValue(%s) createSpec(%s)",
                  MOD, meth, tostring(lsetBinName), tostring( newValue ),
                  tostring( createSpec ));
@@ -1950,31 +1951,128 @@ end -- function localLSetExists()
 -- Then, scan the bin's list for that item (linear scan).
 --
 -- ======================================================================
-local function localLSetSearch(topRec, lsetBinName, searchKey, filter, fargs)
-  local meth = "localLSetSearch()";
-  rc = 0; -- start out OK.
+-- local function localLSetSearch(topRec, lsetBinName, searchVal, filter, fargs)
+--   local meth = "localLSetSearch()";
+--   rc = 0; -- start out OK.
+-- 
+--   GP=E and trace("[ENTER]: <%s:%s> Search for Key(%s)",
+--                  MOD, meth, tostring( searchKey ) );
+-- 
+--   -- Validate the topRec, the bin and the map.  If anything is weird, then
+--   -- this will kick out with a long jump error() call.
+--   validateRecBinAndMap( topRec, lsetBinName, true );
+-- 
+--   -- Find the appropriate bin for the Search value
+--   local lsetList = topRec[lsetBinName];
+--   local propMap = lsetList[1]; 
+--   local lsetMap = lsetList[2];
+--   local searchKey = getKeyValue( lsetMap, searchVal );
+--   local binNumber = computeSetBin( searchKey, lsetMap );
+--   local binName = getBinName( binNumber );
+--   local binList = topRec[binName];
+--   local resultList = list();
+--   rc = scanList(resultList,lsetList,binList,searchKey,nil,FV_SCAN,filter,fargs);
+-- 
+--   GP=E and trace("[EXIT]: <%s:%s>: Search Returns (%s)",
+--                  MOD, meth, tostring(result));
 
-  GP=E and trace("[ENTER]: <%s:%s> Search for Key(%s)",
+--   return resultList;
+-- end -- function localLSetSearch()
+
+-- ======================================================================
+-- |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- || localLSetSearch
+-- |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- ======================================================================
+-- Find an element (i.e. search), and optionally apply a filter.
+-- Return the element if found, return nil if not found.
+-- Parms:
+-- (*) topRec:
+-- (*) lsetBinName:
+-- (*) searchValue:
+-- (*) filter: the NAME of the filter function (which we'll find in FuncTable)
+-- (*) fargs: Optional Arguments to feed to the filter
+-- ======================================================================
+local function localLSetSearch( topRec, lsetBinName, searchValue,
+        filter, fargs)
+
+  GP=F and trace("\n\n >>>>>>>>> API[ LSET SEARCH ] <<<<<<<<<< \n");
+
+  local meth = "localLSetSearch()";
+  GP=E and trace("[ENTER]: <%s:%s> Search Value(%s)",
                  MOD, meth, tostring( searchKey ) );
+
+  local rc = 0; -- Start out ok.
+  local resultList = list(); -- add results to this list.
 
   -- Validate the topRec, the bin and the map.  If anything is weird, then
   -- this will kick out with a long jump error() call.
   validateRecBinAndMap( topRec, lsetBinName, true );
 
-  -- Find the appropriate bin for the Search value
+  -- Check that the Set Structure is already there, otherwise, error
+  if( topRec[lsetBinName] == nil ) then
+    GP=E and trace("[ERROR EXIT]: <%s:%s> LSetCtrlBin does not Exist",
+                   MOD, meth );
+    error( ldte.ERR_BIN_DOES_NOT_EXIST );
+  end
+
   local lsetList = topRec[lsetBinName];
   local propMap = lsetList[1]; 
   local lsetMap = lsetList[2];
-  local binNumber = computeSetBin( searchKey, lsetMap );
+
+  -- Get the value we'll compare against
+  local key = getKeyValue( lsetMap, searchValue );
+
+  -- Find the appropriate bin for the Search value
+  local binNumber = computeSetBin( key, lsetMap );
   local binName = getBinName( binNumber );
   local binList = topRec[binName];
-  local resultList = list();
-  rc = scanList(resultList,lsetList,binList,searchKey,nil,FV_SCAN,filter,fargs);
+  local liveObject = nil;
+  local resultFitlered = nil;
+  local position = 0;
 
-  GP=E and trace("[EXIT]: <%s:%s>: Search Returns (%s)",
-                 MOD, meth, tostring(result));
+  local unTransformFunc = nil;
+  local untransName =  lsetMap[M_UnTransform];
+  if ( untransName ~= nil and functionTable[untransName] ~= nil ) then
+    unTransformFunc = functionTable[untransName];
+  end
 
-  return resultList;
+  local filterFunction = nil;
+  if( filter ~= nil and functionTable[filter] ~= nil ) then
+    filterFunction = functionTable[filter];
+  end
+
+  -- We bother to search only if there's a real list.
+  if binList ~= nil and list.size( binList ) > 0 then
+    position = searchList( lsetList, binList, key );
+    if( position > 0 ) then
+      -- Apply the filter to see if this item qualifies
+      -- First -- we have to untransform it (sadly, again)
+      local item = binList[position];
+      if unTransformFunc ~= nil then
+        liveObject = unTransformFunc( item );
+      else
+        liveObject = item;
+      end
+
+      -- APPLY FILTER HERE, if we have one.
+      if filterFunction ~= nil then
+        resultFiltered = filterFunction( liveObject, fargs );
+      else
+        resultFiltered = liveObject;
+      end
+    end -- if search found something (pos > 0)
+  end -- if there's a list
+
+  if( resultFiltered == nil ) then
+    warn("[WARNING]<%s:%s> Value not found: Value(%s)",
+      MOD, meth, tostring( searchValue ) );
+    error( ldte.ERR_NOT_FOUND );
+  end
+
+  GP=E and trace("[EXIT]: <%s:%s>: Success: Search Value(%s)",
+                 MOD, meth, tostring( searchValue ));
+  return resultFiltered;
 end -- function localLSetSearch()
 
 -- ======================================================================
@@ -2008,12 +2106,7 @@ local function localLSetScan(topRec, lsetBinName, filter, fargs)
   local lsetMap = lsetList[2];
   
   local resultList = list();
- 
-  if lsetMap[M_KeyType] == KT_ATOMIC then
-	rc = simpleScanListAll(topRec, resultList, lsetList, filter, fargs) 
-  else
-	rc = complexScanListAll(topRec, resultList, lsetList, filter, fargs)
-  end
+  rc = scanListAll(topRec, resultList, lsetList, filter, fargs) 
 
   GP=E and trace("[EXIT]: <%s:%s>: Search Returns (%s) Size : %d",
                  MOD, meth, tostring(resultList), list.size(resultList));
@@ -2031,24 +2124,24 @@ end -- function localLSetScan()
 -- Parms:
 -- (*) topRec:
 -- (*) lsetBinName:
--- (*) deleteKey:
+-- (*) deleteValue:
 -- (*) filter: the NAME of the filter function (which we'll find in FuncTable)
 -- (*) fargs: Arguments to feed to the filter
 -- ======================================================================
-local function localLSetDelete( topRec, lsetBinName, deleteKey,
+local function localLSetDelete( topRec, lsetBinName, deleteValue,
         filter, fargs)
+
+  GP=F and trace("\n\n >>>>>>>>> API[ LSET DELETE ] <<<<<<<<<< \n");
 
   local meth = "localLSetDelete()";
   GP=E and trace("[ENTER]: <%s:%s> Delete Value(%s)",
-                 MOD, meth, tostring( deleteKey ) );
+                 MOD, meth, tostring( deleteValue ) );
 
   local rc = 0; -- Start out ok.
-  local resultList = list(); -- add results to this list.
 
   -- Validate the topRec, the bin and the map.  If anything is weird, then
   -- this will kick out with a long jump error() call.
   validateRecBinAndMap( topRec, lsetBinName, true );
-
 
   -- Check that the Set Structure is already there, otherwise, error
   if( topRec[lsetBinName] == nil ) then
@@ -2057,43 +2150,79 @@ local function localLSetDelete( topRec, lsetBinName, deleteKey,
     error( ldte.ERR_BIN_DOES_NOT_EXIST );
   end
 
-  -- Find the appropriate bin for the Search value
   local lsetList = topRec[lsetBinName];
   local propMap = lsetList[1]; 
   local lsetMap = lsetList[2];
-  local binNumber = computeSetBin( deleteKey, lsetMap );
 
-  GP=F and trace("[DEBUG]<%s:%s> LSET Summary(%s)", MOD, meth,
-    lsetSummaryString( lsetList ));
+  -- Get the value we'll compare against
+  local key = getKeyValue( lsetMap, deleteValue );
 
+  -- Find the appropriate bin for the Search value
+  local binNumber = computeSetBin( key, lsetMap );
   local binName = getBinName( binNumber );
   local binList = topRec[binName];
-  -- Fow now, scanList() will only NULL out the element in a list, but will
-  -- not collapse it.  Later, if we see that there are a LOT of nil entries,
-  -- we can RESET the set and remove all of the "gas".
-  rc = scanList(resultList,lsetList,binList,deleteKey,nil,FV_DELETE,nil,nil);
-  if( rc == ERR_NOT_FOUND ) then
-    -- We'll jump out with a NOT FOUND error
-    warn("[WARNING]<%s:%s> Object(%s) not found", MOD, meth, 
-      tostring(deleteKey));
-    error( ldte.ERR_NOT_FOUND );
-  elseif( rc == 0 and list.size( resultList ) > 0 ) then
-    -- We found something -- and marked it nil -- so update the record
-    topRec[binName] = binList;
-    rc = aerospike:update( topRec );
-    if( rc < 0 ) then
-      warn("[ERROR]<%s:%s> Error(%d) aerospike:update(toprec)",MOD,meth,rc);
-      error( ldte.ERR_DELETE );
-    end
-  else
-    warn("[WARNING]<%s:%s> Unexpected Error(%d) from scanList()",MOD,meth,rc);
-    error( ldte.ERR_DELETE );
+  local liveObject = nil;
+  local resultFitlered = nil;
+  local position = 0;
+
+  local unTransformFunc = nil;
+  local untransName =  lsetMap[M_UnTransform];
+  if ( untransName ~= nil and functionTable[untransName] ~= nil ) then
+    unTransformFunc = functionTable[untransName];
   end
 
-  GP=E and trace("[EXIT]: <%s:%s>: Delete RC(%d) ResultList(%s)",
-                 MOD, meth, rc, tostring( resultList ));
+  local filterFunction = nil;
+  if( filter ~= nil and functionTable[filter] ~= nil ) then
+    filterFunction = functionTable[filter];
+  end
 
-  return resultList;
+  GP=F and trace("[DEBUG]<%s:%s>: Untransform(%s) Filter(%s)",
+     MOD, meth, tostring(unTransformFunc), tostring(filterFunction));
+
+  -- We bother to search only if there's a real list.
+  if binList ~= nil and list.size( binList ) > 0 then
+    position = searchList( lsetList, binList, key );
+    if( position > 0 ) then
+      -- Apply the filter to see if this item qualifies
+      -- First -- we have to untransform it (sadly, again)
+      local item = binList[position];
+      if unTransformFunc ~= nil then
+        liveObject = unTransformFunc( item );
+      else
+        liveObject = item;
+      end
+
+      -- APPLY FILTER HERE, if we have one.
+      if filterFunction ~= nil then
+        resultFiltered = filterFunction( liveObject, fargs );
+      else
+        resultFiltered = liveObject;
+      end
+    end -- if search found something (pos > 0)
+  end -- if there's a list
+
+  if( resultFiltered == nil ) then
+    warn("[WARNING]<%s:%s> Value not found: Value(%s)",
+      MOD, meth, tostring( deleteValue ) );
+    error( ldte.ERR_NOT_FOUND );
+  end
+
+  -- ok, we got the value.  Remove it and update the record.  Also,
+  -- update the stats.
+  binList[position] = nil;
+  topRec[binName] = binList;
+  local itemCount = propMap[PM_ItemCount];
+  propMap[PM_ItemCount] = itemCount - 1;
+  topRec[lsetBinName] = lsetList;
+  rc = aerospike:update( topRec );
+  if( rc ~= nil and rc ~= 0 ) then
+    warn("[WARNING]:<%s:%s> Bad Update Return(%s)", MOD, meth,tostring(rc));
+    error( ldte.ERR_INTERNAL );
+  end
+
+  GP=E and trace("[EXIT]: <%s:%s>: Success: DeleteValue(%s)",
+                 MOD, meth, tostring( deleteValue ));
+  return resultFiltered;
 end -- function localLSetDelete()
 
 -- ========================================================================
