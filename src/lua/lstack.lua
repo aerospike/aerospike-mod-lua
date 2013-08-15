@@ -2,7 +2,7 @@
 -- lstack.lua:  August 13, 2013
 --
 -- Module Marker: Keep this in sync with the stated version
-local MOD="lstack_2013_08_14.b"; -- the module name used for tracing
+local MOD="lstack_2013_08_15.a"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -1010,8 +1010,6 @@ local function setLdtRecordType( topRec )
     recPropMap[RPM_VInfo] = vinfo; 
     recPropMap[RPM_LdtCount] = 1; -- this is the first one.
     recPropMap[RPM_Magic] = MAGIC;
-    -- Set this control bin as HIDDEN
-    record.set_flags(topRec, REC_LDT_CTRL_BIN, BF_LDT_CONTROL );
   else
     -- Not much to do -- increment the LDT count for this record.
     recPropMap = topRec[REC_LDT_CTRL_BIN];
@@ -1021,6 +1019,8 @@ local function setLdtRecordType( topRec )
       MOD, meth, ldtCount + 1 );
   end
   topRec[REC_LDT_CTRL_BIN] = recPropMap;
+  -- Set this control bin as HIDDEN
+  record.set_flags(topRec, REC_LDT_CTRL_BIN, BF_LDT_HIDDEN );
 
   -- Now that we've changed the top rec, do the update to make sure the
   -- changes are saved.
@@ -4795,6 +4795,8 @@ local function localLdtRemove( topRec, binName )
   else
     recPropMap[RPM_LdtCount] = ldtCount - 1;
     topRec[REC_LDT_CTRL_BIN] = recPropMap;
+    -- Set this control bin as HIDDEN
+    record.set_flags(topRec, REC_LDT_CTRL_BIN, BF_LDT_HIDDEN );
   end
 
   -- Null out the LDT bin and update the record.
