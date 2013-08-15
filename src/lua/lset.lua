@@ -2,7 +2,7 @@
 -- Last Update August 14, 2013: TJL
 --
 -- Keep this in sync with the version above.
-local MOD="lset_2013_08_14.j"; -- the module name used for tracing
+local MOD="lset_2013_08_14.m"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -21,8 +21,8 @@ local G_LDT_VERSION = 1.1;
 -- the trace() call is NOT executed (regardless of the value of GP)
 -- ======================================================================
 local GP=true; -- Leave this set to true.
-local F=true; -- Set F (flag) to true to turn ON global print
-local E=true; -- Set E (ENTER/EXIT) to true to turn ON Enter/Exit print
+local F=false; -- Set F (flag) to true to turn ON global print
+local E=false; -- Set E (ENTER/EXIT) to true to turn ON Enter/Exit print
 
 -- ======================================================================
 -- Aerospike Server Functions:
@@ -2230,8 +2230,17 @@ local function localLSetDelete( topRec, lsetBinName, deleteValue,
 
   -- ok, we got the value.  Remove it and update the record.  Also,
   -- update the stats.
-  binList[position] = nil;
-  topRec[binName] = binList;
+  -- OK -- we can't simply NULL out the entry -- because that breaks the bin
+  -- when we try to store.  So -- we'll instead replace this current entry
+  -- with the END entry -- and then we'll COPY (take) the list ... until
+  -- we have the ability to truncate a list in place.
+  local listSize = list.size( binList );
+  if( position < listSize ) then
+    binList[position] = binList[listSize];
+  end
+  local newBinList = list.take( binList, listSize - 1 );
+
+  topRec[binName] = newBinList;
   record.set_flags(topRec, binName, BF_LDT_HIDDEN );--Must set every time
   local itemCount = propMap[PM_ItemCount];
   propMap[PM_ItemCount] = itemCount - 1;
@@ -2242,8 +2251,9 @@ local function localLSetDelete( topRec, lsetBinName, deleteValue,
     error( ldte.ERR_INTERNAL );
   end
 
-  GP=E and trace("[EXIT]: <%s:%s>: Success: DeleteValue(%s)",
-                 MOD, meth, tostring( deleteValue ));
+  GP=E and trace("[EXIT]<%s:%s>: Success: DeleteValue(%s) Res(%s) binList(%s)",
+    MOD, meth, tostring( deleteValue ), tostring(resultFiltered),
+    tostring(binList));
   return resultFiltered;
 end -- function localLSetDelete()
 
