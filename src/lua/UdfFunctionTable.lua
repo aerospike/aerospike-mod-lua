@@ -7,7 +7,7 @@
 -- Version 08.08.0:    Last Update: (August 08, 2013) tjl
 
 -- Keep this global value in sync with (above) version
-local MOD="UdfFunctionTable_2013_8_08.a"; -- the module name used for tracing
+local MOD="UdfFunctionTable_2013_08_14.a"; -- the module name used for tracing
 
 -- Table of Functions: Used for Transformation and Filter Functions in
 -- conjunction with Large Stack Objects (LSO) and Large Sets (LSET).
@@ -55,7 +55,7 @@ local MOD="UdfFunctionTable_2013_8_08.a"; -- the module name used for tracing
 -- the trace() call is NOT executed (regardless of the value of GP)
 -- ======================================================================
 local GP=true; -- Leave this set to true.
-local F=false; -- Set F (flag) to true to turn ON global print
+local F=true; -- Set F (flag) to true to turn ON global print
 
 -- ======================
 -- || GLOBAL CONSTANTS || -- Local, but global to this module

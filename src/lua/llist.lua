@@ -1,8 +1,8 @@
 -- Large Ordered List (llist.lua)
--- Last Update August 12,  2013: tjl
+-- Last Update August 14,  2013: tjl
 --
 -- Keep this MOD value in sync with version above
-local MOD = "llist_2013_08_12.d"; -- module name used for tracing.  
+local MOD = "llist_2013_08_14.b"; -- module name used for tracing.  
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -378,11 +378,13 @@ local RT_SUB  = 2; -- 0x2: Regular Sub Record (Node, Leaf)::Used for set_type
 local RT_LEAF = 3; -- xxx: Leaf Nodes:: Not used for set_type() 
 local RT_ESR  = 4; -- 0x4: Existence Sub Record
 
--- Bin Flag Types
-local BF_LDT_BIN     = 1; -- Main LDT Bin
+-- Bin Flag Types -- to show the various types of bins.
+-- NOTE: All bins will be labelled as either (1:RESTRICTED OR 2:HIDDEN)
+-- We will not currently be using "Control" -- that is effectively HIDDEN
+local BF_LDT_BIN     = 1; -- Main LDT Bin (Restricted)
 local BF_LDT_HIDDEN  = 2; -- LDT Bin::Set the Hidden Flag on this bin
 local BF_LDT_CONTROL = 4; -- Main LDT Control Bin (one per record)
---
+
 -- We maintain a pool, or "context", of subrecords that are open.  That allows
 -- us to look up subrecs and get the open reference, rather than bothering
 -- the lower level infrastructure.  There's also a limit to the number
@@ -664,7 +666,6 @@ local function setLdtRecordType( topRec )
     recPropMap[RPM_LdtCount] = 1; -- this is the first one.
     recPropMap[RPM_Magic] = MAGIC;
     -- Set this bin as HIDDEN
-    record.set_flags(topRec, REC_LDT_CTRL_BIN, BF_LDT_CONTROL );
   else
     -- Not much to do -- increment the LDT count for this record.
     recPropMap = topRec[REC_LDT_CTRL_BIN];
@@ -673,6 +674,7 @@ local function setLdtRecordType( topRec )
     GP=F and trace("[DEBUG]<%s:%s>Record LDT Map Exists: Bump LDT Count(%d)",
       MOD, meth, ldtCount + 1 );
   end
+  record.set_flags(topRec, REC_LDT_CTRL_BIN, BF_LDT_HIDDEN );
   topRec[REC_LDT_CTRL_BIN] = recPropMap;
 
   -- Now that we've changed the top rec, do the update to make sure the
@@ -1462,7 +1464,8 @@ local function initializeLeaf(topRec, ldtList, leafRec, firstValue, pd, nd )
   leafPropMap[PM_RecType] = RT_LEAF;
   leafPropMap[PM_ParentDigest] = topDigest;
   leafPropMap[PM_SelfDigest] = leafDigest;
-  leafPropMap[PM_CreateTime] = topPropMap[PM_CreateTime];
+  -- For subrecs, set create time to ZERO.
+  leafPropMap[PM_CreateTime] = 0;
 
   leafMap = map();
   if( ldtMap[R_StoreMode] == SM_LIST ) then
@@ -2154,7 +2157,8 @@ initPropMap( propMap, esrDigest, selfDigest, topDigest, rtFlag, topPropMap )
   propMap[PM_Magic]        = MAGIC;
   propMap[PM_ParentDigest] = topDigest;
   propMap[PM_SelfDigest]   = selfDigest;
-  propMap[PM_CreateTime]   = topPropMap[PM_CreateTime]
+  -- For subrecs, set create time to ZERO.
+  propMap[PM_CreateTime]   = 0;
 
   GP=E and trace("[EXIT]: <%s:%s>", MOD, meth );
 end -- initPropMap()
@@ -3985,6 +3989,7 @@ local function firstTreeInsert( src, topRec, ldtList, newValue, stats )
   ldtMap[R_RootDigestList] = rootDigestList;
   ldtList[2] = ldtMap;
   topRec[binName] = ldtList;
+  record.set_flags(topRec, binName, BF_LDT_BIN );--Must set every time
 
   -- Note: The caller will update the top record, but we need to update
   -- and close the subrecs here.
@@ -4281,6 +4286,7 @@ local function localInsert(src, topRec, ldtList, newValue, stats )
     GP=F and trace("[DEBUG]: <%s:%s> itemCount(%d)", MOD, meth, itemCount );
   end
   topRec[ binName ] = ldtList;
+  record.set_flags(topRec, binName, BF_LDT_BIN );--Must set every time
 
   GP=F and trace("[EXIT]: <%s:%s>Storing Record() with New Value(%s): Map(%s)",
                  MOD, meth, tostring( newValue ), tostring( ldtMap ) );
@@ -4699,6 +4705,7 @@ function llist_create( topRec, ldtBinName, argList )
   if argList ~= nil then
     adjustLListMap( ldtMap, argList ); -- ldtMap here, not ldtList
     topRec[ldtBinName] = ldtList; -- Update after adjustment
+    record.set_flags(topRec, binName, BF_LDT_BIN );--Must set every time
   end
 
   GP=F and trace("[DEBUG]<%s:%s> LLIST after Init(%s)",
@@ -4771,6 +4778,7 @@ local function localLListInsert( topRec, ldtBinName, newValue, createSpec )
       adjustLListMap( ldtMap, createSpec ); -- Map, not list, used here
     end
     topRec[ldtBinName] = ldtList;
+    record.set_flags(topRec, binName, BF_LDT_BIN );--Must set every time
   else
     -- all there, just use it
     ldtList = topRec[ ldtBinName ];
@@ -5080,6 +5088,7 @@ function llist_delete( topRec, binName, key )
     GP=F and trace("[DEBUG]: <%s:%s> itemCount(%d)", MOD, meth, itemCount );
   end
   topRec[ binName ] = ldtList;
+  record.set_flags(topRec, binName, BF_LDT_BIN );--Must set every time
 
   -- Validate results -- if anything bad happened, then the record
   -- probably did not change -- we don't need to udpate.

@@ -1,8 +1,8 @@
--- Large Stack Object (LSO or LSTACK) Operations
--- lmap.lua:  August 13, 2013
+-- Large Map Operations
+-- lmap.lua:  August 14, 2013
 --
 -- Module Marker: Keep this in sync with the stated version
-local MOD="lmap_2013_08_13.f"; -- the module name used for tracing
+local MOD="lmap_2013_08_14.a"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -272,8 +272,10 @@ local LDR_BNRY_BIN = "LdrBinaryBin";
 -- user-named LDT Bin.
 local SUBREC_PROP_BIN="SR_PROP_BIN";
 --
--- Bin Flag Types
-local BF_LDT_BIN     = 1; -- Main LDT Bin
+-- Bin Flag Types -- to show the various types of bins.
+-- NOTE: All bins will be labelled as either (1:RESTRICTED OR 2:HIDDEN)
+-- We will not currently be using "Control" -- that is effectively HIDDEN
+local BF_LDT_BIN     = 1; -- Main LDT Bin (Restricted)
 local BF_LDT_HIDDEN  = 2; -- LDT Bin::Set the Hidden Flag on this bin
 local BF_LDT_CONTROL = 4; -- Main LDT Control Bin (one per record)
 
@@ -872,6 +874,7 @@ local function initializeLMap( topRec, lmapBinName )
   
   -- Once this list of 2 maps is created, we need to assign it to topRec
   topRec[lmapBinName]            = lmapList;
+  record.set_flags(topRec, lmapBinName, BF_LDT_BIN );--Must set every time
   
 
   GP=F and trace("[DEBUG]: <%s:%s> : LMAP Summary after Init(%s)",
@@ -1350,22 +1353,30 @@ local function setupNewLmapBin( topRec, binName )
   -- create the first LMap type LDT bin
   topRec[binName] = list(); -- Create a new list for this new bin
 
+  -- TODO: This looks really wrong -- we're not calling this function, are we?
+
   -- TODO : Code for standard mode
   return 0;
 end -- setupNewLmapBin
 
 -- This gets called after every lmap_create to set the self-digest and update 
 -- TODO : Ask Toby if this can be done in another way 
+-- DONE : You just need to assign the lMapList back into the record, but you
+--        do NOT need to create a new lMapList.
 local function lmap_update_topdigest( topRec, binName )
     local meth = "lmap_update_topdigest()";
     local lMapList = topRec[binName] ;
     local propMap = lMapList[1]; 
     local lmapCtrlInfo = lMapList[2];
     propMap[PM_SelfDigest]   = record.digest( topRec );
-    local NewLmapList = list();
-    list.append( NewLmapList, propMap );
-    list.append( NewLmapList, lmapCtrlInfo );
-    topRec[binName] = NewLmapList;
+
+    -- local NewLmapList = list();
+    -- list.append( NewLmapList, propMap );
+    -- list.append( NewLmapList, lmapCtrlInfo );
+    -- topRec[binName] = NewLmapList;
+    topRec[binName] = lMapList;
+    record.set_flags(topRec, binName, BF_LDT_BIN );--Must set every time
+
     rc = aerospike:update( topRec );
     GP=F and trace("[EXIT]: <%s:%s> : Done.  RC(%d)", MOD, meth, rc );
     return rc;
@@ -1568,6 +1579,7 @@ local function createAndInitESR( topRec, lmapBinName)
     MOD, meth, tostring( lMapList ));
 
   topRec[lmapBinName] = lMapList;
+  record.set_flags(topRec, lmapBinName, BF_LDT_BIN );--Must set every time
 
   -- Probably shouldn't need to do this -- but this is just being extra
   -- conservative for the moment.
@@ -2216,43 +2228,41 @@ local function lmapLdrSubRecInsert( src, topRec, lmapBinName, lmapList, entryIte
   -- TODO : This needs to be moved to a separate function. 
   -- TODO : create_flag is WIP for now. Needs to be fixed later-on
   if create_flag == true then  
-    --GP=F and trace(" <%s:%s> !!!!!! NEW LDR CREATED, update DL !!!!!!", MOD, meth );
-    	local digest_bin = computeSetBin( entryItem, lmapCtrlInfo ); 
-    	local digestlist = lmapCtrlInfo[M_DigestList]; 
-    	
-    	if digestlist == nil then
-    	  -- sanity check 
-    	  warn("[ERROR]: <%s:%s>: Digest list nil or empty", MOD, meth);
-          error( ldte.ERR_INTERNAL );
-       	end 
-       	
-    	local newdigest_list = list(); 
-    	for i = 1, list.size( digestlist ), 1 do
-    	    if i == digest_bin then 
-                     
-              if digestlist[i] == 0 then
-                
-    	        GP=F and trace(" <%s:%s> Appending digest-bin %d with digest %s for value :%s ",
-                     MOD, meth, digest_bin, tostring(newChunkDigest), tostring(entryItem) ); 
-                 GP=F and trace(" !!!!!!! Digest-entry empty, inserting !!!! ");
-                 list.append( newdigest_list, newChunkDigest );
-              else
-                 GP=F and trace(" !!!!!!! Digest-entry index exists, we will skip DL touch !!!! ");
-                 list.append( newdigest_list, digestlist[i] );
-                 
-              end
-    	      
-    	    else
-    	      list.append( newdigest_list, digestlist[i] );
-    	    end -- end of digest_bin if 
-    	end -- end of for-loop 
-    	
-    	lmapCtrlInfo[M_DigestList] = newdigest_list; 
-    	local NewlMapList = list();
-        list.append( NewlMapList, propMap );
-        list.append( NewlMapList, lmapCtrlInfo );
-        topRec[lmapBinName] = NewlMapList;
-        rc = aerospike:update( topRec );
+    local digest_bin = computeSetBin( entryItem, lmapCtrlInfo ); 
+    local digestlist = lmapCtrlInfo[M_DigestList]; 
+    
+    if digestlist == nil then
+      -- sanity check 
+      warn("[ERROR]: <%s:%s>: Digest list nil or empty", MOD, meth);
+      error( ldte.ERR_INTERNAL );
+    end 
+    
+    local newdigest_list = list(); 
+    for i = 1, list.size( digestlist ), 1 do
+        if i == digest_bin then 
+          if digestlist[i] == 0 then
+            GP=F and trace(" <%s:%s> Appending digest-bin %d with digest %s for value :%s ",
+                 MOD, meth, digest_bin, tostring(newChunkDigest),
+                 tostring(entryItem) ); 
+             GP=F and trace(" !!!!!!! Digest-entry empty, inserting !!!! ");
+             list.append( newdigest_list, newChunkDigest );
+          else
+             GP=F and trace("<><> Digest-entry index exists, skip DL touch");
+             list.append( newdigest_list, digestlist[i] );
+          end
+        else
+          list.append( newdigest_list, digestlist[i] );
+        end -- end of digest_bin if 
+    end -- end of for-loop 
+    
+    lmapCtrlInfo[M_DigestList] = newdigest_list; 
+    -- local NewlMapList = list();
+    -- list.append( NewlMapList, propMap );
+    -- list.append( NewlMapList, lmapCtrlInfo );
+    -- topRec[lmapBinName] = NewlMapList;
+    topRec[lmapBinName] = lMapList;
+    record.set_flags(topRec, lmapBinName, BF_LDT_BIN );--Must set every time
+    rc = aerospike:update( topRec );
   end -- end of create-flag 
        
   GP=F and trace("[EXIT]: !!!!!Calling <%s:%s> with DL (%s) for %s !!!!!",
@@ -2564,8 +2574,8 @@ local function localInsert( topRec, lmapBinName, newValue, stats )
     insertResult =
       scanList( topRec, nil, lMapList, binList, newValue, FV_INSERT, nil, nil );
     -- list.append( binList, newValue );
+    lmapCtrlInfo[M_CompactList] = binList; 
     topRec[binName] = lMapList;
-    topRec[M_CompactList] = binList; 
   end
                 
   -- update stats if appropriate.
@@ -2578,11 +2588,13 @@ local function localInsert( topRec, lmapBinName, newValue, stats )
     propMap[PM_ItemCount] = itemCount + 1; -- number of valid items goes up
     lmapCtrlInfo[M_TotalCount] = totalCount + 1; -- Total number of items goes up
  
-    local NewlMapList = list();
-    list.append( NewlMapList, propMap );
-    list.append( NewlMapList, lmapCtrlInfo );
-    topRec[binName] = NewlMapList;
+    -- local NewlMapList = list();
+    -- list.append( NewlMapList, propMap );
+    -- list.append( NewlMapList, lmapCtrlInfo );
+    -- topRec[binName] = NewlMapList;
+    topRec[binName] = lMapList;
   end
+  record.set_flags(topRec, binName, BF_LDT_BIN );--Must set every time
  
   GP=F and trace("[EXIT]: <%s:%s>Storing Record() with New Value(%s): List(%s)",
                  MOD, meth, tostring( newValue ), tostring( binList ) );
@@ -2785,10 +2797,12 @@ local function localLMapInsert( topRec, lmapBinName, newValue, createSpec )
     if createSpec ~= nil then 
    	    adjustLMapCtrlInfo( lmapCtrlInfo, createSpec );
   	    -- Changes to the map need to be re-appended to topRec  
-	    local NewLmapList = list();
-	    list.append( NewLmapList, propMap );
-	    list.append( NewLmapList, lmapCtrlInfo );
-	    topRec[lmapBinName] = NewLmapList;
+	    -- local NewLmapList = list();
+	    -- list.append( NewLmapList, propMap );
+	    -- list.append( NewLmapList, lmapCtrlInfo );
+	    -- topRec[lmapBinName] = NewLmapList;
+	    topRec[lmapBinName] = lMapList;
+        record.set_flags(topRec, lmapBinName, BF_LDT_BIN );--Must set every time
 	    
 	    GP=F and trace("[DEBUG]: <%s:%s> : LMAP Summary after adjustLMapCtrlInfo(%s)",
 	      MOD, meth , lmapSummaryString(NewLmapList));
@@ -2957,11 +2971,16 @@ local function ldrDeleteList(topRec, lmapBinName, ldrChunkRec, listIndex, entryL
    
    -- update TopRec ()
    lmapCtrlInfo[M_DigestList] = digestlist; 
-   local NewLmapList = list();
-   list.append( NewLmapList, propMap );
-   list.append( NewLmapList, lmapCtrlInfo );
-   topRec[lmapBinName] = NewLmapList;
+   -- local NewLmapList = list();
+   -- list.append( NewLmapList, propMap );
+   -- list.append( NewLmapList, lmapCtrlInfo );
+   -- topRec[lmapBinName] = NewLmapList;
+   topRec[lmapBinName] = lMapList;
+  record.set_flags(topRec, lmapBinName, BF_LDT_BIN );--Must set every time
    rc = aerospike:update( topRec );
+
+   -- TODO : Must check result of UPDATE and call error() if something
+   -- bad happened
    
   end -- end of if check 
    
@@ -4053,10 +4072,12 @@ function lmap_create( topRec, lmapBinName, createSpec )
     adjustLMapCtrlInfo( lmapCtrlInfo, createSpec );
     -- Changes to the map need to be re-appended to topRec  
     GP=F and trace(" After adjust Threshold : %s ", tostring( lmapCtrlInfo[M_ThreshHold] ) );
-    local NewLmapList = list();
-    list.append( NewLmapList, propMap );
-    list.append( NewLmapList, lmapCtrlInfo );
-    topRec[lmapBinName] = NewLmapList;
+    -- local NewLmapList = list();
+    -- list.append( NewLmapList, propMap );
+    -- list.append( NewLmapList, lmapCtrlInfo );
+    -- topRec[lmapBinName] = NewLmapList;
+    topRec[lmapBinName] = lMapList;
+    record.set_flags(topRec, lmapBinName, BF_LDT_BIN );--Must set every time
     
     GP=F and trace("[DEBUG]: <%s:%s> : LMAP Summary after adjustLMapCtrlInfo(%s)",
       MOD, meth , lmapSummaryString(NewLmapList));

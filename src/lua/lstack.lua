@@ -2,7 +2,7 @@
 -- lstack.lua:  August 13, 2013
 --
 -- Module Marker: Keep this in sync with the stated version
-local MOD="lstack_2013_08_13.g"; -- the module name used for tracing
+local MOD="lstack_2013_08_14.b"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -375,8 +375,10 @@ local RT_SUB = 2; -- 0x2: Regular Sub Record (LDR, CDIR, etc)
 local RT_CDIR= 3; -- xxx: Cold Dir Subrec::Not used for set_type() 
 local RT_ESR = 4; -- 0x4: Existence Sub Record
 
--- Bin Flag Types
-local BF_LDT_BIN     = 1; -- Main LDT Bin
+-- Bin Flag Types -- to show the various types of bins.
+-- NOTE: All bins will be labelled as either (1:RESTRICTED OR 2:HIDDEN)
+-- We will not currently be using "Control" -- that is effectively HIDDEN
+local BF_LDT_BIN     = 1; -- Main LDT Bin (Restricted)
 local BF_LDT_HIDDEN  = 2; -- LDT Bin::Set the Hidden Flag on this bin
 local BF_LDT_CONTROL = 4; -- Main LDT Control Bin (one per record)
 
@@ -2585,6 +2587,7 @@ local function   warmListChunkCreate( src, topRec, lsoList )
   -- after all of the underlying SUB-REC  operations have been done.
   -- Update the top (LSO) record with the newly updated lsoMap;
   topRec[ binName ] = lsoMap;
+  record.set_flags(topRec, binName, BF_LDT_BIN );--Must set every time
 
   GP=E and trace("[EXIT]: <%s:%s> Return(%s) ",
     MOD, meth, ldrSummary(newLdrChunkRecord));
@@ -2809,6 +2812,7 @@ local function warmListInsert( src, topRec, lsoList, entryList )
   GP=F and trace("[DEBUG]: <%s:%s> Saving LsoMap (%s) Before Update ",
     MOD, meth, tostring( lsoMap ));
   topRec[binName] = lsoMap;
+  record.set_flags(topRec, binName, BF_LDT_BIN );--Must set every time
 
   GP=F and trace("[DEBUG]: <%s:%s> Chunk Summary before storage(%s)",
     MOD, meth, ldrSummary( topWarmChunk ));
@@ -3157,6 +3161,7 @@ local function coldDirHeadCreate( src, topRec, lsoList, spaceEstimate )
     -- However, we can update topRec here, since that won't get written back
     -- to storage until there's an explicit update_subrec() call.
     topRec[ binName ] = lsoMap;
+    record.set_flags(topRec, binName, BF_LDT_BIN );--Must set every time
     returnColdHead = newColdHeadRec;
   end -- if we should create a new Cold HEAD
 
@@ -3374,6 +3379,7 @@ local function coldListInsert( src, topRec, lsoList, digestList )
   GP=F and trace("[DEBUG]: <%s:%s> Saving LsoMap (%s) Before Update ",
     MOD, meth, tostring( lsoMap ));
   topRec[ binName ] = lsoMap;
+  record.set_flags(topRec, binName, BF_LDT_BIN );--Must set every time
 
   GP=F and trace("[DEBUG]: <%s:%s> New Cold Head Save: Summary(%s) ",
     MOD, meth, coldDirRecSummary( coldHeadRec ));
@@ -4171,6 +4177,7 @@ local function localCreate( topRec, lsoBinName, createSpec )
 
   -- Update the Record.
   topRec[lsoBinName] = lsoList;
+  record.set_flags(topRec, lsoBinName, BF_LDT_BIN );--Must set every time
 
   -- All done, store the record (Create if needed, or just Update).
   local rc;
@@ -4293,6 +4300,7 @@ local function localStackPush( topRec, lsoBinName, newValue, createSpec )
   -- Check to see if we really need to reassign the MAP into the list as well.
   lsoList[2] = lsoMap;
   topRec[lsoBinName] = lsoList;
+  record.set_flags(topRec, lsoBinName, BF_LDT_BIN );--Must set every time
 
   -- All done, store the topRec.  Note that this is the ONLY place where
   -- we should be updating the TOP RECORD.  If something fails before here,
@@ -4930,6 +4938,7 @@ local function localSetCapacity( topRec, lsoBinName, newLimit )
 
   lsoMap[M_ColdDirRecMax] = coldRecsNeeded;
   topRec[lsoBinName] = lsoList; -- lsoMap is implicitly included.
+  record.set_flags(topRec, lsoBinName, BF_LDT_BIN );--Must set every time
 
   -- Update the Top Record.  Not sure if this returns nil or ZERO for ok,
   -- so just turn any NILs into zeros.

@@ -1,8 +1,8 @@
 -- AS Large Set (LSET) Operations
--- Last Update August 13, 2013: TJL
+-- Last Update August 14, 2013: TJL
 --
 -- Keep this in sync with the version above.
-local MOD="lset_2013_08_13.r"; -- the module name used for tracing
+local MOD="lset_2013_08_14.j"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -21,8 +21,8 @@ local G_LDT_VERSION = 1.1;
 -- the trace() call is NOT executed (regardless of the value of GP)
 -- ======================================================================
 local GP=true; -- Leave this set to true.
-local F=false; -- Set F (flag) to true to turn ON global print
-local E=false; -- Set E (ENTER/EXIT) to true to turn ON Enter/Exit print
+local F=true; -- Set F (flag) to true to turn ON global print
+local E=true; -- Set E (ENTER/EXIT) to true to turn ON Enter/Exit print
 
 -- ======================================================================
 -- Aerospike Server Functions:
@@ -95,7 +95,9 @@ local KT_ATOMIC  ='A'; -- the set value is just atomic (number or string)
 local KT_COMPLEX ='C'; -- the set value is complex. Use Function to get key.
 
 -- Bin Flag Types -- to show the various types of bins.
-local BF_LDT_BIN     = 1; -- Main LDT Bin
+-- NOTE: All bins will be labelled as either (1:RESTRICTED OR 2:HIDDEN)
+-- We will not currently be using "Control" -- that is effectively HIDDEN
+local BF_LDT_BIN     = 1; -- Main LDT Bin (Restricted)
 local BF_LDT_HIDDEN  = 2; -- LDT Bin::Set the Hidden Flag on this bin
 local BF_LDT_CONTROL = 4; -- Main LDT Control Bin (one per record)
 --
@@ -534,7 +536,6 @@ local function setLdtRecordType( topRec )
     recPropMap[RPM_LdtCount] = 1; -- this is the first one.
     recPropMap[RPM_Magic] = MAGIC;
     -- Set this control bin as HIDDEN
-    record.set_flags(topRec, REC_LDT_CTRL_BIN, BF_LDT_CONTROL );
   else
     -- Not much to do -- increment the LDT count for this record.
     recPropMap = topRec[REC_LDT_CTRL_BIN];
@@ -543,6 +544,7 @@ local function setLdtRecordType( topRec )
     GP=F and trace("[DEBUG]<%s:%s>Record LDT Map Exists: Bump LDT Count(%d)",
       MOD, meth, ldtCount + 1 );
   end
+  record.set_flags(topRec, REC_LDT_CTRL_BIN, BF_LDT_HIDDEN );
   topRec[REC_LDT_CTRL_BIN] = recPropMap;
 
   -- Now that we've changed the top rec, do the update to make sure the
@@ -860,8 +862,16 @@ local function getKeyValue( ldtMap, value )
   GP=E and trace("[ENTER]<%s:%s> value(%s) KeyType(%s)",
     MOD, meth, tostring(value), tostring(ldtMap[M_KeyType]) );
 
+  if( value == nil ) then 
+    GP=E and trace("[Early EXIT]<%s:%s> Value is nil", MOD, meth );
+    return nil;
+  end
+
+  GP=E and trace("[DEBUG]<%s:%s> Value type(%s)", MOD, meth,
+    tostring( type(value)));
+
   local keyValue;
-  if( ldtMap[M_KeyType] == KT_ATOMIC ) then
+  if( ldtMap[M_KeyType] == KT_ATOMIC or type(value) ~= "userdata" ) then
     keyValue = value;
   else
     local keyFuncName = ldtMap[M_KeyFunction];
@@ -869,7 +879,7 @@ local function getKeyValue( ldtMap, value )
       -- Employ the user's supplied function (keyFunction) and if that's not
       -- there, look for the special case where the object has a field
       -- called 'key'.  If not, then, well ... tough.  We tried.
-      keyValue = functionTable[keyFunction]( value );
+      keyValue = functionTable[keyFuncName]( value );
     else
       -- If there's no shortcut, then take the "longcut" to get an atomic
       -- value that represents this entire object.
@@ -969,9 +979,12 @@ end -- applyTransform()
 -- =======================================================================
 local function applyUnTransform( lsetMap, storeValue )
   local returnValue = storeValue;
-  if lsetMap[M_UnTransform] ~= nil and
-    functionTable[lsetMap[M_UnTransform]] ~= nil then
-    returnValue = functionTable[lsetMap[M_UnTransform]]( storeValue );
+  local untransformName = lsetMap[M_UnTransform];
+  if( untransformName  ~= nil ) then
+    local untransformFunction = functionTable[untransformName];
+    if untransformFunction ~= nil then
+      returnValue = untransformFunction( storeValue );
+    end
   end
   return returnValue;
 end -- applyUnTransform( value )
@@ -1070,6 +1083,7 @@ local function searchList(lsetList, binList, searchKey )
   -- Note that searchKey may be the entire object, or it may be a subset.
   local listSize = list.size(binList);
   local item;
+  local dbKey;
   for i = 1, listSize, 1 do
     item = binList[i];
     GP=F and trace("[COMPARE]<%s:%s> index(%d) SV(%s) and ListVal(%s)",
@@ -1082,8 +1096,9 @@ local function searchList(lsetList, binList, searchKey )
       else
         modValue = item;
       end
-
-      if( searchKey == modValue ) then
+      -- If there's a "summary" part of the object, get that now.
+      dbKey = getKeyValue( lsetMap, modValue );
+      if( searchKey == dbKey ) then
         position = i;
         break;
       end
@@ -1469,6 +1484,7 @@ local function localInsert( topRec, lsetList, newValue, stats )
     list.append( binList, newValue );
     insertResult = 1;
     topRec[binName] = binList; 
+    record.set_flags(topRec, binName, BF_LDT_HIDDEN );--Must set every time
 
     -- Update stats if appropriate.
     if( stats == 1 ) then -- Update Stats if success
@@ -1491,8 +1507,8 @@ local function localInsert( topRec, lsetList, newValue, stats )
     error(ldte.ERR_UNIQUE_KEY);
   end
 
-  GP=E and trace("[EXIT]<%s:%s>Insert Results: RC(%d) Value(%s)",
-    MOD, meth, rc, tostring( newValue ));
+  GP=E and trace("[EXIT]<%s:%s>Insert Results: RC(%d) Value(%s) binList(%s)",
+    MOD, meth, rc, tostring( newValue ), tostring(binList));
 
   return rc;
 end -- localInsert
@@ -2000,7 +2016,7 @@ local function localLSetSearch( topRec, lsetBinName, searchValue,
 
   local meth = "localLSetSearch()";
   GP=E and trace("[ENTER]: <%s:%s> Search Value(%s)",
-                 MOD, meth, tostring( searchKey ) );
+                 MOD, meth, tostring( searchValue ) );
 
   local rc = 0; -- Start out ok.
   local resultList = list(); -- add results to this list.
@@ -2041,6 +2057,10 @@ local function localLSetSearch( topRec, lsetBinName, searchValue,
   if( filter ~= nil and functionTable[filter] ~= nil ) then
     filterFunction = functionTable[filter];
   end
+
+  GP=F and trace("[DEBUG]<%s:%s> UnTrans(%s) Filter(%s) Key(%s) List(%s)",
+    MOD, meth, tostring(unTransformFunc), tostring( filterFunction),
+    tostring(key), tostring(binList));
 
   -- We bother to search only if there's a real list.
   if binList ~= nil and list.size( binList ) > 0 then
@@ -2176,8 +2196,9 @@ local function localLSetDelete( topRec, lsetBinName, deleteValue,
     filterFunction = functionTable[filter];
   end
 
-  GP=F and trace("[DEBUG]<%s:%s>: Untransform(%s) Filter(%s)",
-     MOD, meth, tostring(unTransformFunc), tostring(filterFunction));
+  GP=F and trace("[DEBUG]<%s:%s>: Untransform(%s) Filter(%s) BinList(%s)",
+     MOD, meth, tostring(unTransformFunc), tostring(filterFunction),
+     tostring(binList));
 
   -- We bother to search only if there's a real list.
   if binList ~= nil and list.size( binList ) > 0 then
@@ -2201,7 +2222,7 @@ local function localLSetDelete( topRec, lsetBinName, deleteValue,
     end -- if search found something (pos > 0)
   end -- if there's a list
 
-  if( resultFiltered == nil ) then
+  if( position == 0 or resultFiltered == nil ) then
     warn("[WARNING]<%s:%s> Value not found: Value(%s)",
       MOD, meth, tostring( deleteValue ) );
     error( ldte.ERR_NOT_FOUND );
@@ -2211,6 +2232,7 @@ local function localLSetDelete( topRec, lsetBinName, deleteValue,
   -- update the stats.
   binList[position] = nil;
   topRec[binName] = binList;
+  record.set_flags(topRec, binName, BF_LDT_HIDDEN );--Must set every time
   local itemCount = propMap[PM_ItemCount];
   propMap[PM_ItemCount] = itemCount - 1;
   topRec[lsetBinName] = lsetList;
@@ -2384,6 +2406,7 @@ local function localLdtRemove( topRec, lsetBinName )
   else
     recPropMap[RPM_LdtCount] = ldtCount - 1;
     topRec[REC_LDT_CTRL_BIN] = recPropMap;
+    record.set_flags(topRec, REC_LDT_CTRL_BIN, BF_LDT_HIDDEN );
   end
   
   -- Check to see which type of LSET we have -- TopRecord bins or
