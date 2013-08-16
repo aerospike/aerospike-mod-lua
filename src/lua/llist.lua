@@ -2,7 +2,7 @@
 -- Last Update August 14,  2013: tjl
 --
 -- Keep this MOD value in sync with version above
-local MOD = "llist_2013_08_14.b"; -- module name used for tracing.  
+local MOD = "llist_2013_08_15.a"; -- module name used for tracing.  
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -5185,6 +5185,7 @@ local function ldtRemove( topRec, binName )
   else
     recPropMap[RPM_LdtCount] = ldtCount - 1;
     topRec[REC_LDT_CTRL_BIN] = recPropMap;
+    record.set_flags(topRec, REC_LDT_CTRL_BIN, BF_LDT_HIDDEN );
   end
   
   -- Update the Top Record.  Not sure if this returns nil or ZERO for ok,
