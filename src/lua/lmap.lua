@@ -3008,7 +3008,7 @@ local function localLMapDelete( topRec, lmapBinName, searchValue,
                           filter, fargs )
   local meth = "localLMapDelete()";
                             
-   GP=F and trace("[ENTER]:<%s:%s> Bin-Name(%s) Delete-Value(%s) ",
+  GP=F and trace("[ENTER]:<%s:%s> Bin-Name(%s) Delete-Value(%s) ",
         MOD, meth, tostring(lmapBinName), tostring(searchValue));      
          
   local resultList = list(); -- add results to this list.
@@ -3193,8 +3193,8 @@ local function ldrSearchList(topRec, lmapBinName, resultList, ldrChunkRec, listI
   local totalListSize = list.size( ldrValueList );
  -- local itemSlotsAvailable = (lmapCtrlInfo[M_LdrEntryCountMax] - chunkIndexStart) + 1;
   
-  GP=F and trace("[DEBUG]: <%s:%s> TotalItems(%d) ListSize(%d)",
-    MOD, meth, totalItemsToSearch, totalListSize );
+  GP=F and trace("[DEBUG]: <%s:%s> TotalItems(%d) ListSize(%d) Things-tobe-searched : %s",
+    MOD, meth, totalItemsToSearch, totalListSize, tostring(entryList) );
     
   if totalListSize < totalItemsToSearch then
   	-- TODO : Check with Toby about this condition 
@@ -3213,7 +3213,7 @@ local function ldrSearchList(topRec, lmapBinName, resultList, ldrChunkRec, listI
   -- This will also work if we search for more than 1 item in the ldr-list
   for j = 0, list.size( entryList ), 1 do
 	  for i = 0, list.size( ldrValueList ), 1 do
-	      if(ldrValueList[i] == entryList[j]) then 
+	      if(tostring(ldrValueList[i]) == tostring(entryList[j])) then 
 
         	local resultFiltered;
 		if filter ~= nil and fargs ~= nil then
