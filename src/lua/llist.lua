@@ -2,7 +2,7 @@
 -- Last Update August 14,  2013: tjl
 --
 -- Keep this MOD value in sync with version above
-local MOD = "llist_2013_08_15.a"; -- module name used for tracing.  
+local MOD = "llist_2013_08_19.b"; -- module name used for tracing.  
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -1584,11 +1584,6 @@ local function validateRecBinAndMap( topRec, ldtBinName, mustExist )
   -- flag that error first if the user has given us a bad name.
   validateBinName( ldtBinName );
 
-  -- Extract the property map and control map from the ldt bin list.
-  local ldtList = topRec[ ldtBinName ];
-  local propMap = ldtList[1];
-  local ldtMap  = ldtList[2];
-  local binName = propMap[PM_BinName];
 
   -- If "mustExist" is true, then several things must be true or we will
   -- throw an error.
@@ -1612,6 +1607,11 @@ local function validateRecBinAndMap( topRec, ldtBinName, mustExist )
       error( ldte.ERR_BIN_DOES_NOT_EXIST );
     end
 
+    -- Extract the property map and control map from the ldt bin list.
+    local ldtList = topRec[ ldtBinName ];
+    local propMap = ldtList[1];
+    local ldtMap  = ldtList[2];
+    
     -- check that our bin is (mostly) there
     if ( propMap[PM_Magic] ~= MAGIC ) then
       GP=E and warn("[ERROR EXIT]:<%s:%s>LDT BIN(%s) Corrupted (no magic)",
@@ -5155,17 +5155,28 @@ local function ldtRemove( topRec, binName )
   GP=F and trace("[STATUS]<%s:%s> propMap(%s) LDT Summary(%s)", MOD, meth,
     tostring( propMap ), ldtSummaryString( ldtList ));
 
-  -- Get the ESR and delete it.
+
+  -- Get the ESR and delete it -- if it exists.  If we have ONLY an initial
+  -- compact list, then the ESR will be ZERO.
   local esrDigest = propMap[PM_EsrDigest];
-  local esrDigestString = tostring(esrDigest);
-  local esrRec = aerospike:open_subrec( topRec, esrDigestString );
-  GP=F and trace("[STATUS]<%s:%s> About to Call Aerospike REMOVE", MOD, meth );
-  rc = aerospike:remove_subrec( esrRec );
-  if( rc == nil or rc == 0 ) then
-    GP=F and trace("[STATUS]<%s:%s> Successful CREC REMOVE", MOD, meth );
+  if( esrDigest ~= nil and esrDigest ~= 0 ) then
+    local esrDigestString = tostring(esrDigest);
+    info("[SUBREC OPEN]<%s:%s> Digest(%s)", MOD, meth, esrDigestString );
+    local esrRec = aerospike:open_subrec( topRec, esrDigestString );
+    if( esrRec ~= nil ) then
+      rc = aerospike:remove_subrec( esrRec );
+      if( rc == nil or rc == 0 ) then
+        GP=F and trace("[STATUS]<%s:%s> Successful CREC REMOVE", MOD, meth );
+      else
+        warn("[ESR DELETE ERROR]<%s:%s>RC(%d) Bin(%s)", MOD, meth, rc, binName);
+        error( ldte.ERR_SUBREC_DELETE );
+      end
+    else
+      warn("[ESR DELETE ERROR]<%s:%s> ERROR on ESR Open", MOD, meth );
+    end
   else
-    warn("[ESR DELETE ERROR] RC(%d) Bin(%s)", MOD, meth, rc, binName);
-    error( ldte.ERR_SUBREC_DELETE );
+    info("[INFO]<%s:%s> LDT ESR is not yet set, so remove not needed. Bin(%s)",
+    MOD, meth, binName );
   end
 
   topRec[binName] = nil;
