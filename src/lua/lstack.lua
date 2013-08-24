@@ -1,8 +1,8 @@
 -- Large Stack Object (LSO or LSTACK) Operations
--- lstack.lua:  August 13, 2013
+-- lstack.lua:  August 23, 2013
 --
 -- Module Marker: Keep this in sync with the stated version
-local MOD="lstack_2013_08_15.a"; -- the module name used for tracing
+local MOD="lstack_2013_08_23.g"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -1591,7 +1591,6 @@ local function adjustLsoList( lsoList, argListMap )
   -- based on the settings passed in during the stackCreate() call.
   GP=F and trace("[DEBUG]: <%s:%s> : Processing Arguments:(%s)",
     MOD, meth, tostring(argListMap));
-
 
   for name, value in map.pairs( argListMap ) do
     GP=F and trace("[DEBUG]: <%s:%s> : Processing Arg: Name(%s) Val(%s)",
@@ -4102,6 +4101,20 @@ function lstack_delete_subrecs( topRec, lsoBinName )
 end -- lstack_delete_subrecs()
 
 -- ======================================================================
+-- processModule( moduleName )
+-- ======================================================================
+-- ======================================================================
+local function processModule( moduleName )
+  local meth = "processModule()";
+  GP=E and trace("[ENTER]<%s:%s> Process User Module(%s)", MOD, meth,
+    tostring( moduleName ));
+
+  warn("[ERROR]<%s:%s> Mod(%s) THIS FUNCTION NOT YET IMPLEMENTED", MOD, meth,
+    tostring( moduleName));
+
+end -- processModule()
+
+-- ======================================================================
 -- || localCreate ||
 -- ======================================================================
 -- Create/Initialize a Stack structure in a bin, using a single LSO
@@ -4150,6 +4163,8 @@ end -- lstack_delete_subrecs()
 local function localCreate( topRec, lsoBinName, createSpec )
   local meth = "localCreate()";
 
+  GP=F and trace("\n\n >>>>>>>>> API[ LSTACK CREATE ] <<<<<<<<<< \n");
+
   if createSpec == nil then
     GP=E and trace("[ENTER1]: <%s:%s> lsoBinName(%s) NULL createSpec",
       MOD, meth, tostring(lsoBinName));
@@ -4168,8 +4183,16 @@ local function localCreate( topRec, lsoBinName, createSpec )
 
   -- If the user has passed in settings that override the defaults
   -- (the createSpec), then process that now.
-  if createSpec ~= nil then
-    adjustLsoList( lsoList, createSpec )
+  if( createSpec ~= nil )then
+    local createSpecType = type(createSpec);
+    if( createSpecType == "string" ) then
+      processModule( createSpec );
+    elseif( createSpecType == "userdata" ) then
+      adjustLsoList( lsoList, createSpec )
+    else
+      warn("[WARNING]<%s:%s> Unknown Creation Object(%s)",
+        MOD, meth, tostring( createSpec ));
+    end
   end
 
   GP=F and trace("[DEBUG]:<%s:%s>:LsoList after Init(%s)",
@@ -4230,6 +4253,8 @@ end -- function localCreate()
 local function localStackPush( topRec, lsoBinName, newValue, createSpec )
   local meth = "localStackPush()";
 
+  GP=F and trace("\n\n >>>>>>>>> API[ LSTACK PUSH ] <<<<<<<<<< \n");
+
   -- Note: functionTable is "global" to this module, defined at top of file.
 
   GP=E and trace("[ENTER1]:<%s:%s>LSO BIN(%s) NewVal(%s) createSpec(%s)",
@@ -4250,7 +4275,7 @@ local function localStackPush( topRec, lsoBinName, newValue, createSpec )
   local lsoMap;
   local propMap;
   if( not aerospike:exists( topRec ) ) then
-    GP=F and trace("[WARNING]:<%s:%s>:Record Does Not exist. Creating",
+    GP=F and trace("[NOTICE]:<%s:%s>:Record Does Not exist. Creating",
       MOD, meth );
     lsoList = initializeLso( topRec, lsoBinName );
     if( createSpec ~= nil ) then
@@ -4259,12 +4284,22 @@ local function localStackPush( topRec, lsoBinName, newValue, createSpec )
     end
     aerospike:create( topRec );
   elseif ( topRec[lsoBinName] == nil ) then
-    GP=F and trace("[WARNING]: <%s:%s> LSO BIN (%s) DOES NOT Exist: Creating",
+    GP=F and trace("[NOTICE]: <%s:%s> LSO BIN (%s) DOES NOT Exist: Creating",
                    MOD, meth, tostring(lsoBinName) );
     lsoList = initializeLso( topRec, lsoBinName );
-    if( createSpec ~= nil ) then
-      -- If the CreateSpecification is present, then modify the LSO parms
-      adjustLsoList( lsoList, createSpec );
+
+    -- If the user has passed in settings that override the defaults
+    -- (the createSpec), then process that now.
+    if( createSpec ~= nil )then
+      local createSpecType = type(createSpec);
+      if( createSpecType == "string" ) then
+        processModule( createSpec );
+      elseif( createSpecType == "userdata" ) then
+        adjustLsoList( lsoList, createSpec )
+      else
+        warn("[WARNING]<%s:%s> Unknown Creation Object(%s)",
+          MOD, meth, tostring( createSpec ));
+      end
     end
     aerospike:create( topRec );
   else
@@ -4388,6 +4423,8 @@ end -- end localPushAll()
 -- ======================================================================
 local function localStackPeek( topRec, lsoBinName, peekCount, func, fargs )
   local meth = "localStackPeek()";
+
+  GP=F and trace("\n\n >>>>>>>>> API[ LSTACK PEEK ] <<<<<<<<<< \n");
 
   GP=E and trace("[ENTER]: <%s:%s> LSO BIN(%s) Count(%s) func(%s) fargs(%s)",
     MOD, meth, tostring(lsoBinName), tostring(peekCount),
@@ -4762,7 +4799,7 @@ local function localLdtRemove( topRec, binName )
   local esrDigest = propMap[PM_EsrDigest];
   if( esrDigest ~= nil and esrDigest ~= 0 ) then
     local esrDigestString = tostring(esrDigest);
-    info("[SUBREC OPEN]<%s:%s> Digest(%s)", MOD, meth, esrDigestString );
+    GP=f and trace("[SUBREC OPEN]<%s:%s> Digest(%s)",MOD,meth,esrDigestString);
     local esrRec = aerospike:open_subrec( topRec, esrDigestString );
     if( esrRec ~= nil ) then
       rc = aerospike:remove_subrec( esrRec );
@@ -5133,6 +5170,10 @@ end -- lstack_peek_then_filter()
 -- error if the user passes in nil or any other incorrect value/type.
 -- ========================================================================
 -- NEW EXTERNAL FUNCTIONS
+function size( topRec, lsoBinName )
+  return localGetSize( topRec, lsoBinName );
+end -- function size()
+
 function get_size( topRec, lsoBinName )
   return localGetSize( topRec, lsoBinName );
 end -- function get_size()

@@ -1,8 +1,8 @@
 -- AS Large Set (LSET) Operations
--- Last Update August 14, 2013: TJL
+-- Last Update August 20, 2013: TJL
 --
 -- Keep this in sync with the version above.
-local MOD="lset_2013_08_14.m"; -- the module name used for tracing
+local MOD="lset_2013_08_21.a"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -1657,6 +1657,17 @@ local function validateRecBinAndMap( topRec, lsetBinName, mustExist )
   end
 end -- validateRecBinAndMap()
 
+
+-- ======================================================================
+-- processModule( moduleName )
+-- ======================================================================
+-- ======================================================================
+local function processModule( moduleName )
+  local meth = "processModule()";
+  warn("[ERROR]<%s:%s> THIS FUNCTION NOT YET IMPLEMENTED", MOD, meth );
+
+end -- processModule()
+
 -- ======================================================================
 -- ======================================================================
 --
@@ -1711,10 +1722,18 @@ local function localLSetCreate( topRec, lsetBinName, createSpec )
   -- Set the type of this record to LDT (it might already be set)
   record.set_type( topRec, RT_LDT ); -- LDT Type Rec
   
-  -- If the user has passed in some settings that override our defaults
-  -- (createSpec) then apply them now.
-  if createSpec ~= nil then 
-    adjustLSetMap( lsetMap, createSpec );
+  -- If the user has passed in settings that override the defaults
+  -- (the createSpec), then process that now.
+  if( createSpec ~= nil )then
+    local createSpecType = type(createSpec);
+    if( createSpecType == "string" ) then
+      processModule( createSpec );
+    elseif( createSpecType == "userdata" ) then
+      adjustLSetMap( lsetMap, createSpec );
+    else
+      warn("[WARNING]<%s:%s> Unknown Creation Object(%s)",
+        MOD, meth, tostring( createSpec ));
+    end
   end
 
   GP=F and trace("[DEBUG]: <%s:%s> : CTRL Map after Adjust(%s)",
@@ -1809,20 +1828,28 @@ local function localLSetInsert( topRec, lsetBinName, newValue, createSpec )
 
   -- Check that the Set Structure is already there, otherwise, error
   if( topRec[lsetBinName] == nil ) then
-    warn("[WARNING]: <%s:%s> LSET CONTROL BIN does not Exist:Creating",
-         MOD, meth );
+    info("[Notice]: <%s:%s> LSET BIN (%s) does not Exist:Creating",
+         MOD, meth, tostring( lsetBinName ));
           
     lsetList = initializeLSetMap( topRec, lsetBinName );
     propMap     = lsetList[1]; 
     lsetMap = lsetList[2]; 
     topRec[lsetBinName] = lsetList; -- store in the record
     
-    -- If the user has passed in some settings that override our defaults
-    -- (createSpce) then apply them now.
-    if createSpec ~= nil then 
-      adjustLSetMap( lsetMap, createSpec );
+    -- If the user has passed in settings that override the defaults
+    -- (the createSpec), then process that now.
+    if( createSpec ~= nil )then
+      local createSpecType = type(createSpec);
+      if( createSpecType == "string" ) then
+        processModule( createSpec );
+      elseif( createSpecType == "userdata" ) then
+        adjustLSetMap( lsetMap, createSpec );
+      else
+        warn("[WARNING]<%s:%s> Unknown Creation Object(%s)",
+          MOD, meth, tostring( createSpec ));
+      end
     end
-         
+
     -- initializeLSetMap always sets lsetMap[M_StoreState] to SS_COMPACT
     -- At this point there is only one bin
     setupNewBin( topRec, 0 ); -- set up Bin ZERO
@@ -1915,47 +1942,79 @@ local function localLSetInsertAll( topRec, lsetBinName, valueList, createSpec )
 end -- localLSetInsertAll()
 
 -- ======================================================================
+-- ======================================================================
+-- ======================================================================
 -- |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- || Large Set Exists
 -- |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- ======================================================================
 -- Return 1 item if the item exists in the set, otherwise return 0.
 -- We don't want to return "true" and "false" because of Lua Weirdness.
+-- Note that this looks a LOT like localLSetSearch(), except that we don't
+-- return the object, nor do we apply a filter.
 -- Parms:
---
--- Return:
+-- (*) topRec:
+-- (*) lsetBinName:
+-- (*) searchValue:
 -- ======================================================================
-local function localLSetExists(topRec,lsetBinName,searchKey,filter,fargs )
+local function localLSetExists( topRec, lsetBinName, searchValue )
+
+  GP=F and trace("\n\n >>>>>>>>> API[ LSET EXISTS ] <<<<<<<<<< \n");
+
   local meth = "localLSetExists()";
-  GP=E and trace("[ENTER]: <%s:%s> Search for Value(%s)",
-                 MOD, meth, tostring( searchKey ) );
+  GP=E and trace("[ENTER]: <%s:%s> Search Value(%s)",
+                 MOD, meth, tostring( searchValue ) );
+
+  local rc = 0; -- Start out ok.
+  local result = 0; -- default is "not found"
 
   -- Validate the topRec, the bin and the map.  If anything is weird, then
   -- this will kick out with a long jump error() call.
   validateRecBinAndMap( topRec, lsetBinName, true );
 
-  -- Find the appropriate bin for the Search value
+  -- Check that the Set Structure is already there, otherwise, error
+  if( topRec[lsetBinName] == nil ) then
+    GP=E and trace("[ERROR EXIT]: <%s:%s> LSetCtrlBin does not Exist",
+                   MOD, meth );
+    error( ldte.ERR_BIN_DOES_NOT_EXIST );
+  end
+
   local lsetList = topRec[lsetBinName];
   local propMap = lsetList[1]; 
-  local lsetMap = lsetList[2];  
-  local binNumber = computeSetBin( searchKey, lsetMap );
+  local lsetMap = lsetList[2];
+
+  -- Get the value we'll compare against
+  local key = getKeyValue( lsetMap, searchValue );
+
+  -- Find the appropriate bin for the Search value
+  local binNumber = computeSetBin( key, lsetMap );
   local binName = getBinName( binNumber );
   local binList = topRec[binName];
-  local resultList = list();
-  -- In all other cases of calling scanList, we need to reset topRec
-  -- and lsetList except when checking for exists
-  local result = scanList( resultList, lsetList, binList, searchKey, nil,
-                            FV_SCAN, filter, fargs);
-                            
-  -- result is always 0, so we'll always go to else and return 1
-  -- instead we must check for resultList                         
-  if list.size(resultList) == 0 then
-    return 0
-  else
-    return 1
+  local liveObject = nil;
+  local resultFitlered = nil;
+  local position = 0;
+
+  local unTransformFunc = nil;
+  local untransName =  lsetMap[M_UnTransform];
+  if ( untransName ~= nil and functionTable[untransName] ~= nil ) then
+    unTransformFunc = functionTable[untransName];
   end
-  
-end -- function localLSetExists()
+
+  GP=F and trace("[DEBUG]<%s:%s> UnTrans(%s) Key(%s) List(%s)",
+    MOD, meth, tostring(unTransformFunc), tostring(key), tostring(binList));
+
+  -- We bother to search only if there's a real list.
+  if binList ~= nil and list.size( binList ) > 0 then
+    position = searchList( lsetList, binList, key );
+    if( position > 0 ) then
+      result = 1; -- We found it.  Return with 1.
+    end
+  end
+
+  GP=E and trace("[EXIT]: <%s:%s>: Exists Result(%d)",MOD, meth, result ); 
+  return result;
+end -- function localLSetExist()
+
 -- ======================================================================
 -- |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- || as Large Set Search
@@ -2628,6 +2687,10 @@ end -- delete_then_filter()
 -- get_size()
 -- lset_size() -- return the number of elements (item count) in the set.
 -- ========================================================================
+function size( topRec, lsetBinName )
+  return localGetSize( topRec, lsetBinName );
+end
+
 function get_size( topRec, lsetBinName )
   return localGetSize( topRec, lsetBinName );
 end

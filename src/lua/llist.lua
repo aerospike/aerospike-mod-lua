@@ -1,8 +1,8 @@
 -- Large Ordered List (llist.lua)
--- Last Update August 14,  2013: tjl
+-- Last Update August 21,  2013: tjl
 --
 -- Keep this MOD value in sync with version above
-local MOD = "llist_2013_08_19.b"; -- module name used for tracing.  
+local MOD = "llist_2013_08_23.a"; -- module name used for tracing.  
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -21,7 +21,6 @@ local GP=true;
 local F=false; -- Set F (flag) to true to turn ON global print
 -- local E=true; -- Set F (flag) to true to turn ON Enter/Exit print
 local E=false; -- Set F (flag) to true to turn ON Enter/Exit print
--- local F=false; -- Set F (flag) to false to turn OFF global print
 
 -- TODO (Major Feature Items:  (N) Now, (L) Later
 -- (N) Switch all Lua External functions to return two-part values, which
@@ -56,6 +55,43 @@ local E=false; -- Set F (flag) to true to turn ON Enter/Exit print
 --     Scan:   Search, plus listScan
 -- (*) Test that Complex Type and KeyFunction is defined on create,
 --     otherwise error.  Take no default action.
+--
+-- Large List contains a homogeneous list.  Although the objects may be
+-- different sizes and shapes, the objects must be all the same type.
+-- Furthermore, if the objects are a complex type, then the subset that is
+-- used to order the objects must all be the same atomic type.
+--     
+-- Large List API
+--
+-- add(rec, bin, value): Add a value to the list
+-- add_all(rec, bin, value_list )
+-- find(rec, bin, value)
+--    can be partial value (ie the index'd portion)
+--    return a list of values matching the search value. or empty list
+--    if no match.
+--
+-- findany(rec, bin, value)
+--    return any (first) value matching the search value. or nil if no match.
+--
+-- exists(rec, bin, value) == ( findany(rec,bin,value) != nil )
+--
+-- getall(rec, bin)
+--                        
+-- filter(rec, bin, filter_function, args...)
+--
+-- range(rec, bin, lower, upper)
+--
+-- first(rec, bin, n) -- return first n items
+--
+-- last(rec, bin, n) -- return last n items
+--
+-- remove(rec, bin, value)
+--                                  
+-- destroy(rec, bin)
+--
+-- size(rec, bin)
+--                                            
+-- get_config(rec, bin)
 --
 -- DONE LIST
 -- (*) Initialize Maps for Root, Nodes, Leaves
@@ -109,29 +145,29 @@ local ldte = require('ldt_errors');
 -- is reduced overhead for the retieval operation, since it is doing a
 -- binary search (order log(N)) rather than scan (order N).
 -- ======================================================================
--- Functions Supported
--- (*) llist_create: Create the LLIST structure in the chosen topRec bin
--- (*) llist_insert: Insert a user value (AS_VAL) into the list
--- (*) llist_search: Search the ordered list, using tree search
--- (*) llist_delete: Remove an element from the list
--- (*) llist_scan:   Scan the entire tree
--- (*) llist_remove: Remove the entire LDT from the record and remove bin.
+-- Large List Functions Supported
+-- (*) create: Create the LLIST structure in the chosen topRec bin
+-- (*) insert: Insert a user value (AS_VAL) into the list
+-- (*) search: Search the ordered list, using tree search
+-- (*) delete: Remove an element from the list
+-- (*) scan:   Scan the entire tree
+-- (*) remove: Remove the entire LDT from the record and remove bin.
 -- ==> The Insert, Search and Delete functions have a "Multi" option,
 --     which allows the caller to pass in multiple list keys that will
 --     result in multiple operations.  Multi-operations provide higher
 --     performance since there can be many operations performed with
 --     a single "client-server crossing".
--- (*) llist_multi_insert():
--- (*) llist_multi_search():
--- (*) llist_multi_delete():
+-- (*) insert_all():
+-- (*) search_all():
+-- (*) delete_all():
 -- ==> The Insert and Search functions have the option of passing in a
 --     Transformation/Filter UDF that modifies values before storage or
 --     modify and filter values during retrieval.
--- (*) llist_insert_with_udf() llist_multi_insert_with_udf():
+-- (*) insert_with_udf() multi_insert_with_udf():
 --     Insert a user value (AS_VAL) in the ordered list, 
 --     calling the supplied UDF on the value FIRST to transform it before
 --     storing it.
--- (*) llist_search_with_udf, llist_multi_search_with_udf:
+-- (*) search_with_udf, multi_search_with_udf:
 --     Retrieve a value from the list. Prior to fetching the
 --     item, apply the transformation/filter UDF to the value before
 --     adding it to the result list.  If the value doesn't pass the
@@ -264,8 +300,6 @@ local ldte = require('ldt_errors');
 -- status = record.set_type( topRec, recType )
 -- status = record.set_flags( topRec, binName, binFlags )
 --
--- ======================================================================
--- For additional Documentation, please see llist_design.lua
 -- ======================================================================
 -- |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- || FUNCTION TABLE ||
@@ -4637,99 +4671,14 @@ local function treeDelete( src, topRec, ldtList, key )
 end -- treeDelete()
 
 -- ======================================================================
--- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
--- |||||||       Large Ordered List (LLIST) Main Functions        |||||||
--- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- processModule( moduleName )
 -- ======================================================================
---
 -- ======================================================================
--- || listCreate ||
--- ======================================================================
--- Create/Initialize a Large Ordered List  structure in a bin, using a
--- single LLIST -- bin, using User's name, but Aerospike TYPE (AS_LLIST)
---
--- We will use a SINGLE MAP object, which contains control information and
--- two lists (the root note Key and pointer lists).
--- (*) Namespace Name
--- (*) Set Name
--- (*) Tree Node Size
--- (*) Inner Node Count
--- (*) Data Leaf Node Count
--- (*) Total Item Count
--- (*) Storage Mode (Binary or List Mode): 0 for Binary, 1 for List
--- (*) Key Storage
--- (*) Value Storage
---
--- Parms (inside argList)
--- (1) topRec: the user-level record holding the LDT Bin
--- (2) argList: the list of create parameters
---  (2.1) LdtBinName
---  (2.2) Namespace (just one, for now)
---  (2.3) Set
---  (2.4) LdrByteCountMax
---  (2.5) Design Version
---
-function llist_create( topRec, ldtBinName, argList )
-  local meth = "listCreate()";
+local function processModule( moduleName )
+  local meth = "processModule()";
+  warn("[ERROR]<%s:%s> THIS FUNCTION NOT YET IMPLEMENTED", MOD, meth );
 
-  GP=F and trace("\n\n >>>>>>>>> API[ LLIST CREATE ] <<<<<<<<<< \n\n");
-
-  if argList == nil then
-    GP=E and trace("[ENTER1]: <%s:%s> ldtBinName(%s) NULL argList",
-      MOD, meth, tostring(ldtBinName));
-  else
-    GP=E and trace("[ENTER2]: <%s:%s> ldtBinName(%s) argList(%s) ",
-    MOD, meth, tostring( ldtBinName), tostring( argList ));
-  end
-
-  -- Validate the BinName -- this will kick out if there's anything wrong
-  -- with the bin name.
-  validateBinName( ldtBinName );
-
-  -- Check to see if LDT Structure (or anything) is already there,
-  -- and if so, error
-  if topRec[ldtBinName] ~= nil  then
-    warn("[ERROR EXIT]: <%s:%s> LDT BIN(%s) Already Exists",
-      MOD, meth, tostring(ldtBinName) );
-    error( ldte.ERR_BIN_ALREADY_EXISTS );
-  end
-
-  -- Create and initialize the LDT MAP -- the main LDT structure
-  -- initializeLList() also assigns the map to the record bin.
-  local ldtList = initializeLList( topRec, ldtBinName );
-  local propMap = ldtList[1];
-  local ldtMap  = ldtList[2];
-
-  -- If the user has passed in settings that override the defaults
-  -- (the argList), then process that now.
-  if argList ~= nil then
-    adjustLListMap( ldtMap, argList ); -- ldtMap here, not ldtList
-    topRec[ldtBinName] = ldtList; -- Update after adjustment
-    record.set_flags(topRec, binName, BF_LDT_BIN );--Must set every time
-  end
-
-  GP=F and trace("[DEBUG]<%s:%s> LLIST after Init(%s)",
-   MOD, meth, ldtSummaryString( ldtList ) );
-
-  -- All done, store the record
-  local rc;
-  if( not aerospike:exists( topRec ) ) then
-    GP=F and trace("[DEBUG]:<%s:%s>:Create Record()", MOD, meth );
-    rc = aerospike:create( topRec );
-  else
-    GP=F and trace("[DEBUG]:<%s:%s>:Update Record()", MOD, meth );
-    rc = aerospike:update( topRec );
-  end
-  
-  -- Process Create/Update results.
-  if( rc == nil or rc == 0 ) then
-    GP=F and trace("[Normal EXIT]:<%s:%s> Return(0)", MOD, meth );
-    return 0;
-  else
-    GP=F and trace("[ERROR EXIT]:<%s:%s> Return(%s)", MOD, meth,tostring(rc));
-    error( ldte.ERR_INTERNAL );
-  end
-end -- function llist_create( topRec, namespace, set )
+end -- processModule()
 
 -- ======================================================================
 -- |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
@@ -4750,6 +4699,10 @@ end -- function llist_create( topRec, namespace, set )
 -- =======================================================================
 local function localLListInsert( topRec, ldtBinName, newValue, createSpec )
   local meth = "localLListInsert()";
+
+  GP=F and trace("\n\n >>>>>>>>> API[ LLIST INSERT ] <<<<<<<<<V(%s) M(%s)\n",
+    tostring(newValue), tostring(createSpec));
+
   GP=E and trace("[ENTER]<%s:%s>LLIST BIN(%s) NwVal(%s) createSpec(%s)",
     MOD, meth, tostring(ldtBinName), tostring( newValue ),tostring(createSpec));
 
@@ -4772,11 +4725,21 @@ local function localLListInsert( topRec, ldtBinName, newValue, createSpec )
     ldtList = initializeLList( topRec, ldtBinName );
     propMap = ldtList[1];
     ldtMap  = ldtList[2];
-    -- If the user has passed in some settings that override our defaults
-    -- (createSpce) then apply them now.
-    if createSpec ~= nil then 
-      adjustLListMap( ldtMap, createSpec ); -- Map, not list, used here
+
+    -- If the user has passed in settings that override the defaults
+    -- (the createSpec), then process that now.
+    if( createSpec ~= nil )then
+      local createSpecType = type(createSpec);
+      if( createSpecType == "string" ) then
+        processModule( createSpec );
+      elseif( createSpecType == "userdata" ) then
+        adjustLListMap( ldtMap, createSpec ); -- Map, not list, used here
+      else
+        warn("[WARNING]<%s:%s> Unknown Creation Object(%s)",
+          MOD, meth, tostring( createSpec ));
+      end
     end
+
     topRec[ldtBinName] = ldtList;
     record.set_flags(topRec, binName, BF_LDT_BIN );--Must set every time
   else
@@ -4849,25 +4812,7 @@ local function localLListInsert( topRec, ldtBinName, newValue, createSpec )
     GP=F and trace("[ERROR EXIT]:<%s:%s> Return(%s)", MOD, meth,tostring(rc));
     error( ldte.ERR_INTERNAL );
   end
-
 end -- function localLListInsert()
-
--- =======================================================================
--- List Insert -- with and without inner UDFs
--- These are the globally visible calls -- that call the local UDF to do
--- all of the work.
--- =======================================================================
-function llist_insert( topRec, ldtBinName, newValue )
-  GP=F and trace("\n\n >>>>>>>>> API[ LLIST INSERT ] <<<<<<<<<(%s) \n",
-    tostring(newValue));
-  return localLListInsert( topRec, ldtBinName, newValue, nil )
-end -- end llist_insert()
-
-function llist_create_and_insert( topRec, ldtBinName, newValue, createSpec )
-  GP=F and trace("\n\n >>>>>>> API[ LLIST CREATE And INSERT ] <<<<<<<<(%s)\n",
-    tostring(newValue));
-  return localLListInsert( topRec, ldtBinName, newValue, createSpec );
-end -- llist_create_and_insert()
 
 -- ======================================================================
 -- |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
@@ -4911,8 +4856,6 @@ local function localLListSearch( topRec, ldtBinName, key, func, fargs )
   -- If our state is "compact", do a simple list search, otherwise do a
   -- full tree search.
   if( ldtMap[R_StoreState] == SS_COMPACT ) then 
-    -- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-    -- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
     -- Do the COMPACT LIST SEARCH
     local objectList = ldtMap[R_CompactList];
     local resultMap = searchObjectList( ldtMap, objectList, key );
@@ -4932,8 +4875,6 @@ local function localLListSearch( topRec, ldtBinName, key, func, fargs )
         tostring( key ), tostring( objectList ) );
       error( ldte.ERR_NOT_FOUND );
     end
-    -- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-    -- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
   else
     -- Do the TREE Search
     GP=F and trace("[DEBUG]<%s:%s> Searching Tree", MOD, meth );
@@ -4967,69 +4908,8 @@ local function localLListSearch( topRec, ldtBinName, key, func, fargs )
   return resultList;
 end -- function localLListSearch() 
 
--- =======================================================================
--- listSearch -- with and without inner UDFs
--- These are the globally visible calls -- that call the local UDF to do
--- all of the work.
--- NOTE: All parameters must be protected with "tostring()" so that we
--- do not encounter a format error if the user passes in nil or any
--- other incorrect value/type.
--- =======================================================================
-function llist_search( topRec, ldtBinName, searchKey )
-  local meth = "listSearch()";
-  GP=E and trace("[ENTER]<%s:%s> LLIST BIN(%s) searchKey(%s)",
-    MOD, meth, tostring(ldtBinName), tostring(searchKey) )
-
-  GP=F and trace("\n\n >>>>>>>>> API[ LLIST SEARCH ] <<<<<<<<<(%s) \n",
-    tostring(searchKey));
-
-  return localLListSearch( topRec, ldtBinName, searchKey, nil, nil );
-end -- end llist_search()
-
-function llist_search_with_filter(topRec,ldtBinName,searchKey,func,fargs )
-  local meth = "listSearch()";
-  GP=E and trace("[ENTER]<%s:%s> BIN(%s) searchKey(%s) func(%s) fargs(%s)",
-    MOD, meth, tostring(ldtBinName), tostring(searchKey),
-    tostring(func), tostring(fargs));
-
-  GP=F and trace("\n\n >>>>>>>> API[ LLIST SEARCH With FILTER] <<<<<<<(%s)\n",
-    tostring(searchKey));
-
-  return localLListSearch( topRec, ldtBinName, searchKey, func, fargs );
-end -- end llist_search_with_filter()
-
--- =======================================================================
--- llist_scan -- with and without inner UDFs
--- These are the globally visible calls -- that call the local UDF to do
--- all of the work.
--- NOTE: All parameters must be protected with "tostring()" so that we
--- do not encounter a format error if the user passes in nil or any
--- other incorrect value/type.
--- NOTE: After a bit of thought -- we don't need a separate internal
--- scan function.  Search with a nil searchKey works just fine (I think).
--- =======================================================================
-function llist_scan( topRec, ldtBinName )
-  local meth = "llist_scan()";
-  GP=E and trace("[ENTER]<%s:%s> LLIST BIN(%s)",
-    MOD, meth, tostring(ldtBinName) );
-
-  GP=F and trace("\n\n  >>>>>>>> API[ SCAN ] <<<<<<<<<<<<<<<<<< \n");
-
-  return localLListSearch( topRec, ldtBinName, nil, nil, nil );
-end -- end llist_scan()
-
-function llist_scan_with_filter( topRec, ldtBinName, func, fargs )
-  local meth = "llist_scan_with_filter()";
-  GP=E and trace("[ENTER]<%s:%s> BIN(%s) func(%s) fargs(%s)",
-    MOD, meth, tostring(ldtBinName), tostring(func), tostring(fargs));
-
-  GP=F and trace("\n\n  >>>>>>>>> API[ SCAN and FILTER ]<<<<<<<< \n\n");
-
-  return localLListSearch( topRec, ldtBinName, nil, func, fargs );
-end -- end llist_scan()
-
 -- ======================================================================
--- || llist_delete ||
+-- || localLListDelete ||
 -- ======================================================================
 -- Delete the specified item(s).
 --
@@ -5038,8 +4918,8 @@ end -- end llist_scan()
 -- (2) LdtBinName
 -- (3) key: The key we'll search for
 --
-function llist_delete( topRec, binName, key )
-  local meth = "llist_delete()";
+local function localLListDelete( topRec, binName, key )
+  local meth = "localLListDelete()";
   local rc = 0;
 
   GP=F and trace("\n\n  >>>>>>> API[ DELETE ] <<<<<<<<<<<<<<<(%s) \n",
@@ -5118,10 +4998,10 @@ function llist_delete( topRec, binName, key )
     GP=F and trace("[ERROR EXIT]:<%s:%s> Return(%s)", MOD, meth,tostring(rc));
     error( ldte.ERR_DELETE );
   end
-end -- function llist_delete()
+end -- function localLListDelete()
 
 -- ========================================================================
--- ldtRemove() -- Remove the LDT entirely from the record.
+-- localLdtRemove() -- Remove the LDT entirely from the record.
 -- NOTE: This could eventually be moved to COMMON, and be "ldt_remove()",
 -- since it will work the same way for all LDTs.
 -- Remove the ESR, Null out the topRec bin.
@@ -5138,8 +5018,8 @@ end -- function llist_delete()
 --   res = 0: all is well
 --   res = -1: Some sort of error
 -- ========================================================================
-local function ldtRemove( topRec, binName )
-  local meth = "ldtRemove()";
+local function localLdtRemove( topRec, binName )
+  local meth = "localLdtRemove()";
 
   GP=E and trace("[ENTER]: <%s:%s> binName(%s)",
     MOD, meth, tostring(binName));
@@ -5209,11 +5089,246 @@ local function ldtRemove( topRec, binName )
     GP=F and trace("[ERROR EXIT]:<%s:%s> Return(%s)", MOD, meth,tostring(rc));
     error( ldte.ERR_INTERNAL );
   end
+end -- localLdtRemove()
 
-end -- ldtRemove()
+-- ======================================================================
+-- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- |||||||       Large Ordered List (LLIST) Main Functions        |||||||
+-- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- ======================================================================
+-- create(): Create the LDT Bin structure
+-- create_and_insert()
+-- insert(): Add a value to the Large List
+-- search(): Locate an object
+-- range(): Return the elements within the given range
+-- first(): Return the FIRST N elements
+-- last(): Return the LAST N elements
+-- range(): Return the elements within the given range
+-- scan(): Return all elements
+-- filter(): Pass all elements thru the filter and return all that qualify.
+-- delete(): Remove all items corresponding to the specified key.
+-- remove(): Remove the LDT entirely from the record.
+-- size(): Return the size of the LDT
+-- get_config(): Return the settings of the LDT
+-- ======================================================================
+
+-- ======================================================================
+-- || create ||
+-- ======================================================================
+-- Create/Initialize a Large Ordered List  structure in a bin, using a
+-- single LLIST -- bin, using User's name, but Aerospike TYPE (AS_LLIST)
+--
+-- We will use a LLIST control object, which contains control information and
+-- two lists (the root note Key and pointer lists).
+-- (*) Namespace Name
+-- (*) Set Name
+-- (*) Tree Node Size
+-- (*) Inner Node Count
+-- (*) Data Leaf Node Count
+-- (*) Total Item Count
+-- (*) Storage Mode (Binary or List Mode): 0 for Binary, 1 for List
+-- (*) Key Storage
+-- (*) Value Storage
+--
+-- Parms:
+-- (1) topRec: the user-level record holding the LDT Bin
+-- (2) LdtBinName: The user's chosen name for the LDT bin
+-- (3) createSpec: The map that holds a package for adjusting LLIST settings.
+function create( topRec, ldtBinName, createSpec )
+  local meth = "listCreate()";
+
+  GP=F and trace("\n\n >>>>>>>>> API[ LLIST CREATE ] <<<<<<<<<< \n\n");
+
+  if createSpec == nil then
+    GP=E and trace("[ENTER1]: <%s:%s> ldtBinName(%s) NULL createSpec",
+      MOD, meth, tostring(ldtBinName));
+  else
+    GP=E and trace("[ENTER2]: <%s:%s> ldtBinName(%s) createSpec(%s) ",
+    MOD, meth, tostring( ldtBinName), tostring( createSpec ));
+  end
+
+  -- Validate the BinName -- this will kick out if there's anything wrong
+  -- with the bin name.
+  validateBinName( ldtBinName );
+
+  -- Check to see if LDT Structure (or anything) is already there,
+  -- and if so, error
+  if topRec[ldtBinName] ~= nil  then
+    warn("[ERROR EXIT]: <%s:%s> LDT BIN(%s) Already Exists",
+      MOD, meth, tostring(ldtBinName) );
+    error( ldte.ERR_BIN_ALREADY_EXISTS );
+  end
+
+  -- Create and initialize the LDT MAP -- the main LDT structure
+  -- initializeLList() also assigns the map to the record bin.
+  local ldtList = initializeLList( topRec, ldtBinName );
+  local propMap = ldtList[1];
+  local ldtMap  = ldtList[2];
+
+  -- If the user has passed in settings that override the defaults
+  -- (the createSpec), then process that now.
+  if( createSpec ~= nil )then
+    local createSpecType = type(createSpec);
+    if( createSpecType == "string" ) then
+      processModule( createSpec );
+    elseif( createSpecType == "userdata" ) then
+      adjustLListMap( ldtMap, createSpec ); -- ldtMap here, not ldtList
+      topRec[ldtBinName] = ldtList; -- Update after adjustment
+      record.set_flags(topRec, binName, BF_LDT_BIN );--Must set every time
+    else
+      warn("[WARNING]<%s:%s> Unknown Creation Object(%s)",
+        MOD, meth, tostring( createSpec ));
+    end
+  end
+
+  GP=F and trace("[DEBUG]<%s:%s> LLIST after Init(%s)",
+   MOD, meth, ldtSummaryString( ldtList ) );
+
+  -- All done, store the record
+  local rc;
+  if( not aerospike:exists( topRec ) ) then
+    GP=F and trace("[DEBUG]:<%s:%s>:Create Record()", MOD, meth );
+    rc = aerospike:create( topRec );
+  else
+    GP=F and trace("[DEBUG]:<%s:%s>:Update Record()", MOD, meth );
+    rc = aerospike:update( topRec );
+  end
+  
+  -- Process Create/Update results.
+  if( rc == nil or rc == 0 ) then
+    GP=F and trace("[Normal EXIT]:<%s:%s> Return(0)", MOD, meth );
+    return 0;
+  else
+    GP=F and trace("[ERROR EXIT]:<%s:%s> Return(%s)", MOD, meth,tostring(rc));
+    error( ldte.ERR_INTERNAL );
+  end
+end -- function create( topRec, namespace, set )
+
+
+-- =======================================================================
+-- List Insert -- with and without inner UDFs
+-- These are the globally visible calls -- that call the local UDF to do
+-- all of the work.
+-- =======================================================================
+function insert( topRec, ldtBinName, newValue, module_name )
+  return localLListInsert( topRec, ldtBinName, newValue, module_name )
+end -- end insert()
+
+-- =======================================================================
+function create_and_insert( topRec, ldtBinName, newValue, createSpec )
+  return localLListInsert( topRec, ldtBinName, newValue, createSpec );
+end -- create_and_insert()
+
+-- =======================================================================
+-- Iterate thru the list and call localStackPush on each element
+-- =======================================================================
+function insert_all( topRec, ldtBinName, valueList, createSpec )
+  local meth = "insert_all()";
+  GP=E and trace("[ENTER]:<%s:%s>BIN(%s) valueList(%s) createSpec(%s)",
+  MOD, meth, tostring(ldtBinName), tostring(valueList), tostring(createSpec));
+  
+  local rc = 0;
+  if( valueList ~= nil and list.size(valueList) > 0 ) then
+    local listSize = list.size( valueList );
+    for i = 1, listSize, 1 do
+      rc = insert( topRec, ldtBinName, valueList[i], createSpec );
+      if( rc < 0 ) then
+        warn("[ERROR]<%s:%s> Problem Inserting Item #(%d) [%s]", MOD, meth, i,
+          tostring( valueList[i] ));
+        error(ldte.ERR_INSERT);
+      end
+    end -- for each value in the list
+  else
+    warn("[ERROR]<%s:%s> Invalid Input Value List(%s)",
+      MOD, meth, tostring(valueList));
+    error(ldte.ERR_INPUT_PARM);
+  end
+  
+  return rc;
+end -- end insert()
+
+
+-- =======================================================================
+-- search(): With and without inner UDFs
+-- =======================================================================
+-- These are the globally visible calls -- that call the local UDF to do
+-- all of the work.
+-- NOTE: All parameters must be protected with "tostring()" so that we
+-- do not encounter a format error if the user passes in nil or any
+-- other incorrect value/type.
+-- =======================================================================
+function search( topRec, ldtBinName, searchKey )
+  local meth = "search()";
+  GP=E and trace("[ENTER]<%s:%s> LLIST BIN(%s) searchKey(%s)",
+    MOD, meth, tostring(ldtBinName), tostring(searchKey) )
+
+  GP=F and trace("\n\n >>>>>>>>> API[ LLIST SEARCH ] <<<<<<<<<(%s) \n",
+    tostring(searchKey));
+
+  return localLListSearch( topRec, ldtBinName, searchKey, nil, nil );
+end -- end search()
+
+function search_with_filter(topRec,ldtBinName,searchKey,func,fargs )
+  local meth = "listSearch()";
+  GP=E and trace("[ENTER]<%s:%s> BIN(%s) searchKey(%s) func(%s) fargs(%s)",
+    MOD, meth, tostring(ldtBinName), tostring(searchKey),
+    tostring(func), tostring(fargs));
+
+  GP=F and trace("\n\n >>>>>>>> API[ LLIST SEARCH With FILTER] <<<<<<<(%s)\n",
+    tostring(searchKey));
+
+  return localLListSearch( topRec, ldtBinName, searchKey, func, fargs );
+end -- end search_with_filter()
+
+-- =======================================================================
+-- scan(): Return all elements
+-- filter(): Pass all elements thru the filter and return all that qualify.
+-- =======================================================================
+-- These are the globally visible calls -- that call the local UDF to do
+-- all of the work.
+-- NOTE: All parameters must be protected with "tostring()" so that we
+-- do not encounter a format error if the user passes in nil or any
+-- other incorrect value/type.
+-- NOTE: After a bit of thought -- we don't need a separate internal
+-- scan function.  Search with a nil searchKey works just fine (I think).
+-- =======================================================================
+function scan( topRec, ldtBinName )
+  local meth = "scan()";
+  GP=E and trace("[ENTER]<%s:%s> LLIST BIN(%s)",
+    MOD, meth, tostring(ldtBinName) );
+
+  GP=F and trace("\n\n  >>>>>>>> API[ SCAN ] <<<<<<<<<<<<<<<<<< \n");
+
+  return localLListSearch( topRec, ldtBinName, nil, nil, nil );
+end -- end scan()
+
+function filter( topRec, ldtBinName, func, fargs )
+  local meth = "filter()";
+  GP=E and trace("[ENTER]<%s:%s> BIN(%s) func(%s) fargs(%s)",
+    MOD, meth, tostring(ldtBinName), tostring(func), tostring(fargs));
+
+  GP=F and trace("\n\n  >>>>>>>>> API[ SCAN and FILTER ]<<<<<<<< \n\n");
+
+  return localLListSearch( topRec, ldtBinName, nil, func, fargs );
+end -- end filter()
+
+-- ======================================================================
+-- delete(): Remove all items corresponding to the specified key.
+-- ======================================================================
+-- Delete the specified item(s).
+--
+-- Parms 
+-- (1) topRec: the user-level record holding the LDT Bin
+-- (2) LdtBinName
+-- (3) key: The key we'll search for
+-- ======================================================================
+function delete( topRec, binName, key )
+  return localLListDelete( topRec, binName, key );
+end
 
 -- ========================================================================
--- llist_remove() -- Remove the LDT entirely from the record.
+-- remove(): Remove the LDT entirely from the record.
+-- ========================================================================
 -- NOTE: This could eventually be moved to COMMON, and be "ldt_remove()",
 -- since it will work the same way for all LDTs.
 -- Remove the ESR, Null out the topRec bin.
@@ -5230,17 +5345,18 @@ end -- ldtRemove()
 --   res = 0: all is well
 --   res = -1: Some sort of error
 -- ========================================================================
-function llist_remove( topRec, lsoBinName )
+function remove( topRec, lsoBinName )
   GP=F and trace("\n\n >>>>>>>>> API[ LLIST REMOVE ] Bin(%s) <<<<<<<<<<\n",
     lsoBinName );
-  return ldtRemove( topRec, lsoBinName );
-end -- llist_remove()
+  return localLdtRemove( topRec, lsoBinName );
+end -- remove()
 
 -- ========================================================================
--- llist_size() -- return the number of elements (item count) in the set.
+-- get_size() -- return the number of elements (item count) in the set.
 -- ========================================================================
-function llist_size( topRec, ldtBinName )
-  local meth = "llist_size()";
+-- ========================================================================
+function get_size( topRec, ldtBinName )
+  local meth = "get_size()";
 
   GP=E and trace("[ENTER1]: <%s:%s> ldtBinName(%s)",
   MOD, meth, tostring(ldtBinName));
@@ -5259,13 +5375,14 @@ function llist_size( topRec, ldtBinName )
   GP=F and trace("[EXIT]: <%s:%s> : size(%d)", MOD, meth, itemCount );
 
   return itemCount;
-end -- function llist_size()
+end -- get_size()
 
 -- ========================================================================
--- llist_config() -- return the config settings
+-- get_config() -- return the config settings
 -- ========================================================================
-function llist_config( topRec, ldtBinName )
-  local meth = "LList_config()";
+-- ========================================================================
+function get_config( topRec, ldtBinName )
+  local meth = "get_config()";
 
   GP=E and trace("[ENTER1]: <%s:%s> ldtBinName(%s)",
   MOD, meth, tostring(ldtBinName));
@@ -5281,20 +5398,20 @@ function llist_config( topRec, ldtBinName )
   GP=F and trace("[EXIT]: <%s:%s> : config(%s)", MOD, meth, config );
 
   return config;
-end -- function llist_config()
+end -- function get_config()
 
 -- ========================================================================
--- Debugging/Tracing mechanism -- show the WHOLE tree.
+-- Dump: Debugging/Tracing mechanism -- show the WHOLE tree.
 -- ========================================================================
-function ldt_dump( topRec, ldtBinName )
+function dump( topRec, ldtBinName )
   GP=F and trace("\n\n >>>>>>>>> API[ LLIST DUMP ] <<<<<<<<(%s)\n",ldtBinName);
   local src = createSubrecContext();
   printTree( src, topRec, ldtBinName );
   return 0;
-end -- function ldt_dump()
+end -- dump()
 
 -- ========================================================================
--- llist_debug() -- Turn the debug setting on (1) or off (0)
+-- debug() -- Turn the debug setting on (1) or off (0)
 -- ========================================================================
 -- Turning the debug setting "ON" pushes LOTS of output to the console.
 -- Parms:
@@ -5304,8 +5421,8 @@ end -- function ldt_dump()
 --   res = 0: all is well
 --   res = -1: Some sort of error
 -- ========================================================================
-function llist_debug( topRec, setting )
-  local meth = "llist_debug()";
+function debug( topRec, setting )
+  local meth = "debug()";
   local rc = 0;
 
   GP=E and trace("[ENTER]: <%s:%s> setting(%s)", MOD, meth, tostring(setting));
@@ -5325,8 +5442,7 @@ function llist_debug( topRec, setting )
     rc = -1;
   end
   return rc;
-end -- llist_debug()
-
+end -- debug()
 
 -- ========================================================================
 -- ========================================================================
