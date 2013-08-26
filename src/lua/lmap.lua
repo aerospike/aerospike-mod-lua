@@ -3911,7 +3911,7 @@ end -- end of localLMapWalkThru
  
 local function localLMapInsertAll( topRec, binName, nameValMap, createSpec )
   local meth = "localLMapInsertAll()";
-  for name, value in map.pairs( nameValMap ) do
+  for name, value in pairs( nameValMap ) do
     GP=F and info("[DEBUG]: <%s:%s> : Processing Arg: Name(%s) Val(%s) TYPE : %s",
         MOD, meth, tostring( name ), tostring( value ), type(value));
     rc = localLMapInsert( topRec, binName, name, value, createSpec )
@@ -4185,3 +4185,100 @@ end
 function lmap_create_and_insert_all( topRec, binName, NameValMap, createSpec )
   return localLMapInsertAll( topRec, binName, NameValMap, createSpec )
 end
+
+-- NEW API DEFINITIONS
+
+function putall( topRec, binName, NameValMap )
+  return localLMapInsertAll( topRec, binName, NameValMap, nil )
+end -- lmap_insert_all()
+
+function remove( topRec, lmapBinName, searchName )
+  return localLMapDelete(topRec, lmapBinName, searchName, nil, nil )
+end -- lmap_delete()
+
+function put( topRec, lmapBinName, newName, newValue )
+  return localLMapInsert( topRec, lmapBinName, newName, newValue, nil );
+end -- New API for lmap_insert()
+
+-- ========================================================================
+-- get_config() -- return the config settings
+-- ========================================================================
+function get_config( topRec, lmapBinName )
+  local meth = "get_config()";
+
+  GP=F and info("[ENTER1]: <%s:%s> ldtBinName(%s)",
+  MOD, meth, tostring(lmapBinName));
+
+  GP=F and info("\n\n >>>>>>>>> API[ LMAP CONFIG ] <<<<<<<<<< \n\n");
+
+  -- Validate the topRec, the bin and the map.  If anything is weird, then
+  -- this will kick out with a long jump error() call.
+  validateLmapParams( topRec, lmapBinName, true );
+
+  local lMapList = topRec[lmapBinName]; -- The main lmap
+  local config = lmapSummaryString(lMapList); 
+
+  GP=F and info("[EXIT]: <%s:%s> : config(%s)", MOD, meth, tostring(config) );
+  
+  return config;
+end -- New API for lmap_config()
+
+-- ========================================================================
+-- size() -- return the number of elements (item count) in the set.
+-- ========================================================================
+function size( topRec, lmapBinName )
+  local meth = "size()";
+
+  GP=F and info("[ENTER1]: <%s:%s> ldtBinName(%s)",
+  MOD, meth, tostring(lmapBinName));
+
+  GP=F and info("\n\n >>>>>>>>> API[ LMAP SIZE ] <<<<<<<<<< \n\n");
+
+  -- Validate the topRec, the bin and the map.  If anything is weird, then
+  -- this will kick out with a long jump error() call.
+  validateLmapParams( topRec, lmapBinName, true );
+
+  -- Extract the property map and control map from the ldt bin list.
+  local lMapList = topRec[lmapBinName]; -- The main lmap
+  local propMap = lMapList[1]; 
+  local lmapCtrlInfo = lMapList[2]; 
+  local itemCount = propMap[PM_ItemCount];
+
+  GP=F and info("[EXIT]: <%s:%s> : SIZE(%d)", MOD, meth, itemCount );
+  GP=F and info(" !!!!!! lmap_size: Search Key-Type: %s !!!!!", tostring(lmapCtrlInfo[M_KeyType]));
+
+  return itemCount;
+end -- New API for lmap_size()
+
+function getall( topRec, lmapBinName )
+  local meth = "getall()";
+  GP=F and info("[ENTER]<%s:%s> LLIST BIN(%s)",
+    MOD, meth, tostring(lmapBinName) );
+
+  validateLmapParams( topRec, lmapBinName, true );
+  resultList = list();
+  GP=F and info("\n\n  >>>>>>>> API[ SCAN ] <<<<<<<<<<<<<<<<<< \n");
+
+  return localLMapSearchAll(topRec,lmapBinName,resultList,nil,nil);
+end -- New API for lmap_scan()
+
+function destroy( topRec, lmapBinName )
+  GP=F and info("\n\n >>>>>>>>> API[ DESTROY ] <<<<<<<<<< \n\n");
+  return ldt_remove( topRec, lmapBinName );
+end -- New API for lmap_remove 
+
+function get( topRec, lmapBinName, searchName )
+  GP=F and info("\n\n >>>>>>>>> API[ lmap_search ] <<<<<<<<<< \n\n");
+  resultList = list();
+  -- if we dont have a searchValue, get all the list elements.
+  -- Note that this means an empty searchValue which is not 
+  -- the same as a nil or a NULL searchValue
+
+  validateLmapParams( topRec, lmapBinName, true );
+  if( searchName == nil ) then
+    -- if no search value, use the faster SCAN (searchALL)
+    return localLMapSearchAll(topRec,lmapBinName,resultList,nil,nil)
+  else
+    return localLMapSearch(topRec,lmapBinName,searchName,resultList,nil,nil)
+  end
+end -- New API for lmap_search()
