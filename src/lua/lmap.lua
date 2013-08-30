@@ -3911,7 +3911,7 @@ end -- end of localLMapWalkThru
  
 local function localLMapInsertAll( topRec, binName, nameValMap, createSpec )
   local meth = "localLMapInsertAll()";
-  for name, value in pairs( nameValMap ) do
+  for name, value in map.pairs( nameValMap ) do
     GP=F and info("[DEBUG]: <%s:%s> : Processing Arg: Name(%s) Val(%s) TYPE : %s",
         MOD, meth, tostring( name ), tostring( value ), type(value));
     rc = localLMapInsert( topRec, binName, name, value, createSpec )
@@ -4082,7 +4082,7 @@ function lmap_insert( topRec, lmapBinName, newName, newValue )
 end -- lmap_insert()
 
 function lmap_create_and_insert( topRec, lmapBinName, newName, newValue, createSpec )
-  return localLMapInsert( topRec, lmapBinName, newValue, createSpec )
+  return localLMapInsert( topRec, lmapBinName, newName, newValue, createSpec )
 end -- lmap_create_and_insert()
 
 -- ======================================================================
@@ -4128,7 +4128,7 @@ end -- lmap_create_and_insert()
 function lmap_create( topRec, lmapBinName, createSpec )
   local meth = "lmap_create()";
   
-  warn("[ENTER]: <%s:%s> Bin(%s) createSpec(%s)",
+  GP=F and info("[ENTER]: <%s:%s> Bin(%s) createSpec(%s)",
                  MOD, meth, tostring(lmapBinName), tostring(createSpec) );
 
   local rc = localLMapCreate( topRec, lmapBinName, createSpec );
@@ -4186,11 +4186,22 @@ function lmap_create_and_insert_all( topRec, binName, NameValMap, createSpec )
   return localLMapInsertAll( topRec, binName, NameValMap, createSpec )
 end
 
+-- ======================================================================
 -- NEW API DEFINITIONS
+-- ======================================================================
+
+function create( topRec, lmapBinName, createSpec )
+  local rc = localLMapCreate( topRec, lmapBinName, createSpec );
+  return rc; 
+end -- NEW API for lmap_create 
+
+function create_and_insert( topRec, lmapBinName, newName, newValue, createSpec )
+  return localLMapInsert( topRec, lmapBinName, newName, newValue, createSpec )
+end -- NEW API for lmap_create_and_insert()
 
 function putall( topRec, binName, NameValMap )
   return localLMapInsertAll( topRec, binName, NameValMap, nil )
-end -- lmap_insert_all()
+end -- NEW API for lmap_insert_all()
 
 function remove( topRec, lmapBinName, searchName )
   return localLMapDelete(topRec, lmapBinName, searchName, nil, nil )
@@ -4261,6 +4272,18 @@ function getall( topRec, lmapBinName )
 
   return localLMapSearchAll(topRec,lmapBinName,resultList,nil,nil);
 end -- New API for lmap_scan()
+
+function filter( topRec, lmapBinName, filter, fargs )
+  local meth = "getall()";
+  GP=F and info("[ENTER]<%s:%s> LLIST BIN(%s)",
+    MOD, meth, tostring(lmapBinName) );
+
+  validateLmapParams( topRec, lmapBinName, true );
+  resultList = list();
+  GP=F and info("\n\n  >>>>>>>> API[ SCAN ] <<<<<<<<<<<<<<<<<< \n");
+
+  return localLMapSearchAll(topRec,lmapBinName,resultList,filter,fargs);
+end -- New API for lmap_scan with filter()
 
 function destroy( topRec, lmapBinName )
   GP=F and info("\n\n >>>>>>>>> API[ DESTROY ] <<<<<<<<<< \n\n");
