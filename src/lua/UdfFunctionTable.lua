@@ -254,7 +254,7 @@ function UdfFunctionTable.testFilter1( arglist )
 
   GP=F and trace("[EXIT]: <%s:%s> Result(%s) \n", MOD, meth, result );
 
-  return result
+  return result;
 end
 -- ======================================================================
 
@@ -278,7 +278,7 @@ function UdfFunctionTable.compress4ByteInteger( luaNumber, arglist )
   bytes.put_int32(b4, 1,  luaNumber[1] ); -- 4 byte int
 
   GP=F and trace("[EXIT]: <%s:%s> Result(%s) \n", MOD, meth, tostring(b4));
-  return b4
+  return b4;
 end -- compress4ByteInteger()
 
 -- ======================================================================
@@ -327,7 +327,7 @@ function UdfFunctionTable.listCompress_4_18( listTuple, arglist )
   bytes.put_int16(b18, 17, listTuple[4] ); -- 2 byte int
 
   GP=F and trace("[EXIT]: <%s:%s> Result(%s) \n", MOD, meth, tostring(b18));
-  return b18
+  return b18;
 end -- listCompress_4_18( listTuple, arglist )
 
 -- ======================================================================
@@ -384,7 +384,7 @@ function UdfFunctionTable.listCompress_5_18( listTuple, arglist )
   bytes.put_int16(b18, 17, listTuple[5] ); -- 2 byte int
 
   GP=F and trace("[EXIT]: <%s:%s> BinaryResult(%s)", MOD, meth, tostring(b18));
-  return b18
+  return b18;
 end -- listCompress_5_18( listTuple, arglist )
 
 -- ======================================================================
@@ -402,8 +402,8 @@ function UdfFunctionTable.listUnCompress_5_18( b18, arglist )
   local rc = 0;
   -- protect against bad prints
   if arglist == nil then arglist = 0; end
-  GP=F and trace("[ENTER]: <%s:%s> BinaryTuple(%s) TupleType(%s) ArgList(%s) \n",
-                MOD, meth, tostring(b18), type(b18), tostring(arglist));
+  GP=F and trace("[ENTER]: <%s:%s> BinaryTuple(%s) TupleType(%s) ArgList(%s)",
+              MOD, meth, tostring(b18), type(b18), tostring(arglist));
 
   local listTuple = list(5);
   -- NOTE: Must append.  Can't index directly into it.
@@ -451,7 +451,7 @@ function UdfFunctionTable.listCompress_5_20( inputTuple, arglist )
   bytes.put_int32(b20, 17, inputTuple[5] ); -- 4 byte int
 
   GP=F and trace("[EXIT]: <%s:%s> BinaryResult(%s)", MOD, meth, tostring(b20));
-  return b20
+  return b20;
 end -- listCompress_5_20( listTuple, arglist )
 
 -- ======================================================================
@@ -606,6 +606,5 @@ end -- keyHash()
 -- ======================================================================
 return UdfFunctionTable;
 -- ======================================================================
-
 --
 -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> --
