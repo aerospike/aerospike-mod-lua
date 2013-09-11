@@ -125,14 +125,14 @@ static int mod_lua_aerospike_crec_update(lua_State * l) {
 /**
  * aerospike.remove_subrec(record, record) => result<int>
  */
-static int mod_lua_aerospike_crec_remove(lua_State * l) {
-    as_aerospike *  a   = mod_lua_checkaerospike(l, 1);
-    as_rec *        cr  = mod_lua_torecord(l, 2);
-    int             rc  = as_aerospike_crec_remove(a, cr);
-    if (!rc) return 0;
-    lua_pushinteger(l, rc);
-    return 1;
-}
+// static int mod_lua_aerospike_crec_remove(lua_State * l) {
+//     as_aerospike *  a   = mod_lua_checkaerospike(l, 1);
+//     as_rec *        cr  = mod_lua_torecord(l, 2);
+//     int             rc  = as_aerospike_crec_remove(a, cr);
+//     if (!rc) return 0;
+//     lua_pushinteger(l, rc);
+//     return 1;
+// }
 
 
 /**
@@ -208,13 +208,13 @@ static int mod_lua_aerospike_log(lua_State * l) {
  * It is possible that we'll have to store this as BYTES (similar to how we
  * deal with digests) -- or something.
  */
-static int mod_lua_aerospike_get_current_time(lua_State * l) {
-    as_aerospike *  a   = mod_lua_checkaerospike(l, 1);
-    cf_clock      cur_time  = as_aerospike_get_current_time( a );
-    lua_pushinteger(l, cur_time ); // May have to push some other type @TOBY
+// static int mod_lua_aerospike_get_current_time(lua_State * l) {
+//     as_aerospike *  a   = mod_lua_checkaerospike(l, 1);
+//     cf_clock      cur_time  = as_aerospike_get_current_time( a );
+//     lua_pushinteger(l, cur_time ); // May have to push some other type @TOBY
 
-    return 1;
-} // end mod_lua_aerospike_get_current_time()
+//     return 1;
+// } // end mod_lua_aerospike_get_current_time()
 
 /******************************************************************************
  * CLASS TABLE
@@ -226,8 +226,8 @@ static const luaL_reg class_table[] = {
     {"exists",           mod_lua_aerospike_rec_exists},
     {"remove",           mod_lua_aerospike_rec_remove},
     {"log",              mod_lua_aerospike_log},
-    {"get_current_time", mod_lua_aerospike_get_current_time},
-    {"remove_subrec",    mod_lua_aerospike_crec_remove},
+    // {"get_current_time", mod_lua_aerospike_get_current_time},
+    // {"remove_subrec",    mod_lua_aerospike_crec_remove},
     {"create_subrec",    mod_lua_aerospike_crec_create},
     {"close_subrec",     mod_lua_aerospike_crec_close},
     {"open_subrec",      mod_lua_aerospike_crec_open},
