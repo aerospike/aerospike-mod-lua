@@ -1,8 +1,8 @@
 -- Large Ordered List (llist.lua)
--- Last Update August 21,  2013: tjl
+-- Last Update September 11, 2013: tjl
 --
 -- Keep this MOD value in sync with version above
-local MOD = "llist_2013_08_23.a"; -- module name used for tracing.  
+local MOD = "llist_2013_09_11.c"; -- module name used for tracing.  
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -16,11 +16,28 @@ local G_LDT_VERSION = 1.1;
 -- in the server).  We may also use "F" as a general guard for larger
 -- print debug blocks -- as well as the individual trace/info lines.
 -- ======================================================================
-local GP=true;
--- local F=true; -- Set F (flag) to true to turn ON global print
-local F=false; -- Set F (flag) to true to turn ON global print
--- local E=true; -- Set F (flag) to true to turn ON Enter/Exit print
-local E=false; -- Set F (flag) to true to turn ON Enter/Exit print
+local GP=true; -- Doesn't matter what this value is.
+local F=true; -- Set F (flag) to true to turn ON global print
+local E=true; -- Set F (flag) to true to turn ON Enter/Exit print
+local B=true; -- Set B (Banners) to true to turn ON Banner Print
+
+-- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- <<  LLIST Main Functions >>
+-- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- The following external functions are defined in the LLIST module:
+--
+-- (*) Status = add( topRec, ldtBinName, newValue, userModule )
+-- (*) Status = add_all( topRec, ldtBinName, valueList, userModule )
+-- (*) List   = find( topRec, ldtBinName, searchValue ) 
+-- (*) List   = scan( topRec, ldtBinName )
+-- (*) List   = filter( topRec, ldtBinName, userModule, filter, fargs )
+-- (*) Status = remove( topRec, ldtBinName, searchValue ) 
+-- (*) Status = destroy( topRec, ldtBinName )
+-- (*) Number = size( topRec, ldtBinName )
+-- (*) Map    = get_config( topRec, ldtBinName )
+-- (*) Status = set_capacity( topRec, ldtBinName, new_capacity)
+-- (*) Status = get_capacity( topRec, ldtBinName )
+-- ======================================================================
 
 -- TODO (Major Feature Items:  (N) Now, (L) Later
 -- (N) Switch all Lua External functions to return two-part values, which
@@ -69,28 +86,16 @@ local E=false; -- Set F (flag) to true to turn ON Enter/Exit print
 --    can be partial value (ie the index'd portion)
 --    return a list of values matching the search value. or empty list
 --    if no match.
---
 -- findany(rec, bin, value)
 --    return any (first) value matching the search value. or nil if no match.
---
--- exists(rec, bin, value) == ( findany(rec,bin,value) != nil )
---
 -- getall(rec, bin)
---                        
 -- filter(rec, bin, filter_function, args...)
---
 -- range(rec, bin, lower, upper)
---
 -- first(rec, bin, n) -- return first n items
---
 -- last(rec, bin, n) -- return last n items
---
 -- remove(rec, bin, value)
---                                  
 -- destroy(rec, bin)
---
 -- size(rec, bin)
---                                            
 -- get_config(rec, bin)
 --
 -- DONE LIST
@@ -109,6 +114,7 @@ local E=false; -- Set F (flag) to true to turn ON Enter/Exit print
 -- ======================================================================
 local insertParentNode;
 
+-- ======================================================================
 -- ++==================++
 -- || External Modules ||
 -- ++==================++
@@ -126,6 +132,9 @@ local functionTable = require('UdfFunctionTable');
 -- return looks like this:
 -- error( ldte.ERR_INTERNAL );
 local ldte = require('ldt_errors');
+
+-- We have a set of packaged settings for each LDT
+local llistPackage = require('settings_llist');
 
 -- ======================================================================
 -- The Large Ordered List is a sorted list, organized according to a Key
@@ -487,6 +496,7 @@ local R_UnTransFunc         = 'u';-- Reverse transform (from storage to user)
 local R_StoreState          = 'S';-- Compact or Regular Storage
 local R_Threshold           = 'H';-- After this#:Move from compact to tree mode
 local R_KeyFunction         = 'F';-- Function to compute Key from Object
+local R_StoreLimit          = 'L';-- Storage Capacity Limit
 -- Key and Object Sizes, when using fixed length (byte array stuff)
 local R_KeyByteSize         = 'B';-- Fixed Size (in bytes) of Key
 local R_ObjectByteSize      = 'b';-- Fixed Size (in bytes) of Object
@@ -551,28 +561,6 @@ local R_LeafByteCountMax    = 'y';-- Max # of BYTES for obj space in a leaf
 local KC_DEFAULT="keyCompareEqual"; -- Key Compare used only in complex mode
 local KH_DEFAULT="keyHash";         -- Key Hash used only in complex mode
 
--- Package Names
--- Standard, Test and Debug Packages
-local PackageStandardList        = "StandardList";
-local PackageTestModeObject      = "TestModeObject";
-local PackageTestModeObjectDup   = "TestModeObjectDup";
-local PackageTestModeList        = "TestModeList";
-local PackageTestModeBinary      = "TestModeBinary";
-local PackageTestModeNumber      = "TestModeNumber";
-local PackageTestModeNumberDup   = "TestModeNumberDup";
-local PackageDebugModeObjectDup  = "DebugModeObjectDup";
-local PackageDebugModeObject     = "DebugModeObject";
-local PackageDebugModeList       = "DebugModeList";
-local PackageDebugModeBinary     = "DebugModeBinary";
-local PackageDebugModeNumber     = "DebugModeNumber";
-local PackageDebugModeNumberDup  = "DebugModeNumberDup";
-local PackageProdListValBinStore = "ProdListValBinStore";
-
--- set up our "outside" links
--- local  CRC32 = require('CRC32'); -- Used by LSET, LMAP
-local functionTable = require('UdfFunctionTable');
--- local LDTC = require('ldt_common');
-
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- <><><><> <Initialize Control Maps> <Initialize Control Maps> <><><><>
 -- There are three main Record Types used in the LLIST Package, and their
@@ -622,6 +610,7 @@ local function ldtSummary( ldtList )
   -- General Tree Settings
   resultMap.StoreMode         = ldtMap[R_StoreMode];
   resultMap.StoreState        = ldtMap[R_StoreState];
+  resultMap.StoreLimit        = ldtMap[R_StoreLimit];
   resultMap.TreeLevel         = ldtMap[R_TreeLevel];
   resultMap.LeafCount         = ldtMap[R_LeafCount];
   resultMap.NodeCount         = ldtMap[R_NodeCount];
@@ -722,7 +711,7 @@ end -- setLdtRecordType()
 -- <><><><> <Initialize Control Maps> <Initialize Control Maps> <><><><>
 
 -- ======================================================================
--- initializeLList:
+-- initializeLdtCtrl:
 -- ======================================================================
 -- Set up the LLIST control structure with the standard (default) values.
 -- These values may later be overridden by the user.
@@ -736,8 +725,8 @@ end -- setLdtRecordType()
 -- local ldtMap  = ldtList[2];
 -- ======================================================================
 local function
-initializeLList( topRec, ldtBinName )
-  local meth = "initializeLList()";
+initializeLdtCtrl( topRec, ldtBinName )
+  local meth = "initializeLdtCtrl()";
   GP=E and trace("[ENTER]<%s:%s>:: ldtBinName(%s)",
     MOD, meth, tostring(ldtBinName));
 
@@ -821,493 +810,56 @@ initializeLList( topRec, ldtBinName )
       MOD, meth, ldtSummaryString(ldtList));
 
   return ldtList;
-end -- initializeLList()
-
--- ++======================++
--- || Prepackaged Settings ||
--- ++======================++
---
--- ======================================================================
--- This is the standard (default) configuration
--- Package = "StandardList"
--- ======================================================================
-local function packageStandardList( ldtMap )
-  
-  -- General Parameters
-  ldtMap[R_Transform] = nil;
-  ldtMap[R_UnTransform] = nil;
-  ldtMap[R_StoreState] = SS_COMPACT; -- start in "compact mode"
-  ldtMap[R_StoreMode] = SM_LIST; -- Use List Mode
-  ldtMap[R_BinaryStoreSize] = nil; -- Don't waste room if we're not using it
-  ldtMap[R_KeyType] = KT_ATOMIC; -- Atomic Keys
-  ldtMap[R_Threshold] = DEFAULT_THRESHOLD; -- Rehash after this many inserts
-  ldtMap[R_KeyFunction] = nil; -- Special Attention Required.
-
-  -- Top Node Tree Root Directory
-  ldtMap[R_RootListMax] = 100; -- Length of Key List (page list is KL + 1)
-  ldtMap[R_RootByteCountMax] = 0; -- Max bytes for key space in the root
-  
-  -- LLIST Inner Node Settings
-  ldtMap[R_NodeListMax] = 100;  -- Max # of items (key+digest)
-  ldtMap[R_NodeByteCountMax] = 0; -- Max # of BYTES
-
-  -- LLIST Tree Leaves (Data Pages)
-  ldtMap[R_LeafListMax] = 100;  -- Max # of items
-  ldtMap[R_LeafByteCountMax] = 0; -- Max # of BYTES per data page
-
-  return 0;
-end -- packageStandardList()
+end -- initializeLdtCtrl()
 
 -- ======================================================================
--- Package = "TestModeNumber"
 -- ======================================================================
-local function packageTestModeNumber( ldtMap )
-  
-  -- General Parameters
-  ldtMap[R_Transform] = nil;
-  ldtMap[R_UnTransform] = nil;
-  ldtMap[R_StoreState] = SS_COMPACT; -- start in "compact mode"
-  ldtMap[R_StoreMode] = SM_LIST; -- Use List Mode
-  ldtMap[R_BinaryStoreSize] = nil; -- Don't waste room if we're not using it
-  ldtMap[R_KeyType] = KT_ATOMIC; -- Atomic Keys (A Number)
-  ldtMap[R_Threshold] = 20; -- Change to TREE Ops after this many inserts
-  ldtMap[R_KeyFunction] = nil; -- Special Attention Required.
-  ldtMap[R_KeyUnique] = true; -- Unique values only.
- 
-  -- Top Node Tree Root Directory
-  ldtMap[R_RootListMax] = 20; -- Length of Key List (page list is KL + 1)
-  ldtMap[R_RootByteCountMax] = 0; -- Max bytes for key space in the root
-  
-  -- LLIST Inner Node Settings
-  ldtMap[R_NodeListMax] = 20;  -- Max # of items (key+digest)
-  ldtMap[R_NodeByteCountMax] = 0; -- Max # of BYTES
-
-  -- LLIST Tree Leaves (Data Pages)
-  ldtMap[R_LeafListMax] = 20;  -- Max # of items
-  ldtMap[R_LeafByteCountMax] = 0; -- Max # of BYTES per data page
-
-  return 0;
-end -- packageTestModeNumber()
-
 -- ======================================================================
--- Package = "TestModeNumberDup"
--- ======================================================================
-local function packageTestModeNumberDup( ldtMap )
-  
-  -- General Parameters
-  ldtMap[R_Transform] = nil;
-  ldtMap[R_UnTransform] = nil;
-  ldtMap[R_StoreState] = SS_COMPACT; -- start in "compact mode"
-  ldtMap[R_StoreMode] = SM_LIST; -- Use List Mode
-  ldtMap[R_BinaryStoreSize] = nil; -- Don't waste room if we're not using it
-  ldtMap[R_KeyType] = KT_ATOMIC; -- Atomic Keys (A Number)
-  ldtMap[R_Threshold] = 20; -- Change to TREE Ops after this many inserts
-  ldtMap[R_KeyFunction] = nil; -- Special Attention Required.
-  ldtMap[R_KeyUnique] = false; -- allow Duplicates
- 
-  -- Top Node Tree Root Directory
-  ldtMap[R_RootListMax] = 20; -- Length of Key List (page list is KL + 1)
-  ldtMap[R_RootByteCountMax] = 0; -- Max bytes for key space in the root
-  
-  -- LLIST Inner Node Settings
-  ldtMap[R_NodeListMax] = 20;  -- Max # of items (key+digest)
-  ldtMap[R_NodeByteCountMax] = 0; -- Max # of BYTES
-
-  -- LLIST Tree Leaves (Data Pages)
-  ldtMap[R_LeafListMax] = 20;  -- Max # of items
-  ldtMap[R_LeafByteCountMax] = 0; -- Max # of BYTES per data page
-
-  return 0;
-end -- packageTestModeNumberDup()
-
--- ======================================================================
--- Package = "TestModeObjectDup"
--- ======================================================================
-local function packageTestModeObjectDup( ldtMap )
-  
-  -- General Parameters
-  ldtMap[R_Transform] = nil;
-  ldtMap[R_UnTransform] = nil;
-  ldtMap[R_StoreState] = SS_COMPACT; -- start in "compact mode"
-  ldtMap[R_StoreMode] = SM_LIST; -- Use List Mode
-  ldtMap[R_BinaryStoreSize] = nil; -- Don't waste room if we're not using it
-  ldtMap[R_KeyType] = KT_COMPLEX; -- Atomic Keys (A Number)
-  ldtMap[R_Threshold] = 20; -- Change to TREE Ops after this many inserts
-  -- Use the special function that simply returns the value held in
-  -- the object's map field "key".
-  ldtMap[R_KeyFunction] = "keyExtract"; -- Special Attention Required.
-  ldtMap[R_KeyUnique] = false; -- allow Duplicates
- 
-  -- Top Node Tree Root Directory
-  ldtMap[R_RootListMax] = 20; -- Length of Key List (page list is KL + 1)
-  ldtMap[R_RootByteCountMax] = 0; -- Max bytes for key space in the root
-  
-  -- LLIST Inner Node Settings
-  ldtMap[R_NodeListMax] = 20;  -- Max # of items (key+digest)
-  ldtMap[R_NodeByteCountMax] = 0; -- Max # of BYTES
-
-  -- LLIST Tree Leaves (Data Pages)
-  ldtMap[R_LeafListMax] = 20;  -- Max # of items
-  ldtMap[R_LeafByteCountMax] = 0; -- Max # of BYTES per data page
-
-  return 0;
-end -- packageTestModeObjectDup()
-
-
--- ======================================================================
--- Package = "TestModeObject"
--- ======================================================================
-local function packageTestModeObject( ldtMap )
-  
-  -- General Parameters
-  ldtMap[R_Transform] = nil;
-  ldtMap[R_UnTransform] = nil;
-  ldtMap[R_StoreState] = SS_COMPACT; -- start in "compact mode"
-  ldtMap[R_StoreMode] = SM_LIST; -- Use List Mode
-  ldtMap[R_BinaryStoreSize] = nil; -- Don't waste room if we're not using it
-  ldtMap[R_KeyType] = KT_COMPLEX; -- Atomic Keys (A Number)
-  ldtMap[R_Threshold] = 10; -- Change to TREE Ops after this many inserts
-  -- Use the special function that simply returns the value held in
-  -- the object's map field "key".
-  ldtMap[R_KeyFunction] = "keyExtract"; -- Special Attention Required.
-  ldtMap[R_KeyUnique] = true; -- Assume Unique Objects
- 
-  -- Top Node Tree Root Directory
-  ldtMap[R_RootListMax] = 100; -- Length of Key List (page list is KL + 1)
-  ldtMap[R_RootByteCountMax] = 0; -- Max bytes for key space in the root
-  
-  -- LLIST Inner Node Settings
-  ldtMap[R_NodeListMax] = 100;  -- Max # of items (key+digest)
-  ldtMap[R_NodeByteCountMax] = 0; -- Max # of BYTES
-
-  -- LLIST Tree Leaves (Data Pages)
-  ldtMap[R_LeafListMax] = 100;  -- Max # of items
-  ldtMap[R_LeafByteCountMax] = 0; -- Max # of BYTES per data page
-
-  return 0;
-end -- packageTestModeObject()
-
--- ======================================================================
--- Package = "TestModeList"
--- ======================================================================
-local function packageTestModeList( ldtMap )
-  
-  -- General Parameters
-  ldtMap[R_Transform] = nil;
-  ldtMap[R_UnTransform] = nil;
-  ldtMap[R_StoreState] = SS_COMPACT; -- start in "compact mode"
-  ldtMap[R_StoreMode] = SM_LIST; -- Use List Mode
-  ldtMap[R_BinaryStoreSize] = nil; -- Don't waste room if we're not using it
-  ldtMap[R_KeyType] = KT_COMPLEX; -- Complex Object (need key function)
-  -- ldtMap[R_BinName] = ldtBinName;
-  ldtMap[R_Threshold] = 2; -- Change to TREE Operations after this many inserts
-  ldtMap[R_KeyFunction] = nil; -- Special Attention Required.
-  ldtMap[R_KeyUnique] = true; -- Assume Unique Objects
- 
-  -- Top Node Tree Root Directory
-  ldtMap[R_RootListMax] = 100; -- Length of Key List (page list is KL + 1)
-  ldtMap[R_RootByteCountMax] = 0; -- Max bytes for key space in the root
-  
-  -- LLIST Inner Node Settings
-  ldtMap[R_NodeListMax] = 100;  -- Max # of items (key+digest)
-  ldtMap[R_NodeByteCountMax] = 0; -- Max # of BYTES
-
-  -- LLIST Tree Leaves (Data Pages)
-  ldtMap[R_LeafListMax] = 100;  -- Max # of items
-  ldtMap[R_LeafByteCountMax] = 0; -- Max # of BYTES per data page
-
-  return 0;
- 
-end -- packageTestModeList()
-
--- ======================================================================
--- Package = "TestModeBinary"
--- ======================================================================
-local function packageTestModeBinary( ldtMap )
-  
-  -- General Parameters
-  ldtMap[R_Transform] = "compressTest4";
-  ldtMap[R_UnTransform] = "unCompressTest4";
-  ldtMap[R_StoreState] = SS_COMPACT; -- start in "compact mode"
-  ldtMap[R_StoreMode] = SM_LIST; -- Use List Mode
-  ldtMap[R_BinaryStoreSize] = nil; -- Don't waste room if we're not using it
-  ldtMap[R_KeyType] = KT_COMPLEX; -- Complex Object (need key function)
-  -- ldtMap[R_BinName] = ldtBinName;
-  ldtMap[R_Threshold] = 2; -- Change to TREE Mode after this many ops.
-  ldtMap[R_KeyFunction] = nil; -- Special Attention Required.
-  return 0;
-
-end -- packageTestModeBinary( ldtMap )
-
--- ======================================================================
--- Package = "ProdListValBinStore"
--- This Production App uses a compacted (transformed) representation.
--- ======================================================================
-local function packageProdListValBinStore( ldtMap )
-  
-  -- General Parameters
-  ldtMap[R_Transform] = "listCompress_5_18";
-  ldtMap[R_UnTransform] = "listUnCompress_5_18";
-  ldtMap[R_StoreState] = SS_COMPACT; -- start in "compact mode"
-  ldtMap[R_StoreMode] = SM_BINARY; -- Use a Byte Array
-  ldtMap[R_BinaryStoreSize] = 4; -- Storing a single 4 byte integer
-  ldtMap[R_KeyType] = KT_ATOMIC; -- Atomic Keys (a number)
-  -- ldtMap[R_BinName] = ldtBinName;
-  ldtMap[R_Threshold] = 100; -- Rehash after this many have been inserted
-  ldtMap[R_KeyFunction] = nil; -- Special Attention Required.
-  return 0;
-  
-end -- packageProdListValBinStore()
-
--- ======================================================================
--- Package = "DebugModeObject"
--- Test the LLIST with Objects (i.e. Complex Objects in the form of MAPS)
--- where we sort them based on a map field called "key".
--- ======================================================================
-local function packageDebugModeObject( ldtMap )
-  local meth = "packageDebugModeObject()";
-  
-  GP=E and trace("[ENTER]<%s:%s> : ldtMap(%s)",
-      MOD, meth , tostring(ldtMap));
-
-  -- General Parameters
-  ldtMap[R_Transform] = nil;
-  ldtMap[R_UnTransform] = nil;
-  ldtMap[R_StoreState] = SS_COMPACT; -- start in "compact mode"
-  ldtMap[R_StoreMode] = SM_LIST; -- Use List Mode
-  ldtMap[R_BinaryStoreSize] = nil; -- Don't waste room if we're not using it
-  ldtMap[R_KeyType] = KT_COMPLEX; -- Atomic Keys
-  ldtMap[R_Threshold] = 2; -- Rehash after this many have been inserted
-  ldtMap[R_KeyFunction] = "keyExtract"; -- Special Attention Required.
-  ldtMap[R_KeyUnique] = true; -- Just Unique keys for now.
-
-  -- Top Node Tree Root Directory
-  ldtMap[R_RootListMax] = 4; -- Length of Key List (page list is KL + 1)
-  
-  -- LLIST Inner Node Settings
-  ldtMap[R_NodeListMax] = 4;  -- Max # of items (key+digest)
-
-  -- LLIST Tree Leaves (Data Pages)
-  ldtMap[R_LeafListMax] = 4;  -- Max # of items
-
-  GP=E and trace("[EXIT]<%s:%s> : ldtMap(%s)",
-      MOD, meth , tostring(ldtMap));
-
-  return 0;
-
-end -- packageDebugModeObject()
-
-
--- ======================================================================
--- Package = "DebugModeObjectDup"
--- Test the LLIST with Objects (i.e. Complex Objects in the form of MAPS)
--- where we sort them based on a map field called "key".
--- ASSUME that we will support DUPLICATES.
--- ======================================================================
-local function packageDebugModeObjectDup( ldtMap )
-  local meth = "packageDebugModeObjectDup()";
-  
-  GP=E and trace("[ENTER]<%s:%s> : ldtMap(%s)",
-      MOD, meth , tostring(ldtMap));
-
-  -- General Parameters
-  ldtMap[R_Transform] = nil;
-  ldtMap[R_UnTransform] = nil;
-  ldtMap[R_StoreState] = SS_COMPACT; -- start in "compact mode"
-  ldtMap[R_StoreMode] = SM_LIST; -- Use List Mode
-  ldtMap[R_BinaryStoreSize] = nil; -- Don't waste room if we're not using it
-  ldtMap[R_KeyType] = KT_COMPLEX; -- Atomic Keys
-  ldtMap[R_Threshold] = 2; -- Rehash after this many have been inserted
-  ldtMap[R_KeyFunction] = "keyExtract"; -- Special Attention Required.
-  ldtMap[R_KeyUnique] = false; -- Assume there will be Duplicates
-
-  -- Top Node Tree Root Directory
-  ldtMap[R_RootListMax] = 4; -- Length of Key List (page list is KL + 1)
-  
-  -- LLIST Inner Node Settings
-  ldtMap[R_NodeListMax] = 4;  -- Max # of items (key+digest)
-
-  -- LLIST Tree Leaves (Data Pages)
-  ldtMap[R_LeafListMax] = 4;  -- Max # of items
-
-  return 0;
-
-end -- packageDebugModeObjectDup()
-
-
--- ======================================================================
--- Package = "DebugModeList"
--- Test the LLIST with very small numbers to force it to make LOTS of
--- warm and close objects with very few inserted items.
--- ======================================================================
-local function packageDebugModeList( ldtMap )
-  local meth = "packageDebugModeList()";
-  
-  GP=E and trace("[ENTER]<%s:%s> : ldtMap(%s)",
-      MOD, meth , tostring(ldtMap));
-
-  -- General Parameters
-  ldtMap[R_Transform] = nil;
-  ldtMap[R_UnTransform] = nil;
-  ldtMap[R_StoreState] = SS_COMPACT; -- start in "compact mode"
-  ldtMap[R_StoreMode] = SM_LIST; -- Use List Mode
-  ldtMap[R_BinaryStoreSize] = nil; -- Don't waste room if we're not using it
-  ldtMap[R_KeyType] = KT_ATOMIC; -- Atomic Keys
-  ldtMap[R_Threshold] = 10; -- Rehash after this many have been inserted
-  ldtMap[R_KeyFunction] = nil; -- Special Attention Required.
-  ldtMap[R_KeyUnique] = true; -- Just Unique keys for now.
-
-  -- Top Node Tree Root Directory
-  ldtMap[R_RootListMax] = 10; -- Length of Key List (page list is KL + 1)
-  
-  -- LLIST Inner Node Settings
-  ldtMap[R_NodeListMax] = 10;  -- Max # of items (key+digest)
-
-  -- LLIST Tree Leaves (Data Pages)
-  ldtMap[R_LeafListMax] = 10;  -- Max # of items
-
-  return 0;
-
-end -- packageDebugModeList()
-
--- ======================================================================
--- Package = "DebugModeBinary"
--- Perform the Debugging style test with compression.
--- ======================================================================
-local function packageDebugModeBinary( ldtMap )
-  
-  -- General Parameters
-  ldtMap[R_Transform] = "compressTest4";
-  ldtMap[R_UnTransform] = "unCompressTest4";
-  ldtMap[R_KeyCompare] = "debugListCompareEqual"; -- "Simple" list comp
-  ldtMap[R_StoreState] = SS_COMPACT; -- start in "compact mode"
-  ldtMap[R_StoreMode] = SM_LIST; -- Use List Mode
-  ldtMap[R_BinaryStoreSize] = 16; -- Don't waste room if we're not using it
-  ldtMap[R_KeyType] = KT_COMPLEX; -- special function for list compare.
-  -- ldtMap[R_BinName] = ldtBinName;
-  ldtMap[R_Threshold] = 4; -- Rehash after this many have been inserted
-  ldtMap[R_KeyFunction] = nil; -- Special Attention Required.
-  return 0;
-
-end -- packageDebugModeBinary( ldtMap )
-
--- ======================================================================
--- Package = "DebugModeNumber"
--- Perform the Debugging style test with a number
--- ======================================================================
-local function packageDebugModeNumber( ldtMap )
-  local meth = "packageDebugModeNumber()";
-  GP=E and trace("[ENTER]<%s:%s>:: LdtMap(%s)",
-    MOD, meth, tostring(ldtMap) );
-  
-  -- General Parameters
-  ldtMap[R_Transform] = nil;
-  ldtMap[R_UnTransform] = nil;
-  ldtMap[R_KeyCompare] = nil;
-  ldtMap[R_StoreState] = SS_COMPACT; -- start in "compact mode"
-  ldtMap[R_StoreMode] = SM_LIST; -- Use List Mode
-  ldtMap[R_BinaryStoreSize] = 0; -- Don't waste room if we're not using it
-  ldtMap[R_KeyType] = KT_ATOMIC; -- Simple Number (atomic) compare
-  -- ldtMap[R_BinName] = ldtBinName;
-  ldtMap[R_Threshold] = 4; -- Rehash after this many have been inserted
-  ldtMap[R_KeyFunction] = nil; -- Special Attention Required.
-  ldtMap[R_KeyUnique] = true; -- Just Unique keys for now.
-
-  -- Top Node Tree Root Directory
-  ldtMap[R_RootListMax] = 4; -- Length of Key List (page list is KL + 1)
-  ldtMap[R_RootByteCountMax] = 0; -- Max bytes for key space in the root
-  
-  -- LLIST Inner Node Settings
-  ldtMap[R_NodeListMax] = 4;  -- Max # of items (key+digest)
-  ldtMap[R_NodeByteCountMax] = 0; -- Max # of BYTES
-
-  -- LLIST Tree Leaves (Data Pages)
-  ldtMap[R_LeafListMax] = 4;  -- Max # of items
-  ldtMap[R_LeafByteCountMax] = 0; -- Max # of BYTES per data page
-
-  GP=E and trace("[EXIT]: <%s:%s>:: LdtMap(%s)",
-    MOD, meth, tostring(ldtMap) );
-
-  return 0;
-end -- packageDebugModeNumber( ldtMap )
-
--- ======================================================================
--- adjustLListMap:
+-- adjustLdtMap:
 -- ======================================================================
 -- Using the settings supplied by the caller in the stackCreate call,
--- we adjust the values in the LListMap.
+-- we adjust the values in the LsoMap:
 -- Parms:
--- (*) ldtMap: the main LList Bin value
--- (*) argListMap: Map of LList Settings 
+-- (*) ldtCtrl: the main LDT Bin value (propMap, ldtMap)
+-- (*) argListMap: Map of LDT Settings 
+-- Return: The updated LsoList
 -- ======================================================================
-local function adjustLListMap( ldtMap, argListMap )
-  local meth = "adjustLListMap()";
-  GP=E and trace("[ENTER]<%s:%s>:: LListMap(%s)::\n ArgListMap(%s)",
-    MOD, meth, tostring(ldtMap), tostring( argListMap ));
+local function adjustLdtMap( ldtCtrl, argListMap )
+  local meth = "adjustLdtMap()";
+  local propMap = ldtCtrl[1];
+  local ldtMap = ldtCtrl[2];
+
+  GP=E and trace("[ENTER]: <%s:%s>:: LsoList(%s)::\n ArgListMap(%s)",
+  MOD, meth, tostring(ldtCtrl), tostring( argListMap ));
 
   -- Iterate thru the argListMap and adjust (override) the map settings 
-  -- based on the settings passed in during the create() call.
+  -- based on the settings passed in during the stackCreate() call.
   GP=F and trace("[DEBUG]: <%s:%s> : Processing Arguments:(%s)",
-    MOD, meth, tostring(argListMap));
+  MOD, meth, tostring(argListMap));
 
+  -- For the old style -- we'd iterate thru ALL arguments and change
+  -- many settings.  Now we process only packages this way.
   for name, value in map.pairs( argListMap ) do
     GP=F and trace("[DEBUG]: <%s:%s> : Processing Arg: Name(%s) Val(%s)",
-        MOD, meth, tostring( name ), tostring( value ));
+    MOD, meth, tostring( name ), tostring( value ));
 
-    -- Process our "prepackaged" settings first:
-    -- NOTE: Eventually, these "packages" will be installed in either
-    -- a separate "package" lua file, or possibly in the UdfFunctionTable.
-    -- Regardless though -- they will move out of this main file, except
-    -- maybe for the "standard" packages.
+    -- Process our "prepackaged" settings.  These now reside in the
+    -- settings file.  All of the packages are in a table, and thus are
+    -- looked up dynamically.
+    -- Notice that this is the old way to change settings.  The new way is
+    -- to use a "user module", which contains UDFs that control LDT settings.
     if name == "Package" and type( value ) == "string" then
-      -- Figure out WHICH package we're going to deploy:
-      if value == PackageStandardList then
-          packageStandardList( ldtMap );
-      elseif value == PackageTestModeObject then
-          packageTestModeObject( ldtMap );
-      elseif value == PackageTestModeObjectDup then
-          packageTestModeObjectDup( ldtMap );
-      elseif value == PackageTestModeList then
-          packageTestModeList( ldtMap );
-      elseif value == PackageTestModeBinary then
-          packageTestModeBinary( ldtMap );
-      elseif value == PackageTestModeNumber then
-          packageTestModeNumber( ldtMap );
-      elseif value == PackageTestModeNumberDup then
-          packageTestModeNumberDup( ldtMap );
-      elseif value == PackageProdListValBinStore then
-          packageProdListValBinStore( ldtMap );
-      elseif value == PackageDebugModeObjectDup then
-          packageDebugModeObjectDup( ldtMap );
-      elseif value == PackageDebugModeObject then
-          packageDebugModeObject( ldtMap );
-      elseif value == PackageDebugModeList then
-          packageDebugModeList( ldtMap );
-      elseif value == PackageDebugModeBinary then
-          packageDebugModeBinary( ldtMap );
-      elseif value == PackageDebugModeNumber then
-          packageDebugModeNumber( ldtMap );
-      end
-    elseif name == "KeyType" and type( value ) == "string" then
-      -- Use only valid values (default to ATOMIC if not specifically complex)
-      if value == KT_COMPLEX or value == "complex" then
-        ldtMap[R_KeyType] = KT_COMPLEX;
-      else
-        ldtMap[R_KeyType] = KT_ATOMIC;
-      end
-    elseif name == "StoreMode"  and type( value ) == "string" then
-      -- Verify it's a valid value
-      if value == SM_BINARY or value == SM_LIST then
-        ldtMap[R_StoreMode] = value;
+      local ldtPackage = llistPackage[value];
+      if( ldtPackage ~= nil ) then
+        ldtPackage( ldtMap );
       end
     end
   end -- for each argument
 
-  GP=E and trace("[EXIT]: <%s:%s> : CTRL Map after Adjust(%s)",
-    MOD, meth , tostring(ldtMap));
-      
-  return ldtMap
-end -- adjustLListMap
+  GP=E and trace("[EXIT]:<%s:%s>:LsoList after Init(%s)",
+  MOD,meth,tostring(ldtCtrl));
+  return ldtCtrl;
+end -- adjustLdtMap
 
 
 -- ======================================================================
@@ -4671,14 +4223,89 @@ local function treeDelete( src, topRec, ldtList, key )
 end -- treeDelete()
 
 -- ======================================================================
--- processModule( moduleName )
+-- processModule( ldtCtrl, moduleName )
 -- ======================================================================
+-- We expect to see several things from a user module.
+-- (*) An adjust_settings() function: where a user overrides default settings
+-- (*) Various filter functions (callable later during search)
+-- (*) Transformation functions
+-- (*) UnTransformation functions
+-- The settings and transformation/untransformation are all set from the
+-- adjust_settings() function, which puts these values in the control map.
 -- ======================================================================
-local function processModule( moduleName )
+local function processModule( ldtCtrl, moduleName )
   local meth = "processModule()";
-  warn("[ERROR]<%s:%s> THIS FUNCTION NOT YET IMPLEMENTED", MOD, meth );
+  GP=E and trace("[ENTER]<%s:%s> Process User Module(%s)", MOD, meth,
+    tostring( moduleName ));
+
+  local propMap = ldtCtrl[1];
+  local ldtMap = ldtCtrl[2];
+
+  if( moduleName ~= nil and type(moduleName) == "string" ) then
+    local userModule = require(moduleName);
+    if( userModule == nil ) then
+      warn("[ERROR]<%s:%s>User Module(%s) not valid", MOD, meth, moduleName);
+    else
+      local userSettings =  userModule[G_SETTINGS];
+      if( userSettings ~= nil ) then
+        userSettings( ldtMap ); -- hope for the best.
+        ldtMap[M_UserModule] = moduleName;
+      end
+    end
+  else
+    warn("[ERROR]<%s:%s>User Module(%s) invalid",MOD,meth,tostring(moduleName));
+  end
+  GP=E and trace("[EXIT]<%s:%s> Module(%s) LDT CTRL(%s)", MOD, meth,
+    tostring( moduleName ), ldtSummaryString(ldtCtrl));
 
 end -- processModule()
+
+
+-- ======================================================================
+-- setupLdtBin()
+-- Caller has already verified that there is no bin with this name,
+-- so we're free to allocate and assign a newly created LDT CTRL
+-- in this bin.
+-- ALSO:: Caller write out the LDT bin after this function returns.
+-- ======================================================================
+local function setupLdtBin( topRec, ldtBinName, createSpec ) 
+  local meth = "setupLdtBin()";
+  GP=E and trace("[ENTER]<%s:%s> binName(%s)",MOD,meth,tostring(ldtBinName));
+
+  local ldtCtrl = initializeLdtCtrl( topRec, ldtBinName );
+  local propMap = ldtCtrl[1]; 
+  local ldtMap = ldtCtrl[2]; 
+  
+  -- Set the type of this record to LDT (it might already be set)
+  record.set_type( topRec, RT_LDT ); -- LDT Type Rec
+  
+  -- If the user has passed in settings that override the defaults
+  -- (the createSpec), then process that now.
+  if( createSpec ~= nil )then
+    local createSpecType = type(createSpec);
+    if( createSpecType == "string" ) then
+      processModule( ldtCtrl, createSpec );
+    elseif( createSpecType == "userdata" ) then
+      adjustLdtMap( ldtMap, createSpec );
+    else
+      warn("[WARNING]<%s:%s> Unknown Creation Object(%s)",
+        MOD, meth, tostring( createSpec ));
+    end
+  end
+
+  GP=F and trace("[DEBUG]: <%s:%s> : CTRL Map after Adjust(%s)",
+                 MOD, meth , tostring(ldtMap));
+
+  ldtMap[R_CompactList] = list();
+
+  -- Sets the topRec control bin attribute to point to the 2 item list
+  -- we created from InitializeLSetMap() : 
+  -- Item 1 :  the property map & Item 2 : the ldtMap
+  topRec[ldtBinName] = ldtCtrl; -- store in the record
+
+  -- NOTE: The Caller will write out the LDT bin.
+  return 0;
+end -- setupLdtBin( topRec, ldtBinName ) 
 
 -- ======================================================================
 -- |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
@@ -4706,10 +4333,6 @@ local function localLListInsert( topRec, ldtBinName, newValue, createSpec )
   GP=E and trace("[ENTER]<%s:%s>LLIST BIN(%s) NwVal(%s) createSpec(%s)",
     MOD, meth, tostring(ldtBinName), tostring( newValue ),tostring(createSpec));
 
-  local ldtList;
-  local propMap;
-  local ldtMap;
-
   -- Validate the topRec, the bin and the map.  If anything is weird, then
   -- this will kick out with a long jump error() call.
   -- This function does not build, save or update.  It only checks.
@@ -4720,36 +4343,17 @@ local function localLListInsert( topRec, ldtBinName, newValue, createSpec )
   -- If the record does not exist, or the BIN does not exist, then we must
   -- create it and initialize the LDT map. Otherwise, use it.
   if( topRec[ldtBinName] == nil ) then
-    GP=F and trace("[DEBUG]<%s:%s>LIST CONTROL BIN does not Exist:Creating",
+    GP=F and info("[DEBUG]<%s:%s>LLIST CONTROL BIN does not Exist:Creating",
          MOD, meth );
-    ldtList = initializeLList( topRec, ldtBinName );
-    propMap = ldtList[1];
-    ldtMap  = ldtList[2];
 
-    -- If the user has passed in settings that override the defaults
-    -- (the createSpec), then process that now.
-    if( createSpec ~= nil )then
-      local createSpecType = type(createSpec);
-      if( createSpecType == "string" ) then
-        processModule( createSpec );
-      elseif( createSpecType == "userdata" ) then
-        adjustLListMap( ldtMap, createSpec ); -- Map, not list, used here
-      else
-        warn("[WARNING]<%s:%s> Unknown Creation Object(%s)",
-          MOD, meth, tostring( createSpec ));
-      end
-    end
-
-    topRec[ldtBinName] = ldtList;
-    record.set_flags(topRec, binName, BF_LDT_BIN );--Must set every time
-  else
-    -- all there, just use it
-    ldtList = topRec[ ldtBinName ];
-    propMap = ldtList[1];
-    ldtMap  = ldtList[2];
+    -- set up our new LDT Bin
+    setupLdtBin( topRec, ldtBinName, createSpec );
   end
-  -- Note: We'll do the aerospike:create() at the end of this function,
-  -- if needed.
+
+  local ldtList = topRec[ ldtBinName ];
+  local propMap = ldtList[1];
+  local ldtMap  = ldtList[2];
+  
   -- DESIGN NOTE: All "outer" functions, like this one, will create a
   -- "subrecContext" object, which will hold all of the open subrecords.
   -- The key will be the DigestString, and the value will be the subRec
@@ -4803,8 +4407,13 @@ local function localLListInsert( topRec, ldtBinName, newValue, createSpec )
     GP=F and trace("[DEBUG]:<%s:%s>:Update TopRecord()", MOD, meth );
     rc = aerospike:update( topRec );
   end
-
-  -- Process Create/Update results.
+  -- All done, store the record
+  -- With recent changes, we know that the record is now already created
+  -- so all we need to do is perform the update (no create needed).
+  GP=F and info("[DEBUG]:<%s:%s>:Update Record()", MOD, meth );
+  rc = aerospike:update( topRec );
+  
+-- Process Create/Update results.
   if( rc == nil or rc == 0 ) then
     GP=F and trace("[Normal EXIT]:<%s:%s> Return(0)", MOD, meth );
     return 0;
@@ -5012,7 +4621,7 @@ end -- function localLListDelete()
 --
 -- Question  -- Reset the record[binName] to NIL (does that work??)
 -- Parms:
--- (1) topRec: the user-level record holding the LSO Bin
+-- (1) topRec: the user-level record holding the LDT Bin
 -- (2) binName: The name of the LDT Bin
 -- Result:
 --   res = 0: all is well
@@ -5091,29 +4700,111 @@ local function localLdtRemove( topRec, binName )
   end
 end -- localLdtRemove()
 
+-- ========================================================================
+-- localSetCapacity() -- set the current capacity setting for this LDT
+-- Parms:
+-- (1) topRec: the user-level record holding the LDT Bin
+-- (2) ldtBinName: The name of the LDT Bin
+-- Result:
+--   rc >= 0  (the current capacity)
+--   rc < 0: Aerospike Errors
+-- ========================================================================
+local function localSetCapacity( topRec, ldtBinName, capacity )
+  local meth = "localSetCapacity()";
+
+  GP=E and trace("[ENTER]: <%s:%s> ldtBinName(%s)",
+    MOD, meth, tostring(ldtBinName));
+
+  -- validate the topRec, the bin and the map.  If anything is weird, then
+  -- this will kick out with a long jump error() call.
+  validateRecBinAndMap( topRec, ldtBinName, true );
+
+  local ldtCtrl = topRec[ ldtBinName ];
+  -- Extract the property map and lso control map from the lso bin list.
+  local ldtMap = ldtCtrl[2];
+  if( capacity ~= nil and type(capacity) == "number" and capacity >= 0 ) then
+    ldtMap[M_StoreLimit] = capacity;
+  else
+    warn("[ERROR]<%s:%s> Bad Capacity Value(%s)",MOD,meth,tostring(capacity));
+    error( ldte.ERR_INTERNAL );
+  end
+
+  GP=E and trace("[EXIT]: <%s:%s> : new size(%d)", MOD, meth, capacity );
+
+  return 0;
+end -- function localSetCapacity()
+
+-- ========================================================================
+-- localGetCapacity() -- return the current capacity setting for this LDT
+-- Parms:
+-- (1) topRec: the user-level record holding the LDT Bin
+-- (2) ldtBinName: The name of the LDT Bin
+-- Result:
+--   rc >= 0  (the current capacity)
+--   rc < 0: Aerospike Errors
+-- ========================================================================
+local function localGetCapacity( topRec, ldtBinName )
+  local meth = "localGetCapacity()";
+
+  GP=E and trace("[ENTER]: <%s:%s> ldtBinName(%s)",
+    MOD, meth, tostring(ldtBinName));
+
+  -- validate the topRec, the bin and the map.  If anything is weird, then
+  -- this will kick out with a long jump error() call.
+  validateRecBinAndMap( topRec, ldtBinName, true );
+
+  local ldtCtrl = topRec[ ldtBinName ];
+  -- Extract the property map and lso control map from the lso bin list.
+  local ldtMap = ldtCtrl[2];
+  local capacity = ldtMap[M_StoreLimit];
+  if( capacity == nil ) then
+    capacity = 0;
+  end
+
+  GP=E and trace("[EXIT]: <%s:%s> : size(%d)", MOD, meth, capacity );
+
+  return capacity;
+end -- function localGetCapacity()
+
 -- ======================================================================
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- |||||||       Large Ordered List (LLIST) Main Functions        |||||||
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- ======================================================================
--- create(): Create the LDT Bin structure
--- create_and_insert()
--- insert(): Add a value to the Large List
--- search(): Locate an object
+-- These are the globally visible (API) calls.
+-- The calls the local UDFs do all of the work.
+-- ======================================================================
+-- add(): Add a value to the Large List
+-- add_all(): Add a value to the Large List
+-- find(): Locate an object
 -- range(): Return the elements within the given range
 -- first(): Return the FIRST N elements
 -- last(): Return the LAST N elements
--- range(): Return the elements within the given range
 -- scan(): Return all elements
 -- filter(): Pass all elements thru the filter and return all that qualify.
--- delete(): Remove all items corresponding to the specified key.
--- remove(): Remove the LDT entirely from the record.
+-- remove(): Remove all items corresponding to the specified key.
+-- destroy(): Remove the LDT entirely from the record.
 -- size(): Return the size of the LDT
 -- get_config(): Return the settings of the LDT
 -- ======================================================================
+-- (*) Status = add( topRec, ldtBinName, newValue, userModule )
+-- (*) Status = add_all( topRec, ldtBinName, valueList, userModule )
+-- (*) List   = find( topRec, ldtBinName, searchValue ) 
+-- (*) List   = range( topRec, ldtBinName, lowValue, highValue ) 
+-- (*) List   = first( topRec, ldtBinName, count )
+-- (*) List   = last( topRec, ldtBinName, count )
+-- (*) List   = scan( topRec, ldtBinName )
+-- (*) List   = filter( topRec, ldtBinName, userModule, filter, fargs )
+-- (*) Status = remove( topRec, ldtBinName, searchValue ) 
+-- (*) Status = destroy( topRec, ldtBinName )
+-- (*) Number = size( topRec, ldtBinName )
+-- (*) Map    = get_config( topRec, ldtBinName )
+-- (*) Status = set_capacity( topRec, ldtBinName, new_capacity)
+-- (*) Status = get_capacity( topRec, ldtBinName )
+-- ======================================================================
 
 -- ======================================================================
--- || create ||
+-- || create || Deprecated
 -- ======================================================================
 -- Create/Initialize a Large Ordered List  structure in a bin, using a
 -- single LLIST -- bin, using User's name, but Aerospike TYPE (AS_LLIST)
@@ -5159,70 +4850,66 @@ function create( topRec, ldtBinName, createSpec )
     error( ldte.ERR_BIN_ALREADY_EXISTS );
   end
 
-  -- Create and initialize the LDT MAP -- the main LDT structure
-  -- initializeLList() also assigns the map to the record bin.
-  local ldtList = initializeLList( topRec, ldtBinName );
-  local propMap = ldtList[1];
-  local ldtMap  = ldtList[2];
+  -- Set up a new LDT Bin
+  setupLdtBin( topRec, ldtBinName, createSpec );
 
-  -- If the user has passed in settings that override the defaults
-  -- (the createSpec), then process that now.
-  if( createSpec ~= nil )then
-    local createSpecType = type(createSpec);
-    if( createSpecType == "string" ) then
-      processModule( createSpec );
-    elseif( createSpecType == "userdata" ) then
-      adjustLListMap( ldtMap, createSpec ); -- ldtMap here, not ldtList
-      topRec[ldtBinName] = ldtList; -- Update after adjustment
-      record.set_flags(topRec, binName, BF_LDT_BIN );--Must set every time
-    else
-      warn("[WARNING]<%s:%s> Unknown Creation Object(%s)",
-        MOD, meth, tostring( createSpec ));
-    end
-  end
-
-  GP=F and trace("[DEBUG]<%s:%s> LLIST after Init(%s)",
-   MOD, meth, ldtSummaryString( ldtList ) );
-
+--  -- Create and initialize the LDT MAP -- the main LDT structure
+--  -- initializeLdtCtrl() also assigns the map to the record bin.
+--  local ldtList = initializeLdtCtrl( topRec, ldtBinName );
+--  local propMap = ldtList[1];
+--  local ldtMap  = ldtList[2];
+--
+--  -- If the user has passed in settings that override the defaults
+--  -- (the createSpec), then process that now.
+--  if( createSpec ~= nil )then
+--    local createSpecType = type(createSpec);
+--    if( createSpecType == "string" ) then
+--      processModule( createSpec );
+--    elseif( createSpecType == "userdata" ) then
+--      adjustLdtMap( ldtMap, createSpec ); -- ldtMap here, not ldtList
+--      topRec[ldtBinName] = ldtList; -- Update after adjustment
+--      record.set_flags(topRec, binName, BF_LDT_BIN );--Must set every time
+--    else
+--      warn("[WARNING]<%s:%s> Unknown Creation Object(%s)",
+--        MOD, meth, tostring( createSpec ));
+--    end
+--  end
+--
+--  GP=F and trace("[DEBUG]<%s:%s> LLIST after Init(%s)",
+--   MOD, meth, ldtSummaryString( ldtList ) );
+--
+--  -- All done, store the record
+--  local rc;
+--  if( not aerospike:exists( topRec ) ) then
+--    GP=F and trace("[DEBUG]:<%s:%s>:Create Record()", MOD, meth );
+--    rc = aerospike:create( topRec );
+--  else
+--    GP=F and trace("[DEBUG]:<%s:%s>:Update Record()", MOD, meth );
+--    rc = aerospike:update( topRec );
+--  end
+--  
   -- All done, store the record
-  local rc;
-  if( not aerospike:exists( topRec ) ) then
-    GP=F and trace("[DEBUG]:<%s:%s>:Create Record()", MOD, meth );
-    rc = aerospike:create( topRec );
-  else
-    GP=F and trace("[DEBUG]:<%s:%s>:Update Record()", MOD, meth );
-    rc = aerospike:update( topRec );
-  end
-  
-  -- Process Create/Update results.
-  if( rc == nil or rc == 0 ) then
-    GP=F and trace("[Normal EXIT]:<%s:%s> Return(0)", MOD, meth );
-    return 0;
-  else
-    GP=F and trace("[ERROR EXIT]:<%s:%s> Return(%s)", MOD, meth,tostring(rc));
-    error( ldte.ERR_INTERNAL );
-  end
+  -- With recent changes, we know that the record is now already created
+  -- so all we need to do is perform the update (no create needed).
+  GP=F and info("[DEBUG]:<%s:%s>:Update Record()", MOD, meth );
+  rc = aerospike:update( topRec );
+
+  GP=F and info("[EXIT]: <%s:%s> : Done.  RC(%d)", MOD, meth, rc );
+  return rc;
 end -- function create( topRec, namespace, set )
-
-
+--
+--
 -- =======================================================================
--- List Insert -- with and without inner UDFs
--- These are the globally visible calls -- that call the local UDF to do
--- all of the work.
+-- add() -- with and without inner UDFs
 -- =======================================================================
-function insert( topRec, ldtBinName, newValue, module_name )
+function add( topRec, ldtBinName, newValue, module_name )
   return localLListInsert( topRec, ldtBinName, newValue, module_name )
 end -- end insert()
 
 -- =======================================================================
-function create_and_insert( topRec, ldtBinName, newValue, createSpec )
-  return localLListInsert( topRec, ldtBinName, newValue, createSpec );
-end -- create_and_insert()
-
--- =======================================================================
 -- Iterate thru the list and call localStackPush on each element
 -- =======================================================================
-function insert_all( topRec, ldtBinName, valueList, createSpec )
+function add_all( topRec, ldtBinName, valueList, createSpec )
   local meth = "insert_all()";
   GP=E and trace("[ENTER]:<%s:%s>BIN(%s) valueList(%s) createSpec(%s)",
   MOD, meth, tostring(ldtBinName), tostring(valueList), tostring(createSpec));
@@ -5245,11 +4932,10 @@ function insert_all( topRec, ldtBinName, valueList, createSpec )
   end
   
   return rc;
-end -- end insert()
-
+end -- end add_all()
 
 -- =======================================================================
--- search(): With and without inner UDFs
+-- find(): With and without inner UDFs
 -- =======================================================================
 -- These are the globally visible calls -- that call the local UDF to do
 -- all of the work.
@@ -5257,28 +4943,28 @@ end -- end insert()
 -- do not encounter a format error if the user passes in nil or any
 -- other incorrect value/type.
 -- =======================================================================
-function search( topRec, ldtBinName, searchKey )
-  local meth = "search()";
+function find( topRec, ldtBinName, searchKey )
+  local meth = "find()";
   GP=E and trace("[ENTER]<%s:%s> LLIST BIN(%s) searchKey(%s)",
     MOD, meth, tostring(ldtBinName), tostring(searchKey) )
 
-  GP=F and trace("\n\n >>>>>>>>> API[ LLIST SEARCH ] <<<<<<<<<(%s) \n",
+  GP=F and trace("\n\n >>>>>>>>> API[ LLIST FIND ] <<<<<<<<<(%s) \n",
     tostring(searchKey));
 
   return localLListSearch( topRec, ldtBinName, searchKey, nil, nil );
-end -- end search()
+end -- end find()
 
-function search_with_filter(topRec,ldtBinName,searchKey,func,fargs )
-  local meth = "listSearch()";
+function find_then_filter(topRec,ldtBinName,searchKey,func,fargs )
+  local meth = "find_then_filter()";
   GP=E and trace("[ENTER]<%s:%s> BIN(%s) searchKey(%s) func(%s) fargs(%s)",
     MOD, meth, tostring(ldtBinName), tostring(searchKey),
     tostring(func), tostring(fargs));
 
-  GP=F and trace("\n\n >>>>>>>> API[ LLIST SEARCH With FILTER] <<<<<<<(%s)\n",
+  GP=F and trace("\n\n >>>>>>>> API[ LLIST FIND Then FILTER] <<<<<<<(%s)\n",
     tostring(searchKey));
 
   return localLListSearch( topRec, ldtBinName, searchKey, func, fargs );
-end -- end search_with_filter()
+end -- end find_then_filter()
 
 -- =======================================================================
 -- scan(): Return all elements
@@ -5327,9 +5013,9 @@ function delete( topRec, binName, key )
 end
 
 -- ========================================================================
--- remove(): Remove the LDT entirely from the record.
+-- destroy(): Remove the LDT entirely from the record.
 -- ========================================================================
--- NOTE: This could eventually be moved to COMMON, and be "ldt_remove()",
+-- NOTE: This could eventually be moved to COMMON, and be "ldt_destroy()",
 -- since it will work the same way for all LDTs.
 -- Remove the ESR, Null out the topRec bin.
 -- ========================================================================
@@ -5337,26 +5023,25 @@ end
 -- control structure of the bin.  If this is the LAST LDT in the record,
 -- then ALSO remove the HIDDEN LDT CONTROL BIN.
 --
--- Question  -- Reset the record[lsoBinName] to NIL (does that work??)
 -- Parms:
--- (1) topRec: the user-level record holding the LSO Bin
--- (2) lsoBinName: The name of the LSO Bin
+-- (1) topRec: the user-level record holding the LDT Bin
+-- (2) lsoBinName: The name of the LDT Bin
 -- Result:
 --   res = 0: all is well
 --   res = -1: Some sort of error
 -- ========================================================================
-function remove( topRec, lsoBinName )
+function destroy( topRec, lsoBinName )
   GP=F and trace("\n\n >>>>>>>>> API[ LLIST REMOVE ] Bin(%s) <<<<<<<<<<\n",
     lsoBinName );
   return localLdtRemove( topRec, lsoBinName );
 end -- remove()
 
 -- ========================================================================
--- get_size() -- return the number of elements (item count) in the set.
+-- size() -- return the number of elements (item count) in the set.
 -- ========================================================================
 -- ========================================================================
-function get_size( topRec, ldtBinName )
-  local meth = "get_size()";
+function size( topRec, ldtBinName )
+  local meth = "size()";
 
   GP=E and trace("[ENTER1]: <%s:%s> ldtBinName(%s)",
   MOD, meth, tostring(ldtBinName));
@@ -5375,7 +5060,7 @@ function get_size( topRec, ldtBinName )
   GP=F and trace("[EXIT]: <%s:%s> : size(%d)", MOD, meth, itemCount );
 
   return itemCount;
-end -- get_size()
+end -- size()
 
 -- ========================================================================
 -- get_config() -- return the config settings
@@ -5401,6 +5086,27 @@ function get_config( topRec, ldtBinName )
 end -- function get_config()
 
 -- ========================================================================
+-- get_capacity() -- return the current capacity setting for this LDT.
+-- set_capacity() -- set the current capacity setting for this LDT.
+-- ========================================================================
+-- Parms:
+-- (1) topRec: the user-level record holding the LDT Bin
+-- (2) ldtBinName: The name of the LDT Bin
+-- Result:
+--   rc >= 0  (the current capacity)
+--   rc < 0: Aerospike Errors
+-- ========================================================================
+function get_capacity( topRec, ldtBinName )
+  GP=B and info("\n\n  >>>>>>>> API[ GET CAPACITY ] <<<<<<<<<<<<<<<<<< \n");
+  return localGetCapacity( topRec, ldtBinName );
+end
+
+function set_capacity( topRec, ldtBinName, capacity )
+  GP=B and info("\n\n  >>>>>>>> API[ SET CAPACITY ] <<<<<<<<<<<<<<<<<< \n");
+  return localSetCapacity( topRec, ldtBinName, capacity );
+end
+
+-- ========================================================================
 -- Dump: Debugging/Tracing mechanism -- show the WHOLE tree.
 -- ========================================================================
 function dump( topRec, ldtBinName )
@@ -5415,7 +5121,7 @@ end -- dump()
 -- ========================================================================
 -- Turning the debug setting "ON" pushes LOTS of output to the console.
 -- Parms:
--- (1) topRec: the user-level record holding the LSO Bin
+-- (1) topRec: the user-level record holding the LDT Bin
 -- (2) setting: 0 turns it off, anything else turns it on.
 -- Result:
 --   res = 0: all is well
@@ -5449,5 +5155,11 @@ end -- debug()
 -- ========================================================================
 
 -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> --
--- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> --
+--   _      _     _____ _____ _____ 
+--  | |    | |   |_   _/  ___|_   _|
+--  | |    | |     | | \ `--.  | |  
+--  | |    | |     | |  `--. \ | |  
+--  | |____| |_____| |_/\__/ / | |  
+--  \_____/\_____/\___/\____/  \_/  
+--                                  
 -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> --

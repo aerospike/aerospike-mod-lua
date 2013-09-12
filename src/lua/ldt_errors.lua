@@ -3,7 +3,7 @@
 -- ===================
 
 -- Remember when we were here last
-local MOD="2013_08_01.c";
+local MOD="2013_09_05.a";
 
 -- These errors align with the errors found in:
 -- client/aerospike/src/include/aerospike/as_status.h
@@ -12,7 +12,7 @@ local exports = {
 
 ERR_INTERNAL             ="1400:LDT-Internal Error",
 ERR_NOT_FOUND            ="1401:LDT-Item Not Found",
-ERR_UNIQUE_KEY           ="1402:LDT-Unique Key Violation",
+ERR_UNIQUE_KEY           ="1402:LDT-Unique Key or Value Violation",
 ERR_INSERT               ="1403:LDT-Insert Error",
 ERR_SEARCH               ="1404:LDT-Search Error",
 ERR_DELETE               ="1405:LDT-Delete Error",
@@ -38,8 +38,8 @@ ERR_SUBREC_OPEN          ="1422:LDT-Sub Record Open Error",
 ERR_SUBREC_UPDATE        ="1423:LDT-Sub Record Update Error",
 ERR_SUBREC_CREATE        ="1424:LDT-Sub Record Create Error",
 ERR_SUBREC_DELETE        ="1425:LDT-Sub Record Delete Error",
-ERR_SUBREC_CLOSE         ="1426:LDT-Sub Record Close Error"
-
+ERR_SUBREC_CLOSE         ="1426:LDT-Sub Record Close Error",
+ERR_CAPACITY_EXCEEDED    ="1427:LDT-Capacity Exceeded"
 }
 
 return exports;
