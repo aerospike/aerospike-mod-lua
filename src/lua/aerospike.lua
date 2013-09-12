@@ -3,6 +3,8 @@
 -- A table to track whether we had sandboxed a function
 sandboxed = {}
 
+ldebug = debug;
+
 -- ############################################################################
 --
 -- LOG FUNCTIONS

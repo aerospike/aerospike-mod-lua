@@ -79,7 +79,7 @@ static bool before(atf_suite * suite) {
 
     mod_lua_config config = {
         .server_mode    = true,
-        .cache_enabled  = true,
+        .cache_enabled  = false,
         .system_path    = "src/lua",
         .user_path      = "src/test/lua"
     };
