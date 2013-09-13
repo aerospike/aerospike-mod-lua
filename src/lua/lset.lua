@@ -2803,6 +2803,7 @@ function get_config( topRec, ldtBinName )
 end
 
 function lset_config( topRec, ldtBinName )
+  GP=B and info("\n\n  >>>>>>>> API[ LSET CONFIG ] < (old api) <<<<<< \n");
   return localGetConfig( topRec, ldtBinName );
 end
 

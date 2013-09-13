@@ -1171,7 +1171,9 @@ local function initializeLdtCtrl( topRec, ldtBinName )
   propMap[PM_BinName]    = ldtBinName; -- Defines the LSO Bin
   propMap[PM_RecType]    = RT_LDT; -- Record Type LDT Top Rec
   propMap[PM_EsrDigest]    = 0; -- not set yet.
-  propMap[PM_CreateTime] = aerospike:get_current_time();
+  -- propMap[PM_CreateTime] = aerospike:get_current_time();
+  warn("WARNING:: Please Fix GET CURRENT TIME");
+  propMap[PM_CreateTime] = 0;
   propMap[PM_SelfDigest] = record.digest( topRec );
 
   -- Specific LSO Parms: Held in LsoMap

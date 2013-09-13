@@ -871,6 +871,8 @@ local function initializeLdtCtrl( topRec, ldtBinName )
   propMap[PM_SelfDigest] = nil; 
   propMap[PM_RecType]    = RT_LDT; -- Record Type LDT Top Rec
 --  propMap[PM_CreateTime] = aerospike:get_current_time();
+  warn("WARNING:: Please Fix GET CURRENT TIME");
+  propMap[PM_CreateTime] = 0;
   
 -- Specific LMAP Parms: Held in LMap
   ldtMap[M_StoreMode]  = SM_LIST; -- SM_LIST or SM_BINARY:
