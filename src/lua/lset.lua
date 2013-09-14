@@ -1,8 +1,8 @@
 -- AS Large Set (LSET) Operations
--- Last Update September 11, 2013: TJL
+-- Last Update September 13, 2013: TJL
 --
 -- Keep this in sync with the version above.
-local MOD="lset_2013_09_11.f"; -- the module name used for tracing
+local MOD="lset_2013_09_13.f"; -- the module name used for tracing
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -54,6 +54,7 @@ local B=true; -- Set B (Banners) to true to turn ON Banner Print
 -- (*) List   = scan( topRec, ldtBinName )
 -- (*) List   = filter( topRec, ldtBinName, userModule, filter, fargs )
 -- (*) Status = remove( topRec, ldtBinName, searchValue ) 
+-- (*) Object = take( topRec, ldtBinName, searchValue ) 
 -- (*) Status = destroy( topRec, ldtBinName )
 -- (*) Number = size( topRec, ldtBinName )
 -- (*) Map    = get_config( topRec, ldtBinName )
@@ -115,7 +116,7 @@ local LDT_TYPE_LSET   = "LSET";
 -- distribution.   Later we'll switch to a more robust B+ Tree version.
 local DEFAULT_DISTRIB = 31;
 -- Switch from a single list to distributed lists after this amount
-local DEFAULT_THRESHOLD = 100;
+local DEFAULT_THRESHOLD = 20;
 
 -- Use this to test for CtrlMap Integrity.  Every map should have one.
 local MAGIC="MAGIC";     -- the magic value for Testing LSET integrity
@@ -583,7 +584,8 @@ local function initializeLdtCtrl(topRec, ldtBinName )
   ldtMap[M_SetTypeStore]     = ST_RECORD; -- default is Top Record Store.
   ldtMap[M_HashType]         = HT_STATIC; -- Static or Dynamic
   ldtMap[M_BinaryStoreSize]  = nil; 
-  ldtMap[M_KeyType]          = KT_ATOMIC; -- assume "atomic" values for now.
+  -- Complex will work for both atomic/complex.
+  ldtMap[M_KeyType]          = KT_COMPLEX; -- Most things will be complex
   ldtMap[M_TotalCount]       = 0; -- Count of both valid and deleted elements
   ldtMap[M_Modulo]           = DEFAULT_DISTRIB;
   ldtMap[M_ThreshHold]       = 101; -- Rehash after this many inserts
@@ -850,7 +852,7 @@ end -- unTransformSimpleCompare()
 -- (*) dbValue: The value pulled from the DB
 -- (*) searchValue: The value we're looking for.
 -- =======================================================================
-local function unTransformComplexCompare(ldtMap, unTransform, dbValue, searchKey)
+local function unTransformComplexCompare(ldtMap,unTransform,dbValue,searchKey)
   local meth = "unTransformComplexCompare()";
 
   GP=E and trace("[ENTER]: <%s:%s> unTransform(%s) dbVal(%s) key(%s)",
@@ -927,8 +929,13 @@ local function searchList(ldtCtrl, binList, searchKey )
       end
       -- If there's a "summary" part of the object, get that now.
       dbKey = getKeyValue( ldtMap, modValue );
-      if( searchKey == dbKey ) then
+      GP=F and trace("[ACTUAL COMPARE]<%s:%s> index(%d) SV(%s) and dbKey(%s)",
+                   MOD, meth, i, tostring(searchKey), tostring(dbKey));
+      if(dbKey ~= nil and type(searchKey) == type(dbKey) and searchKey == dbKey)
+      then
         position = i;
+        GP=F and trace("[FOUND!!]<%s:%s> index(%d) SV(%s) and dbKey(%s)",
+                   MOD, meth, i, tostring(searchKey), tostring(dbKey));
         break;
       end
     end -- end if not null and not empty
@@ -1914,7 +1921,7 @@ end -- function topRecInsert()
 local function localLSetInsert( topRec, ldtBinName, newValue, userModule )
   local meth = "localLSetInsert()";
   
-  GP=E and trace("[ENTER]:<%s:%s> SetBin(%s) NewValue(%s) createSpec(%s)",
+  GP=E and trace("[ENTER]:<%s:%s> LSetBin(%s) NewValue(%s) createSpec(%s)",
                  MOD, meth, tostring(ldtBinName), tostring( newValue ),
                  tostring( userModule ));
 
@@ -2201,9 +2208,10 @@ end -- function localLSetScan()
 -- (*) deleteValue:
 -- (*) filter: the NAME of the filter function (which we'll find in FuncTable)
 -- (*) fargs: Arguments to feed to the filter
+-- (*) returnVal: When true, return the deleted value.
 -- ======================================================================
 local function
-localLSetDelete( topRec, ldtBinName, deleteValue, filter, fargs)
+localLSetDelete( topRec, ldtBinName, deleteValue, filter, fargs, returnVal)
 
   local meth = "localLSetDelete()";
   GP=E and trace("[ENTER]: <%s:%s> Delete Value(%s)",
@@ -2306,7 +2314,11 @@ localLSetDelete( topRec, ldtBinName, deleteValue, filter, fargs)
   GP=E and trace("[EXIT]<%s:%s>: Success: DeleteValue(%s) Res(%s) binList(%s)",
     MOD, meth, tostring( deleteValue ), tostring(resultFiltered),
     tostring(binList));
-  return resultFiltered;
+  if( returnVal == true ) then
+    return resultFiltered;
+  else
+    return 0;
+  end
 end -- function localLSetDelete()
 
 -- ========================================================================
@@ -2412,8 +2424,8 @@ local function localDump( topRec, ldtBinName )
 end -- localDump();
 
 -- ========================================================================
--- localLdtRemove() -- Remove the LDT entirely from the record.
--- NOTE: This could eventually be moved to COMMON, and be "localLdtRemove()",
+-- localLdtDestroy() -- Remove the LDT entirely from the record.
+-- NOTE: This could eventually be moved to COMMON, and be "localLdtDestroy()",
 -- since it will work the same way for all LDTs.
 -- Remove the ESR, Null out the topRec bin.
 -- ========================================================================
@@ -2429,8 +2441,8 @@ end -- localDump();
 --   res = 0: all is well
 --   res = -1: Some sort of error
 -- ========================================================================
-local function localLdtRemove( topRec, ldtBinName )
-  local meth = "localLdtRemove()";
+local function localLdtDestroy( topRec, ldtBinName )
+  local meth = "localLdtDestroy()";
 
   GP=E and trace("[ENTER]: <%s:%s> ldtBinName(%s)",
     MOD, meth, tostring(ldtBinName));
@@ -2494,7 +2506,7 @@ local function localLdtRemove( topRec, ldtBinName )
     GP=E and trace("[ERROR EXIT]:<%s:%s> Return(%s)", MOD, meth,tostring(rc));
     error( ldte.ERR_INTERNAL );
   end
-end -- localLdtRemove()
+end -- localLdtDestroy()
 
 -- ========================================================================
 -- localSetCapacity() -- set the current capacity setting for this LDT
@@ -2608,7 +2620,7 @@ end -- function localGetCapacity()
 --               :: a package name with a set of config parameters.
 -- ======================================================================
 function create( topRec, ldtBinName, userModule )
-  GP=B and info("\n\n  >>>>>>>> API[ ADD ] <<<<<<<<<<<<<<<<<< \n");
+  GP=B and info("\n\n  >>>>>>>> API[ CREATE ] <<<<<<<<<<<<<<<<<< \n");
   return localLSetCreate( topRec, ldtBinName, userModule );
 end
 
@@ -2660,7 +2672,7 @@ end
 function get( topRec, ldtBinName, searchValue )
   GP=B and info("\n\n  >>>>>>>> API[ GET ] <<<<<<<<<<<<<<<<<< \n");
   return localLSetSearch( topRec, ldtBinName, searchValue, nil, nil);
-end -- lset_search()
+end -- get()
 
 function get_with_filter( topRec, ldtBinName, searchValue, filter, fargs )
   return localLSetSearch(topRec, ldtBinName, searchValue, filter, fargs);
@@ -2726,16 +2738,23 @@ end -- lset_search_then_filter()
 
 -- ======================================================================
 -- remove() -- remove <searchValue> from the LSET
+-- take() -- remove and RETURN <searchValue> from the LSET
 -- lset_delete() :: Deprecated
 -- Return Status (OK or error)
 -- ======================================================================
 function remove( topRec, ldtBinName, searchValue )
   GP=B and info("\n\n  >>>>>>>> API[ REMOVE ] <<<<<<<<<<<<<<<<<< \n");
-  return localLSetDelete(topRec, ldtBinName, searchValue, nil, nil );
-end -- delete()
+  return localLSetDelete(topRec, ldtBinName, searchValue, nil, nil, false);
+end -- remove()
+
+function take( topRec, ldtBinName, searchValue )
+  GP=B and info("\n\n  >>>>>>>> API[ REMOVE ] <<<<<<<<<<<<<<<<<< \n");
+  return localLSetDelete(topRec, ldtBinName, searchValue, nil, nil, true );
+end -- remove()
+
 
 function lset_delete( topRec, ldtBinName, searchValue )
-  return localLSetDelete(topRec, ldtBinName, searchValue, nil, nil );
+  return localLSetDelete(topRec, ldtBinName, searchValue, nil, nil, false);
 end -- lset_delete()
 
 -- ======================================================================
@@ -2743,12 +2762,12 @@ end -- lset_delete()
 -- lset_delete_then_filter()
 -- ======================================================================
 function remove_with_filter( topRec, ldtBinName, searchValue, filter, fargs )
-  return localLSetDelete( topRec, ldtBinName, searchValue, filter, fargs );
+  return localLSetDelete(topRec,ldtBinName,searchValue,filter,fargs,false);
 end -- delete_then_filter()
 
 function
 lset_delete_then_filter( topRec, ldtBinName, searchValue, filter, fargs )
-  return localLSetDelete( topRec, ldtBinName, searchValue, filter, fargs );
+  return localLSetDelete(topRec,ldtBinName,searchValue,filter,fargs,false);
 end -- lset_delete_then_filter()
 
 -- ========================================================================
@@ -2769,11 +2788,11 @@ end -- lset_delete_then_filter()
 -- ========================================================================
 function destroy( topRec, ldtBinName )
   GP=B and info("\n\n  >>>>>>>> API[ DESTROY ] <<<<<<<<<<<<<<<<<< \n");
-  return localLdtRemove( topRec, ldtBinName );
+  return localLdtDestroy( topRec, ldtBinName );
 end
 
 function lset_remove( topRec, ldtBinName )
-  return localLdtRemove( topRec, ldtBinName );
+  return localLdtDestroy( topRec, ldtBinName );
 end
 
 -- ========================================================================
@@ -2856,7 +2875,8 @@ function dump( topRec, ldtBinName )
   -- Validate the topRec, the bin and the map.  If anything is weird, then
   -- this will kick out with a long jump error() call.
   validateRecBinAndMap( topRec, ldtBinName, true );
-  localDump(); -- Dump out our entire LDT structure.
+  warn("Function DUMP is CURRENTLY UNDER CONSTRUCTION");
+  -- localDump(); -- Dump out our entire LDT structure.
 
   -- Another key difference between dump and scan : 
   -- dump prints things in the logs and returns a 0
