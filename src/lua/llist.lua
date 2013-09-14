@@ -1,8 +1,8 @@
 -- Large Ordered List (llist.lua)
--- Last Update September 11, 2013: tjl
+-- Last Update September 13, 2013: tjl
 --
 -- Keep this MOD value in sync with version above
-local MOD = "llist_2013_09_11.c"; -- module name used for tracing.  
+local MOD = "llist_2013_09_13.d"; -- module name used for tracing.  
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -1140,14 +1140,14 @@ local function validateBinName( binName )
     MOD, meth, tostring(binName));
 
   if binName == nil  then
-    WARN("[ERROR]<%s:%s> Bin Name is NULL", MOD, meth );
+    warn("[ERROR]<%s:%s> Bin Name is NULL", MOD, meth );
     error( ldte.ERR_NULL_BIN_NAME );
   elseif type( binName ) ~= "string"  then
-    WARN("[ERROR]<%s:%s> Bin Name is Not a String: Type(%s)", MOD, meth,
+    warn("[ERROR]<%s:%s> Bin Name is Not a String: Type(%s)", MOD, meth,
       tostring( type(binName) ));
     error( ldte.ERR_BIN_NAME_NOT_STRING );
   elseif string.len( binName ) > 14 then
-    WARN("[ERROR]<%s:%s> Bin Name Too Long::Exceeds 14 characters", MOD, meth);
+    warn("[ERROR]<%s:%s> Bin Name Too Long::Exceeds 14 characters", MOD, meth);
     error( ldte.ERR_BIN_NAME_TOO_LONG );
   end
   return 0;
@@ -1426,7 +1426,7 @@ end -- showRecSummary()
 -- =============================
 -- ======================================================================
 -- SUB RECORD CONTEXT DESIGN NOTE:
--- All "outer" functions, like insert(), search(), delete(),
+-- All "outer" functions, like insert(), search(), remove(),
 -- will employ the "subrecContext" object, which will hold all of the
 -- subrecords that were opened during processing.  Note that with
 -- B+ Trees, operations like insert() can potentially involve many subrec
@@ -4329,9 +4329,6 @@ end -- setupLdtBin( topRec, ldtBinName )
 local function localLListInsert( topRec, ldtBinName, newValue, createSpec )
   local meth = "localLListInsert()";
 
-  GP=F and trace("\n\n >>>>>>>>> API[ LLIST INSERT ] <<<<<<<<<V(%s) M(%s)\n",
-    tostring(newValue), tostring(createSpec));
-
   GP=E and trace("[ENTER]<%s:%s>LLIST BIN(%s) NwVal(%s) createSpec(%s)",
     MOD, meth, tostring(ldtBinName), tostring( newValue ),tostring(createSpec));
 
@@ -4533,9 +4530,6 @@ local function localLListDelete( topRec, binName, key )
   local meth = "localLListDelete()";
   local rc = 0;
 
-  GP=F and trace("\n\n  >>>>>>> API[ DELETE ] <<<<<<<<<<<<<<<(%s) \n",
-    tostring(key));
-
   GP=E and trace("[ENTER]<%s:%s>ldtBinName(%s) key(%s)",
       MOD, meth, tostring(binName), tostring(key));
 
@@ -4612,7 +4606,7 @@ local function localLListDelete( topRec, binName, key )
 end -- function localLListDelete()
 
 -- ========================================================================
--- localLdtRemove() -- Remove the LDT entirely from the record.
+-- localLdtDestroy() -- Remove the LDT entirely from the record.
 -- NOTE: This could eventually be moved to COMMON, and be "ldt_remove()",
 -- since it will work the same way for all LDTs.
 -- Remove the ESR, Null out the topRec bin.
@@ -4629,8 +4623,8 @@ end -- function localLListDelete()
 --   res = 0: all is well
 --   res = -1: Some sort of error
 -- ========================================================================
-local function localLdtRemove( topRec, binName )
-  local meth = "localLdtRemove()";
+local function localLdtDestroy( topRec, binName )
+  local meth = "localLdtDestroy()";
 
   GP=E and trace("[ENTER]: <%s:%s> binName(%s)",
     MOD, meth, tostring(binName));
@@ -4700,7 +4694,7 @@ local function localLdtRemove( topRec, binName )
     GP=F and trace("[ERROR EXIT]:<%s:%s> Return(%s)", MOD, meth,tostring(rc));
     error( ldte.ERR_INTERNAL );
   end
-end -- localLdtRemove()
+end -- localLdtDestroy()
 
 -- ========================================================================
 -- localSetCapacity() -- set the current capacity setting for this LDT
@@ -4830,7 +4824,7 @@ end -- function localGetCapacity()
 function create( topRec, ldtBinName, createSpec )
   local meth = "listCreate()";
 
-  GP=F and trace("\n\n >>>>>>>>> API[ LLIST CREATE ] <<<<<<<<<< \n\n");
+  GP=B and trace("\n\n >>>>>>>>> API[ LLIST CREATE ] <<<<<<<<<< \n");
 
   if createSpec == nil then
     GP=E and trace("[ENTER1]: <%s:%s> ldtBinName(%s) NULL createSpec",
@@ -4905,6 +4899,7 @@ end -- function create( topRec, namespace, set )
 -- add() -- with and without inner UDFs
 -- =======================================================================
 function add( topRec, ldtBinName, newValue, module_name )
+  GP=B and trace("\n\n >>>>>>>>> API[ LLIST ADD ] <<<<<<<<<<< \n");
   return localLListInsert( topRec, ldtBinName, newValue, module_name )
 end -- end insert()
 
@@ -4912,6 +4907,8 @@ end -- end insert()
 -- Iterate thru the list and call localStackPush on each element
 -- =======================================================================
 function add_all( topRec, ldtBinName, valueList, createSpec )
+  GP=B and trace("\n\n >>>>>>>>> API[ LLIST ADD_ALL ] <<<<<<<<<<< \n");
+
   local meth = "insert_all()";
   GP=E and trace("[ENTER]:<%s:%s>BIN(%s) valueList(%s) createSpec(%s)",
   MOD, meth, tostring(ldtBinName), tostring(valueList), tostring(createSpec));
@@ -4946,24 +4943,22 @@ end -- end add_all()
 -- other incorrect value/type.
 -- =======================================================================
 function find( topRec, ldtBinName, searchKey )
+  GP=B and trace("\n\n >>>>>>>>> API[ LLIST FIND ] <<<<<<<<<(%s) \n",
+    tostring(searchKey));
   local meth = "find()";
   GP=E and trace("[ENTER]<%s:%s> LLIST BIN(%s) searchKey(%s)",
     MOD, meth, tostring(ldtBinName), tostring(searchKey) )
-
-  GP=F and trace("\n\n >>>>>>>>> API[ LLIST FIND ] <<<<<<<<<(%s) \n",
-    tostring(searchKey));
 
   return localLListSearch( topRec, ldtBinName, searchKey, nil, nil );
 end -- end find()
 
 function find_then_filter(topRec,ldtBinName,searchKey,func,fargs )
+  GP=B and trace("\n\n >>>>>>>> API[ LLIST FIND Then FILTER] <<<<<<<(%s)\n",
+    tostring(searchKey));
   local meth = "find_then_filter()";
   GP=E and trace("[ENTER]<%s:%s> BIN(%s) searchKey(%s) func(%s) fargs(%s)",
     MOD, meth, tostring(ldtBinName), tostring(searchKey),
     tostring(func), tostring(fargs));
-
-  GP=F and trace("\n\n >>>>>>>> API[ LLIST FIND Then FILTER] <<<<<<<(%s)\n",
-    tostring(searchKey));
 
   return localLListSearch( topRec, ldtBinName, searchKey, func, fargs );
 end -- end find_then_filter()
@@ -4981,36 +4976,34 @@ end -- end find_then_filter()
 -- scan function.  Search with a nil searchKey works just fine (I think).
 -- =======================================================================
 function scan( topRec, ldtBinName )
+  GP=B and trace("\n\n  >>>>>>>> API[ SCAN ] <<<<<<<<<<<<<<<<<< \n");
   local meth = "scan()";
   GP=E and trace("[ENTER]<%s:%s> LLIST BIN(%s)",
     MOD, meth, tostring(ldtBinName) );
-
-  GP=F and trace("\n\n  >>>>>>>> API[ SCAN ] <<<<<<<<<<<<<<<<<< \n");
 
   return localLListSearch( topRec, ldtBinName, nil, nil, nil );
 end -- end scan()
 
 function filter( topRec, ldtBinName, func, fargs )
+  GP=F and trace("\n\n  >>>>>>>>> API[ SCAN and FILTER ]<<<<<<<< \n");
   local meth = "filter()";
   GP=E and trace("[ENTER]<%s:%s> BIN(%s) func(%s) fargs(%s)",
     MOD, meth, tostring(ldtBinName), tostring(func), tostring(fargs));
-
-  GP=F and trace("\n\n  >>>>>>>>> API[ SCAN and FILTER ]<<<<<<<< \n\n");
 
   return localLListSearch( topRec, ldtBinName, nil, func, fargs );
 end -- end filter()
 
 -- ======================================================================
--- delete(): Remove all items corresponding to the specified key.
+-- remove(): Remove all items corresponding to the specified key.
 -- ======================================================================
--- Delete the specified item(s).
+-- Remove (Delete) the specified item(s).
 --
 -- Parms 
 -- (1) topRec: the user-level record holding the LDT Bin
 -- (2) LdtBinName
 -- (3) key: The key we'll search for
 -- ======================================================================
-function delete( topRec, binName, key )
+function remove( topRec, binName, key )
   return localLListDelete( topRec, binName, key );
 end
 
@@ -5033,10 +5026,10 @@ end
 --   res = -1: Some sort of error
 -- ========================================================================
 function destroy( topRec, lsoBinName )
-  GP=F and trace("\n\n >>>>>>>>> API[ LLIST REMOVE ] Bin(%s) <<<<<<<<<<\n",
+  GP=B and trace("\n\n >>>>>>>>> API[ LLIST DESTROY ] Bin(%s) <<<<<<<<<<\n",
     lsoBinName );
-  return localLdtRemove( topRec, lsoBinName );
-end -- remove()
+  return localLdtDestroy( topRec, lsoBinName );
+end -- destroy()
 
 -- ========================================================================
 -- size() -- return the number of elements (item count) in the set.
@@ -5048,7 +5041,7 @@ function size( topRec, ldtBinName )
   GP=E and trace("[ENTER1]: <%s:%s> ldtBinName(%s)",
   MOD, meth, tostring(ldtBinName));
 
-  GP=F and trace("\n\n >>>>>>>>> API[ LLIST SIZE ] <<<<<<<<<(%s)\n",ldtBinName);
+  GP=B and trace("\n\n >>>>>>>>> API[ LLIST SIZE ] <<<<<<<<<(%s)\n",ldtBinName);
 
   -- Validate the topRec, the bin and the map.  If anything is weird, then
   -- this will kick out with a long jump error() call.
@@ -5074,7 +5067,8 @@ function get_config( topRec, ldtBinName )
   GP=E and trace("[ENTER1]: <%s:%s> ldtBinName(%s)",
   MOD, meth, tostring(ldtBinName));
 
-  GP=F and trace("\n\n >>>>>>>>> API[ LLIST CONFIG ] <<<<<<<<(%s)\n",ldtBinName);
+  GP=B and trace("\n\n >>>>>>> API[ LLIST CONFIG ] <<<<<<(%s)\n",
+      tostring(ldtBinName));
 
   -- Validate the topRec, the bin and the map.  If anything is weird, then
   -- this will kick out with a long jump error() call.
@@ -5112,7 +5106,8 @@ end
 -- Dump: Debugging/Tracing mechanism -- show the WHOLE tree.
 -- ========================================================================
 function dump( topRec, ldtBinName )
-  GP=F and trace("\n\n >>>>>>>>> API[ LLIST DUMP ] <<<<<<<<(%s)\n",ldtBinName);
+  GP=B and trace("\n\n >>>>>>>>> API[ LLIST DUMP ] <<<<<<<<(%s)\n",
+    tostring(ldtBinName));
   local src = createSubrecContext();
   printTree( src, topRec, ldtBinName );
   return 0;
