@@ -1,8 +1,6 @@
 -- Large Ordered List (llist.lua)
--- Last Update September 13, 2013: tjl
---
--- Keep this MOD value in sync with version above
-local MOD = "llist_2013_09_13.d"; -- module name used for tracing.  
+-- Track the date and iteration of the last update:
+local MOD = "llist_2013_09_16.a";
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -581,17 +579,17 @@ local KH_DEFAULT="keyHash";         -- Key Hash used only in complex mode
 --
 
 -- ======================================================================
--- local function Tree Summary( ldtList ) (DEBUG/Trace Function)
+-- local function Tree Summary( ldtCtrl ) (DEBUG/Trace Function)
 -- ======================================================================
 -- For easier debugging and tracing, we will summarize the Tree Map
 -- contents -- without printing out the entire thing -- and return it
 -- as a string that can be printed.
 -- ======================================================================
-local function ldtSummary( ldtList )
+local function ldtSummary( ldtCtrl )
 
   -- Extract the property map and control map from the ldt bin list.
-  local propMap = ldtList[1];
-  local ldtMap  = ldtList[2];
+  local propMap = ldtCtrl[1];
+  local ldtMap  = ldtCtrl[2];
   
   local resultMap             = map();
 
@@ -643,8 +641,8 @@ end -- ldtSummary()
 -- ======================================================================
 -- Do the summary of the LDT, and stringify it for internal use.
 -- ======================================================================
-local function ldtSummaryString( ldtList )
-  return tostring( ldtSummary( ldtList ) );
+local function ldtSummaryString( ldtCtrl )
+  return tostring( ldtSummary( ldtCtrl ) );
 end -- ldtSummaryString()
 
 -- ======================================================================
@@ -720,9 +718,9 @@ end -- setLdtRecordType()
 -- behavior.  Thus this function represents the "type" LLIST MAP -- all
 -- LLIST control fields are defined here.
 -- The LListMap is obtained using the user's LLIST Bin Name:
--- ldtList = topRec[ldtBinName]
--- local propMap = ldtList[1];
--- local ldtMap  = ldtList[2];
+-- ldtCtrl = topRec[ldtBinName]
+-- local propMap = ldtCtrl[1];
+-- local ldtMap  = ldtCtrl[2];
 -- ======================================================================
 local function
 initializeLdtCtrl( topRec, ldtBinName )
@@ -732,7 +730,7 @@ initializeLdtCtrl( topRec, ldtBinName )
 
   local propMap = map();
   local ldtMap = map();
-  local ldtList = list();
+  local ldtCtrl = list();
 
   -- The LLIST control structure -- with Default Values.  Note that we use
   -- two maps -- a general propery map that is the same for all LDTS (in
@@ -787,9 +785,9 @@ initializeLdtCtrl( topRec, ldtBinName )
   ldtMap[R_LeafByteCountMax] = 0; -- Max # of BYTES per data page
 
   -- Put our new map in the record, then store the record.
-  list.append( ldtList, propMap );
-  list.append( ldtList, ldtMap ); -- ldtMap used here, not ldtList
-  topRec[ldtBinName] = ldtList;
+  list.append( ldtCtrl, propMap );
+  list.append( ldtCtrl, ldtMap );
+  topRec[ldtBinName] = ldtCtrl;
 
   -- If the topRec already has an LDT CONTROL BIN (with a valid map in it),
   -- then we know that the main LDT record type has already been set.
@@ -809,9 +807,9 @@ initializeLdtCtrl( topRec, ldtBinName )
   MOD, meth );
 
   GP=E and trace("[EXIT]: <%s:%s> : CTRL Map after Init(%s)",
-      MOD, meth, ldtSummaryString(ldtList));
+      MOD, meth, ldtSummaryString(ldtCtrl));
 
-  return ldtList;
+  return ldtCtrl;
 end -- initializeLdtCtrl()
 
 -- ======================================================================
@@ -938,13 +936,13 @@ end -- adjustLdtMap
 -- and out of a 16 byte value.
 --
 -- ======================================================================
-local function initializeNode(topRec, nodeRec, ldtList)
+local function initializeNode(topRec, nodeRec, ldtCtrl)
   local meth = "initializeNode()";
   GP=E and trace("[ENTER]<%s:%s>", MOD, meth );
 
   -- Extract the property map and control map from the ldt bin list.
-  local topPropMap = ldtList[1];
-  local ldtMap     = ldtList[2];
+  local topPropMap = ldtCtrl[1];
+  local ldtMap     = ldtCtrl[2];
 
   -- Set up our new property and control map for this node
   local nodePropMap = map();
@@ -1027,13 +1025,13 @@ end -- initializeNode()
 -- Either Bins 0,1,2,4 or Bins 0,1,3,5.
 -- Parms:
 -- (*) topRec
--- (*) ldtList
+-- (*) ldtCtrl
 -- (*) leafRec
 -- (*) firstValue
 -- (*) pd: previous (left) Leaf Digest (or 0, if not there)
 -- (*) nd: next (right) Leaf Digest (or 0, if not there)
 -- ======================================================================
-local function initializeLeaf(topRec, ldtList, leafRec, firstValue, pd, nd )
+local function initializeLeaf(topRec, ldtCtrl, leafRec, firstValue, pd, nd )
   local meth = "initializeLeaf()";
   local rc = 0;
   GP=E and trace("[ENTER]<%s:%s>:1st Val(%s)", MOD, meth, tostring(firstValue));
@@ -1042,8 +1040,8 @@ local function initializeLeaf(topRec, ldtList, leafRec, firstValue, pd, nd )
   local leafDigest = record.digest( leafRec );
   
   -- Extract the property map and control map from the ldt bin list.
-  local topPropMap = ldtList[1];
-  local ldtMap  = ldtList[2];
+  local topPropMap = ldtCtrl[1];
+  local ldtMap  = ldtCtrl[2];
 
   -- Set up the Property Map
   leafPropMap = map();
@@ -1196,9 +1194,9 @@ local function validateRecBinAndMap( topRec, ldtBinName, mustExist )
     end
 
     -- Extract the property map and control map from the ldt bin list.
-    local ldtList = topRec[ ldtBinName ];
-    local propMap = ldtList[1];
-    local ldtMap  = ldtList[2];
+    local ldtCtrl = topRec[ ldtBinName ];
+    local propMap = ldtCtrl[1];
+    local ldtMap  = ldtCtrl[2];
     
     -- check that our bin is (mostly) there
     if ( propMap[PM_Magic] ~= MAGIC ) then
@@ -1212,9 +1210,9 @@ local function validateRecBinAndMap( topRec, ldtBinName, mustExist )
     -- is REQUIRED to be there.  Basically, if a control bin DOES exist
     -- then it MUST have magic.
     if topRec ~= nil and topRec[ldtBinName] ~= nil then
-      local ldtList = topRec[ldtBinName];
-      local propMap = ldtList[1];
-      local ldtMap  = ldtList[2];
+      local ldtCtrl = topRec[ldtBinName];
+      local propMap = ldtCtrl[1];
+      local ldtMap  = ldtCtrl[2];
       if ( propMap[PM_Magic] ~= MAGIC ) then
         GP=E and warn("[ERROR EXIT]:<%s:%s> LDT BIN(%s) Corrupted (no magic)",
               MOD, meth, tostring( ldtBinName ) );
@@ -1248,14 +1246,14 @@ local function summarizeList( myList )
 end -- summarizeList()
 
 -- ======================================================================
--- printRoot( topRec, ldtList )
+-- printRoot( topRec, ldtCtrl )
 -- ======================================================================
 -- Dump the Root contents for Debugging/Tracing purposes
 -- ======================================================================
-local function printRoot( topRec, ldtList )
+local function printRoot( topRec, ldtCtrl )
   -- Extract the property map and control map from the ldt bin list.
-  local pMap       = ldtList[1];
-  local cMap       = ldtList[2];
+  local pMap       = ldtCtrl[1];
+  local cMap       = ldtCtrl[2];
   local keyList    = cMap[R_RootKeyList];
   local digestList = cMap[R_RootDigestList];
   local binName    = pMap[PM_BinName];
@@ -1270,7 +1268,7 @@ local function printRoot( topRec, ldtList )
 end -- printRoot()
 
 -- ======================================================================
--- printNode( topRec, ldtList )
+-- printNode( topRec, ldtCtrl )
 -- ======================================================================
 -- Dump the Node contents for Debugging/Tracing purposes
 -- ======================================================================
@@ -1289,7 +1287,7 @@ local function printNode( nodeRec )
 end -- printNode()
 
 -- ======================================================================
--- printLeaf( topRec, ldtList )
+-- printLeaf( topRec, ldtCtrl )
 -- ======================================================================
 -- Dump the Leaf contents for Debugging/Tracing purposes
 -- ======================================================================
@@ -1306,16 +1304,16 @@ local function printLeaf( leafRec )
 end -- printLeaf()
 
 -- ======================================================================
--- rootNodeSummary( ldtList )
+-- rootNodeSummary( ldtCtrl )
 -- ======================================================================
 -- Print out interesting stats about this B+ Tree Root
 -- ======================================================================
-local function rootNodeSummary( ldtList )
-  local resultMap = ldtList;
+local function rootNodeSummary( ldtCtrl )
+  local resultMap = ldtCtrl;
 
   -- Add to this -- move selected fields into resultMap and return it.
 
-  return tostring( ldtSummary( ldtList )  );
+  return tostring( ldtSummary( ldtCtrl )  );
 end -- rootNodeSummary()
 
 -- ======================================================================
@@ -1764,10 +1762,10 @@ end -- initPropMap()
 -- and read.  It must be the same for all LDT recs.
 --
 -- ======================================================================
-local function createAndInitESR( src, topRec, ldtList )
+local function createAndInitESR( src, topRec, ldtCtrl )
   local meth = "createAndInitESR()";
   GP=E and trace("[ENTER]<%s:%s> LDT Summary(%s)",
-    MOD, meth, ldtSummaryString(ldtList));
+    MOD, meth, ldtSummaryString(ldtCtrl));
 
   local rc = 0;
   -- Remember to add this to the SRC
@@ -1779,8 +1777,8 @@ local function createAndInitESR( src, topRec, ldtList )
 
   local esrDigest = record.digest( esrRec );
   local topDigest = record.digest( topRec );
-  local topPropMap = ldtList[1];
-  local ldtMap  = ldtList[2];
+  local topPropMap = ldtCtrl[1];
+  local ldtMap  = ldtCtrl[2];
 
   -- Init the properties map for this ESR. Note that esrDigest is in here
   -- twice -- once for "self" and once for "esrRec".
@@ -2017,9 +2015,9 @@ local function printTree( src, topRec, ldtBinName )
   -- At each level, create a new child list, which will become the parent
   -- list for the next level down (unless we're at the leaves).
   -- The root is a special case of a list of parents with a single node.
-  local ldtList = topRec[ldtBinName];
-  local propMap = ldtList[1];
-  local ldtMap  = ldtList[2];
+  local ldtCtrl = topRec[ldtBinName];
+  local propMap = ldtCtrl[1];
+  local ldtMap  = ldtCtrl[2];
   local nodeList = list();
   local childList = list();
   local digestString;
@@ -2032,9 +2030,9 @@ local function printTree( src, topRec, ldtBinName )
   trace("\n <PT> <PT> <PT> <PT>                          <PT> <PT> <PT>\n");
   trace("\n ===========================================================\n");
 
-  trace("\n ======  ROOT SUMMARY ======\n(%s)", rootNodeSummary( ldtList ));
+  trace("\n ======  ROOT SUMMARY ======\n(%s)", rootNodeSummary( ldtCtrl ));
 
-  printRoot( topRec, ldtList );
+  printRoot( topRec, ldtCtrl );
 
   nodeList = ldtMap[R_RootDigestList];
 
@@ -2504,7 +2502,7 @@ end -- scanLeaf()
 -- end -- getTreeNodeRec()
 
 -- ======================================================================
--- treeSearch( subrecContext, topRec, searchPath, ldtList, searchKey )
+-- treeSearch( subrecContext, topRec, searchPath, ldtCtrl, searchKey )
 -- ======================================================================
 -- Search the tree (start with the root and move down). 
 -- Remember the search path from root to leaf (and positions in each
@@ -2519,20 +2517,20 @@ end -- scanLeaf()
 -- Return: ST_FOUND(0) or ST_NOTFOUND(-1)
 -- And, implicitly, the updated searchPath Object.
 local function
-treeSearch( src, topRec, sp, ldtList, searchKey )
+treeSearch( src, topRec, sp, ldtCtrl, searchKey )
   local meth = "treeSearch()";
   local rc = 0;
   GP=E and trace("[ENTER]<%s:%s> searchKey(%s) ldtSummary(%s)",
-      MOD, meth, tostring(searchKey), ldtSummaryString(ldtList) );
+      MOD, meth, tostring(searchKey), ldtSummaryString(ldtCtrl) );
 
   -- Extract the property map and control map from the ldt bin list.
-  local propMap = ldtList[1];
-  local ldtMap  = ldtList[2];
+  local propMap = ldtCtrl[1];
+  local ldtMap  = ldtCtrl[2];
 
   local treeLevels = ldtMap[R_TreeLevel];
 
   GP=F and trace("[DEBUG]<%s:%s>searchKey(%s) ldtSummary(%s) CMap(%s) PMap(%s)",
-      MOD, meth, tostring(searchKey), ldtSummaryString(ldtList),
+      MOD, meth, tostring(searchKey), ldtSummaryString(ldtCtrl),
       tostring(ldtMap), tostring(propMap) );
   -- Start the loop with the special Root, then drop into each successive
   -- inner node level until we get to a LEAF NODE.  We search the leaf node
@@ -2903,7 +2901,7 @@ end -- populateNode()
 -- Parms:
 -- (*) src: subrecContext: The pool of open subrecords
 -- (*) topRec: The main AS Record holding the LDT
--- (*) ldtList: Main LDT Control Structure
+-- (*) ldtCtrl: Main LDT Control Structure
 -- Contents of a Node Record:
 -- (1) SUBREC_PROP_BIN: Main record Properties go here
 -- (2) NSR_CTRL_BIN:    Main Node Control structure
@@ -2911,7 +2909,7 @@ end -- populateNode()
 -- (4) NSR_DIGEST_BIN: Digest List (or packed binary) goes here
 -- (5) NSR_BINARY_BIN:  Packed Binary Array (if used) goes here
 -- ======================================================================
-local function createNodeRec( src, topRec, ldtList )
+local function createNodeRec( src, topRec, ldtCtrl )
   local meth = "createNodeRec()";
 
   GP=F and trace("\n INSIDE createNodeRec\n");
@@ -2919,8 +2917,8 @@ local function createNodeRec( src, topRec, ldtList )
   GP=E and trace("[ENTER]<%s:%s> ", MOD, meth );
 
   -- Extract the property map and control map from the ldt bin list.
-  local propMap = ldtList[1];
-  local ldtMap  = ldtList[2];
+  local propMap = ldtCtrl[1];
+  local ldtMap  = ldtCtrl[2];
 
   -- Remember to add this to the SRC
   local nodeRec = aerospike:create_subrec( topRec );
@@ -2929,7 +2927,7 @@ local function createNodeRec( src, topRec, ldtList )
     error( ldte.ERR_SUBREC_CREATE );
   end
 
-  local rc = initializeNode( topRec, nodeRec, ldtList );
+  local rc = initializeNode( topRec, nodeRec, ldtCtrl );
   if( rc >= 0 ) then
     GP=F and trace("[DEBUG]<%s:%s>Node Init OK", MOD, meth );
     rc = aerospike:update_subrec( nodeRec );
@@ -2959,11 +2957,11 @@ end -- createNodeRec()
 -- (*) src: SubRec Context (for looking up open subrecs)
 -- (*) topRec:
 -- (*) sp: SearchPath (from the initial search)
--- (*) ldtList:
+-- (*) ldtCtrl:
 -- (*) key:
 -- (*) digest:
 -- ======================================================================
-local function splitRootInsert( src, topRec, sp, ldtList, key, digest )
+local function splitRootInsert( src, topRec, sp, ldtCtrl, key, digest )
   local meth = "splitRootInsert()";
   local rc = 0;
   GP=E and trace("[ENTER]<%s:%s> topRec(%s) SRC(%s) SP(%s) LDT(%s) Key(%s) ",
@@ -2974,8 +2972,8 @@ local function splitRootInsert( src, topRec, sp, ldtList, key, digest )
     tostring( key ));
 
   -- Extract the property map and control map from the ldt bin list.
-  local propMap = ldtList[1];
-  local ldtMap  = ldtList[2];
+  local propMap = ldtCtrl[1];
+  local ldtMap  = ldtCtrl[2];
   local binName = propMap[PM_BinName];
 
   local rootLevel = 1;
@@ -3028,8 +3026,8 @@ local function splitRootInsert( src, topRec, sp, ldtList, key, digest )
 
   -- Create two new Child Inner Nodes -- that will be the new Level 2 of the
   -- tree.  The root gets One Key and Two Digests.
-  local leftNodeRec  = createNodeRec( src, topRec, ldtList );
-  local rightNodeRec = createNodeRec( src, topRec, ldtList );
+  local leftNodeRec  = createNodeRec( src, topRec, ldtCtrl );
+  local rightNodeRec = createNodeRec( src, topRec, ldtCtrl );
 
   local leftNodeDigest  = record.digest( leftNodeRec );
   local rightNodeDigest = record.digest( rightNodeRec );
@@ -3093,12 +3091,12 @@ end -- splitRootInsert()
 -- (*) src: SubRec Context (for looking up open subrecs)
 -- (*) topRec:
 -- (*) sp: SearchPath (from the initial search)
--- (*) ldtList:
+-- (*) ldtCtrl:
 -- (*) key:
 -- (*) digest:
 -- (*) level:
 -- ======================================================================
-local function splitNodeInsert( src, topRec, sp, ldtList, key, digest, level )
+local function splitNodeInsert( src, topRec, sp, ldtCtrl, key, digest, level )
   local meth = "splitNodeInsert()";
   local rc = 0;
   GP=E and trace("[ENTER]<%s:%s> SRC(%s) SP(%s) LDT(%s) Key(%s) Lvl(%d)",
@@ -3107,7 +3105,7 @@ local function splitNodeInsert( src, topRec, sp, ldtList, key, digest, level )
   
   if( level == 1 ) then
     -- Special Split -- Root is handled differently.
-    rc = splitRootInsert( src, topRec, sp, ldtList, key, digest );
+    rc = splitRootInsert( src, topRec, sp, ldtCtrl, key, digest );
   else
     -- Ok -- "Regular" Inner Node Split Insert.
     -- We will split this inner node, use the existing node as the new
@@ -3120,8 +3118,8 @@ local function splitNodeInsert( src, topRec, sp, ldtList, key, digest, level )
     GP=F and trace("\n\n <><!><> !!! SPLIT INNER NODE !!! <><E><> \n\n");
 
     -- Extract the property map and control map from the ldt bin list.
-    local propMap = ldtList[1];
-    local ldtMap  = ldtList[2];
+    local propMap = ldtCtrl[1];
+    local ldtMap  = ldtCtrl[2];
     local binName = propMap[PM_BinName];
 
     local nodePosition = sp.PositionList[level];
@@ -3179,7 +3177,7 @@ local function splitNodeInsert( src, topRec, sp, ldtList, key, digest, level )
       tostring(rightKeyList), tostring(rightDigestList) );
 
     local rightNodeRec = nodeRec; -- our new name for the existing node
-    local leftNodeRec = createNodeRec( src, topRec, ldtList );
+    local leftNodeRec = createNodeRec( src, topRec, ldtCtrl );
     local leftNodeDigest = record.digest( leftNodeRec );
 
     -- This is a different order than the splitLeafInsert, but before we
@@ -3214,7 +3212,7 @@ local function splitNodeInsert( src, topRec, sp, ldtList, key, digest, level )
     GP=F and trace("\n\n CALLING INSERT PARENT FROM SPLIT NODE: Key(%s)\n",
       tostring(splitKey));
 
-    insertParentNode(src, topRec, sp, ldtList, splitKey,
+    insertParentNode(src, topRec, sp, ldtCtrl, splitKey,
       leftNodeDigest, level - 1 );
   end -- else regular (non-root) node split
 
@@ -3234,7 +3232,7 @@ end -- splitNodeInsert()
 -- (*) src: The SubRec Context (holds open subrecords).
 -- (*) topRec: The main record
 -- (*) sp: the searchPath structure
--- (*) ldtList: the main control structure
+-- (*) ldtCtrl: the main control structure
 -- (*) key: the new key to be inserted
 -- (*) digest: The new digest to be inserted
 -- (*) level: The current level in searchPath of this node
@@ -3242,18 +3240,18 @@ end -- splitNodeInsert()
 -- NOTE: This function is FORWARD-DECLARED, so it does NOT get a "local"
 -- declaration here.
 -- ======================================================================
-function insertParentNode(src, topRec, sp, ldtList, key, digest, level)
+function insertParentNode(src, topRec, sp, ldtCtrl, key, digest, level)
   local meth = "insertParentNode()";
   local rc = 0;
   GP=E and trace("[ENTER]<%s:%s> SP(%s) Key(%s) Dig(%s) Level(%d)",
     MOD, meth, tostring(sp), tostring(key), tostring(digest), level );
-  GP=F and trace("\n[DUMP]<%s> LDT(%s)", meth, ldtSummaryString(ldtList) );
+  GP=F and trace("\n[DUMP]<%s> LDT(%s)", meth, ldtSummaryString(ldtCtrl) );
 
   GP=F and trace("\n\n STARTING INTO INSERT PARENT NODE \n\n");
 
   -- Extract the property map and control map from the ldt bin list.
-  local propMap = ldtList[1];
-  local ldtMap  = ldtList[2];
+  local propMap = ldtCtrl[1];
+  local ldtMap  = ldtCtrl[2];
   local binName = propMap[PM_BinName];
 
   -- Check the tree level.  If it's the root, we access the node data
@@ -3303,7 +3301,7 @@ function insertParentNode(src, topRec, sp, ldtList, key, digest, level)
   else
     -- Complex node split and propagate up to parent.  Special case is if
     -- this is a ROOT split, which is different.
-    rc = splitNodeInsert( src, topRec, sp, ldtList, key, digest, level);
+    rc = splitNodeInsert( src, topRec, sp, ldtCtrl, key, digest, level);
   end
 
   GP=F and trace("[EXIT]<%s:%s> rc(%s)", MOD, meth, tostring(rc) );
@@ -3315,7 +3313,7 @@ end -- insertParentNode()
 -- Parms:
 -- (*) src: subrecContext: The pool of open subrecords
 -- (*) topRec: The main AS Record holding the LDT
--- (*) ldtList: Main LDT Control Structure
+-- (*) ldtCtrl: Main LDT Control Structure
 -- (*) firstValue: if present, insert this value
 -- NOTE: Remember that we must create an ESR when we create the first leaf
 -- but that is the caller's job
@@ -3325,13 +3323,13 @@ end -- insertParentNode()
 -- (3) LSR_LIST_BIN:    Object List goes here
 -- (4) LSR_BINARY_BIN:  Packed Binary Array (if used) goes here
 -- ======================================================================
-local function createLeafRec( src, topRec, ldtList, firstValue )
+local function createLeafRec( src, topRec, ldtCtrl, firstValue )
   local meth = "createLeafRec()";
   GP=E and trace("[ENTER]<%s:%s> ", MOD, meth );
 
   -- Extract the property map and control map from the ldt bin list.
-  local propMap = ldtList[1];
-  local ldtMap  = ldtList[2];
+  local propMap = ldtCtrl[1];
+  local ldtMap  = ldtCtrl[2];
 
   -- Remember to add this to the SRC
   local leafRec = aerospike:create_subrec( topRec );
@@ -3344,7 +3342,7 @@ local function createLeafRec( src, topRec, ldtList, firstValue )
   local subrecCount = propMap[PM_SubRecCount];
   propMap[PM_SubRecCount] = subrecCount + 1;
 
-  local rc = initializeLeaf( topRec, ldtList, leafRec, firstValue );
+  local rc = initializeLeaf( topRec, ldtCtrl, leafRec, firstValue );
   if( rc >= 0 ) then
     GP=F and trace("[DEBUG]<%s:%s>Leaf Init OK", MOD, meth );
     rc = aerospike:update_subrec( leafRec );
@@ -3378,20 +3376,20 @@ end -- createLeafRec()
 -- (*) src: subrecContext
 -- (*) topRec
 -- (*) sp: searchPath
--- (*) ldtList
+-- (*) ldtCtrl
 -- (*) newKey
 -- (*) newValue
 -- Return:
 -- ======================================================================
 local function
-splitLeafInsert( src, topRec, sp, ldtList, newKey, newValue )
+splitLeafInsert( src, topRec, sp, ldtCtrl, newKey, newValue )
   local meth = "splitLeafInsert()";
   local rc = 0;
 
   GP=F and trace("\n\n <><><> !!! SPLIT LEAF !!! <><><> \n\n");
 
   GP=E and trace("[ENTER]<%s:%s> SP(%s) LDT(%s) Key(%s) Val(%s)",
-    MOD, meth, tostring(sp), ldtSummaryString(ldtList),
+    MOD, meth, tostring(sp), ldtSummaryString(ldtCtrl),
     tostring(newKey), tostring(newValue));
 
   -- Splitting a leaf works as follows.  It is slightly different than a
@@ -3431,8 +3429,8 @@ splitLeafInsert( src, topRec, sp, ldtList, newKey, newValue )
   -- Leaf A       Leaf B1     Leaf B2          Leaf C
   --
   -- Extract the property map and control map from the ldt bin list.
-  local propMap = ldtList[1];
-  local ldtMap  = ldtList[2];
+  local propMap = ldtCtrl[1];
+  local ldtMap  = ldtCtrl[2];
   local binName = propMap[PM_BinName];
 
   local leafLevel = sp.LevelCount;
@@ -3464,7 +3462,7 @@ splitLeafInsert( src, topRec, sp, ldtList, newKey, newValue )
     MOD, meth, tostring(leftList), tostring(splitKey), tostring(rightList) );
 
   local rightLeafRec = leafRec; -- our new name for the existing leaf
-  local leftLeafRec = createLeafRec( src, topRec, ldtList, nil );
+  local leftLeafRec = createLeafRec( src, topRec, ldtCtrl, nil );
   local leftLeafDigest = record.digest( leftLeafRec );
 
   -- Overwrite the leaves with their new object value lists
@@ -3501,7 +3499,7 @@ splitLeafInsert( src, topRec, sp, ldtList, newKey, newValue )
   -- of this method to either split the parent or do a straight insert.
   GP=F and trace("\n\n CALLING INSERT PARENT FROM SPLIT LEAF: Key(%s)\n",
     tostring(splitKey));
-  insertParentNode(src, topRec, sp, ldtList, splitKey,
+  insertParentNode(src, topRec, sp, ldtCtrl, splitKey,
     leftLeafDigest, leafLevel - 1 );
 
   GP=F and trace("[EXIT]<%s:%s> rc(%s)", MOD, meth, tostring(rc) );
@@ -3509,7 +3507,7 @@ splitLeafInsert( src, topRec, sp, ldtList, newKey, newValue )
 end -- splitLeafInsert()
 
 -- ======================================================================
--- firstTreeInsert( topRec, ldtList, newValue, stats )
+-- firstTreeInsert( topRec, ldtCtrl, newValue, stats )
 -- ======================================================================
 -- For the VERY FIRST INSERT, we don't need to search.  We just put the
 -- first key in the root, and we allocate TWO leaves: the left leaf for
@@ -3518,22 +3516,22 @@ end -- splitLeafInsert()
 -- Parms:
 -- (*) src: SubRecContext
 -- (*) topRec
--- (*) ldtList
+-- (*) ldtCtrl
 -- (*) newValue
 -- (*) stats: bool: When true, we update stats
-local function firstTreeInsert( src, topRec, ldtList, newValue, stats )
+local function firstTreeInsert( src, topRec, ldtCtrl, newValue, stats )
   local meth = "firstTreeInsert()";
   local rc = 0;
   GP=E and trace("[ENTER]<%s:%s>LdtSummary(%s) newValue(%s)",
-    MOD, meth, ldtSummaryString(ldtList), tostring(newValue) );
+    MOD, meth, ldtSummaryString(ldtCtrl), tostring(newValue) );
 
   -- We know that on the VERY FIRST SubRecord create, we want to create
   -- the Existence Sub Record (ESR).  So, do this first.
-  local esrDigest = createAndInitESR( src, topRec, ldtList );
+  local esrDigest = createAndInitESR( src, topRec, ldtCtrl );
 
   -- Extract the property map and control map from the ldt bin list.
-  local propMap = ldtList[1];
-  local ldtMap  = ldtList[2];
+  local propMap = ldtCtrl[1];
+  local ldtMap  = ldtCtrl[2];
   local binName = propMap[PM_BinName];
 
   local rootKeyList = ldtMap[R_RootKeyList];
@@ -3542,10 +3540,10 @@ local function firstTreeInsert( src, topRec, ldtList, newValue, stats )
 
   -- Create two leaves -- Left and Right. Initialize them.  Then
   -- insert our new value into the RIGHT one.
-  local leftLeafRec = createLeafRec( src, topRec, ldtList, nil );
+  local leftLeafRec = createLeafRec( src, topRec, ldtCtrl, nil );
   local leftLeafDigest = record.digest( leftLeafRec );
 
-  local rightLeafRec = createLeafRec( src, topRec, ldtList, newValue);
+  local rightLeafRec = createLeafRec( src, topRec, ldtCtrl, newValue);
   local rightLeafDigest = record.digest( rightLeafRec );
 
   -- Our leaf pages are doubly linked -- we use digest values as page ptrs.
@@ -3575,8 +3573,8 @@ local function firstTreeInsert( src, topRec, ldtList, newValue, stats )
   -- TODO: @TOBY: Double check this and fix.
   ldtMap[R_RootKeyList] = rootKeyList;
   ldtMap[R_RootDigestList] = rootDigestList;
-  ldtList[2] = ldtMap;
-  topRec[binName] = ldtList;
+  ldtCtrl[2] = ldtMap;
+  topRec[binName] = ldtCtrl;
   record.set_flags(topRec, binName, BF_LDT_BIN );--Must set every time
 
   -- Note: The caller will update the top record, but we need to update
@@ -3587,12 +3585,12 @@ local function firstTreeInsert( src, topRec, ldtList, newValue, stats )
   -- aerospike:close_subrec( rightLeafRec );
 
   GP=F and trace("[EXIT]<%s:%s>LdtSummary(%s) newValue(%s) rc(%s)",
-    MOD, meth, ldtSummaryString(ldtList), tostring(newValue), tostring(rc));
+    MOD, meth, ldtSummaryString(ldtCtrl), tostring(newValue), tostring(rc));
   return rc;
 end -- firstTreeInsert()
 
 -- ======================================================================
--- treeInsert( src, topRec, ldtList, value, stats )
+-- treeInsert( src, topRec, ldtCtrl, value, stats )
 -- ======================================================================
 -- Search the tree (start with the root and move down).  Get the spot in
 -- the leaf where the insert goes.  Insert into the leaf.  Remember the
@@ -3601,21 +3599,21 @@ end -- firstTreeInsert()
 -- Parms:
 -- (*) src: subrecContext: The pool of open subrecords
 -- (*) topRec
--- (*) ldtList
+-- (*) ldtCtrl
 -- (*) value
 -- (*) stats: bool: When true, we update stats
-local function treeInsert( src, topRec, ldtList, value, stats )
+local function treeInsert( src, topRec, ldtCtrl, value, stats )
   local meth = "treeInsert()";
   local rc = 0;
   
   GP=E and trace("[ENTER]<%s:%s>", MOD, meth );
 
   GP=F and trace("[PARMS]<%s:%s>value(%s) stats(%s) LdtSummary(%s) ",
-  MOD, meth, tostring(value), tostring(stats), ldtSummaryString(ldtList));
+  MOD, meth, tostring(value), tostring(stats), ldtSummaryString(ldtCtrl));
 
   -- Extract the property map and control map from the ldt bin list.
-  local propMap = ldtList[1];
-  local ldtMap  = ldtList[2];
+  local propMap = ldtCtrl[1];
+  local ldtMap  = ldtCtrl[2];
   local binName = propMap[PM_BinName];
 
   local key = getKeyValue( ldtMap, value );
@@ -3628,7 +3626,7 @@ local function treeInsert( src, topRec, ldtList, value, stats )
   if( ldtMap[R_TreeLevel] == 1 ) then
     GP=F and trace("[DEBUG]<%s:%s>\n\n<FFFF> FIRST TREE INSERT!!!\n",
         MOD, meth );
-    firstTreeInsert( src, topRec, ldtList, value, stats );
+    firstTreeInsert( src, topRec, ldtCtrl, value, stats );
   else
     GP=F and trace("[DEBUG]<%s:%s>\n\n<RRRR> Regular TREE INSERT(%s)!!!\n\n",
         MOD, meth, tostring(value));
@@ -3638,7 +3636,7 @@ local function treeInsert( src, topRec, ldtList, value, stats )
     -- showing node/list states, counts, fill factors, etc.
     local sp = createSearchPath(ldtMap);
     local status =
-      treeSearch( src, topRec, sp, ldtList, key );
+      treeSearch( src, topRec, sp, ldtCtrl, key );
 
     if( status == ST_FOUND and ldtMap[R_KeyUnique] == true ) then
       warn("[User ERROR]<%s:%s> Unique Key(%s) Violation",
@@ -3659,7 +3657,7 @@ local function treeInsert( src, topRec, ldtList, value, stats )
     else
       -- Split first, then insert.  This split can potentially propagate all
       -- the way up the tree to the root. This is potentially a big deal.
-      rc = splitLeafInsert( src, topRec, sp, ldtList,
+      rc = splitLeafInsert( src, topRec, sp, ldtCtrl,
                             key, value );
     end
   end -- end else "real" insert
@@ -3673,13 +3671,13 @@ local function treeInsert( src, topRec, ldtList, value, stats )
     rc = aerospike:update( topRec );
   else
     warn("[ERROR]<%s:%s>Insert Error::Ldt(%s) value(%s) stats(%s) rc(%s)",
-    MOD, meth, ldtSummaryString(ldtList), tostring(value), tostring(stats),
+    MOD, meth, ldtSummaryString(ldtCtrl), tostring(value), tostring(stats),
     tostring(rc));
     error( ldte.ERR_INSERT );
   end
 
   GP=F and trace("[EXIT]<%s:%s>LdtSummary(%s) value(%s) rc(%s)",
-    MOD, meth, ldtSummaryString(ldtList), tostring(value), tostring(rc));
+    MOD, meth, ldtSummaryString(ldtCtrl), tostring(value), tostring(rc));
   return rc;
 end -- treeInsert
 
@@ -3810,25 +3808,25 @@ end -- unTransformComplexCompare()
 
 
 -- ======================================================================
--- localInsert( src, topRec, ldtList, newValue, stats )
+-- localInsert( src, topRec, ldtCtrl, newValue, stats )
 -- ======================================================================
 -- Perform the main work of insert (used by both convertList() and the
 -- regular insert().
 -- Parms:
 -- (*) src: subrecContext: The pool of open subrecords
 -- (*) topRec: The top DB Record:
--- (*) ldtList: The LDT control Structure
+-- (*) ldtCtrl: The LDT control Structure
 -- (*) newValue: Value to be inserted
 -- (*) stats: true=Please update Counts, false=Do NOT update counts (rehash)
 -- ======================================================================
-local function localInsert(src, topRec, ldtList, newValue, stats )
+local function localInsert(src, topRec, ldtCtrl, newValue, stats )
   local meth = "localInsert()";
   GP=E and trace("[ENTER]:<%s:%s>Insert(%s)", MOD, meth, tostring(newValue));
   local rc = 0;
   
   -- Extract the property map and control map from the ldt bin list.
-  local propMap = ldtList[1];
-  local ldtMap  = ldtList[2];
+  local propMap = ldtCtrl[1];
+  local ldtMap  = ldtCtrl[2];
   local binName = propMap[PM_BinName];
 
   -- If our state is "compact", do a simple list insert, otherwise do a
@@ -3862,7 +3860,7 @@ local function localInsert(src, topRec, ldtList, newValue, stats )
   else
     -- Do the TREE INSERT
     GP=F and trace("[NOTICE]<%s:%s> Using >>>  TREE INSERT  <<<", MOD, meth);
-    insertResult = treeInsert(src, topRec, ldtList, newValue, stats );
+    insertResult = treeInsert(src, topRec, ldtCtrl, newValue, stats );
   end
 
   -- update stats if appropriate.
@@ -3873,7 +3871,7 @@ local function localInsert(src, topRec, ldtList, newValue, stats )
     ldtMap[R_TotalCount] = totalCount + 1; -- Total number of items goes up
     GP=F and trace("[DEBUG]: <%s:%s> itemCount(%d)", MOD, meth, itemCount );
   end
-  topRec[ binName ] = ldtList;
+  topRec[ binName ] = ldtCtrl;
   record.set_flags(topRec, binName, BF_LDT_BIN );--Must set every time
 
   GP=F and trace("[EXIT]: <%s:%s>Storing Record() with New Value(%s): Map(%s)",
@@ -3916,7 +3914,7 @@ local function getNextLeaf( src, topRec, leafRec  )
 end -- getNextLeaf()
 
 -- ======================================================================
--- convertList( topRec, ldtBinName, ldtList )
+-- convertList( topRec, ldtBinName, ldtCtrl )
 -- ======================================================================
 -- When we start in "compact" StoreState (SS_COMPACT), we eventually have
 -- to switch to "regular" state when we get enough values.  So, at some
@@ -3928,17 +3926,17 @@ end -- getNextLeaf()
 -- (*) src: subrecContext
 -- (*) topRec
 -- (*) ldtBinName
--- (*) ldtList
+-- (*) ldtCtrl
 -- ======================================================================
-local function convertList(src, topRec, ldtBinName, ldtList )
+local function convertList(src, topRec, ldtBinName, ldtCtrl )
   local meth = "convertList()";
 
   GP=E and trace("[ENTER]<%s:%s>\n\n <><>  CONVERT LIST <><>\n\n", MOD, meth );
   GP=E and trace("[ENTER]<%s:%s>\n\n <><>  CONVERT LIST <><>\n\n", MOD, meth );
   
   -- Extract the property map and control map from the ldt bin list.
-  local propMap = ldtList[1];
-  local ldtMap  = ldtList[2];
+  local propMap = ldtCtrl[1];
+  local ldtMap  = ldtCtrl[2];
   local binName = propMap[PM_BinName];
 
   -- iterate thru the ldtMap CompactList, re-inserting each item.
@@ -3959,7 +3957,7 @@ local function convertList(src, topRec, ldtBinName, ldtList )
   -- TODO: @TOBY: Change this to build the tree in one operation.
   for i = 1, list.size( compactList ), 1 do
     -- Do NOT update counts, as we're just RE-INSERTING existing values.
-    treeInsert( src, topRec, ldtList, compactList[i], false );
+    treeInsert( src, topRec, ldtCtrl, compactList[i], false );
   end
 
   -- Now, release the compact list we were using.
@@ -3968,7 +3966,7 @@ local function convertList(src, topRec, ldtBinName, ldtList )
   ldtMap[R_CompactList] = list();  -- Replace with an empty list.
 
   GP=F and trace("[EXIT]: <%s:%s> ldtSummary(%s)",
-    MOD, meth, tostring(ldtList));
+    MOD, meth, tostring(ldtCtrl));
   return 0;
 end -- convertList()
 
@@ -3977,7 +3975,7 @@ end -- convertList()
 -- values that satisfy the searchPredicate and the filter.
 -- ======================================================================
 local function 
-treeScan(src, resultList, topRec, sp, ldtList, key, func, fargs )
+treeScan(src, resultList, topRec, sp, ldtCtrl, key, func, fargs )
   local meth = "treeScan()";
   local rc = 0;
   local scan_A = 0;
@@ -3986,8 +3984,8 @@ treeScan(src, resultList, topRec, sp, ldtList, key, func, fargs )
       MOD, meth, tostring(sp), tostring(key) );
 
   -- Extract the property map and control map from the ldt bin list.
-  local propMap = ldtList[1];
-  local ldtMap  = ldtList[2];
+  local propMap = ldtCtrl[1];
+  local ldtMap  = ldtCtrl[2];
 
   local leafLevel = sp.LevelCount;
   local leafRec = sp.RecList[leafLevel];
@@ -4118,18 +4116,18 @@ end -- listDelete()
 -- (*) src: SubRec Context (in case we have to open more leaves)
 -- (*) sp: Search Path structure
 -- (*) topRec:
--- (*) ldtList:
+-- (*) ldtCtrl:
 -- (*) key: the key -- in case we need to look for more dups
 -- ======================================================================
-local function leafDelete( src, sp, topRec, ldtList, key )
+local function leafDelete( src, sp, topRec, ldtCtrl, key )
   local meth = "leafDelete()";
   GP=E and trace("[ENTER]<%s:%s> LDT(%s) key(%s)", MOD, meth,
-    ldtSummaryString( ldtList ), tostring( key ));
+    ldtSummaryString( ldtCtrl ), tostring( key ));
   local rc = 0;
 
   -- Our list and map has already been validated.  Just use it.
-  propMap = ldtList[1];
-  ldtMap  = ldtList[2];
+  propMap = ldtCtrl[1];
+  ldtMap  = ldtCtrl[2];
 
   local leafLevel = sp.LevelCount;
   local leafRec = sp.RecList[leafLevel];
@@ -4151,7 +4149,7 @@ local function leafDelete( src, sp, topRec, ldtList, key )
   end
 
   GP=F and trace("[EXIT]<%s:%s>LdtSummary(%s) newValue(%s) rc(%s)",
-    MOD, meth, ldtSummaryString(ldtList), tostring(newValue), tostring(rc));
+    MOD, meth, ldtSummaryString(ldtCtrl), tostring(newValue), tostring(rc));
   return rc;
 end -- leafDelete()
 
@@ -4176,7 +4174,7 @@ end -- leafDelete()
 -- Parms:
 -- (*) src: SubRec Context
 -- (*) topRec:
--- (*) ldtList: The LDT Control Structure
+-- (*) ldtCtrl: The LDT Control Structure
 -- (*) key:  Find and Delete the objects that match this key
 -- (*) createSpec:
 -- Return:
@@ -4184,21 +4182,21 @@ end -- leafDelete()
 -- ERR_NOT_FOUND(-2): if NOT found
 -- ERR_GENERAL(-1): For any other error 
 -- =======================================================================
-local function treeDelete( src, topRec, ldtList, key )
+local function treeDelete( src, topRec, ldtCtrl, key )
   local meth = "treeDelete()";
   GP=E and trace("[ENTER]<%s:%s> LDT(%s) key(%s)", MOD, meth,
-    ldtSummaryString( ldtList ), tostring( key ));
+    ldtSummaryString( ldtCtrl ), tostring( key ));
   local rc = 0;
 
   -- Our list and map has already been validated.  Just use it.
-  propMap = ldtList[1];
-  ldtMap  = ldtList[2];
+  propMap = ldtCtrl[1];
+  ldtMap  = ldtCtrl[2];
 
   local sp = createSearchPath(ldtMap);
-  local status = treeSearch( src, topRec, sp, ldtList, key );
+  local status = treeSearch( src, topRec, sp, ldtCtrl, key );
 
   if( status == ST_FOUND ) then
-    rc = leafDelete( src, sp, topRec, ldtList, key );
+    rc = leafDelete( src, sp, topRec, ldtCtrl, key );
     if( rc == 0 ) then
       rc = closeAllSubrecs( src );
       if( rc < 0 ) then
@@ -4220,7 +4218,7 @@ local function treeDelete( src, topRec, ldtList, key )
   end
 
   GP=F and trace("[EXIT]<%s:%s>LdtSummary(%s) newValue(%s) rc(%s)",
-    MOD, meth, ldtSummaryString(ldtList), tostring(newValue), tostring(rc));
+    MOD, meth, ldtSummaryString(ldtCtrl), tostring(newValue), tostring(rc));
   return rc;
 end -- treeDelete()
 
@@ -4349,9 +4347,9 @@ local function localLListInsert( topRec, ldtBinName, newValue, createSpec )
     setupLdtBin( topRec, ldtBinName, createSpec );
   end
 
-  local ldtList = topRec[ ldtBinName ];
-  local propMap = ldtList[1];
-  local ldtMap  = ldtList[2];
+  local ldtCtrl = topRec[ ldtBinName ];
+  local propMap = ldtCtrl[1];
+  local ldtMap  = ldtCtrl[2];
   
   -- DESIGN NOTE: All "outer" functions, like this one, will create a
   -- "subrecContext" object, which will hold all of the open subrecords.
@@ -4379,11 +4377,11 @@ local function localLListInsert( topRec, ldtBinName, newValue, createSpec )
   if(( ldtMap[R_StoreState] == SS_COMPACT ) and
      ( totalCount >= ldtMap[R_Threshold] )) 
   then
-    convertList(src, topRec, ldtBinName, ldtList );
+    convertList(src, topRec, ldtBinName, ldtCtrl );
   end
  
   -- Call our local multi-purpose insert() to do the job.(Update Stats)
-  localInsert(src, topRec, ldtList, newValue, true );
+  localInsert(src, topRec, ldtCtrl, newValue, true );
 
   -- This is a debug "Tree Print" 
   -- GP=F and printTree( src, topRec, ldtBinName );
@@ -4450,9 +4448,9 @@ local function localLListSearch( topRec, ldtBinName, key, func, fargs )
   validateRecBinAndMap( topRec, ldtBinName, true );
   
   -- Extract the property map and control map from the ldt bin list.
-  local ldtList = topRec[ldtBinName];
-  local propMap = ldtList[1];
-  local ldtMap  = ldtList[2];
+  local ldtCtrl = topRec[ldtBinName];
+  local propMap = ldtCtrl[1];
+  local ldtMap  = ldtCtrl[2];
 
   -- Create our subrecContext, which tracks all open SubRecords during
   -- the call.  Then, allows us to close them all at the end.
@@ -4487,9 +4485,9 @@ local function localLListSearch( topRec, ldtBinName, key, func, fargs )
     -- Do the TREE Search
     GP=F and trace("[DEBUG]<%s:%s> Searching Tree", MOD, meth );
     local sp = createSearchPath(ldtMap);
-    rc = treeSearch( src, topRec, sp, ldtList, key );
+    rc = treeSearch( src, topRec, sp, ldtCtrl, key );
     if( rc == ST_FOUND ) then
-      rc = treeScan( src, resultList, topRec, sp, ldtList, key, func, fargs );
+      rc = treeScan( src, resultList, topRec, sp, ldtCtrl, key, func, fargs );
       if( rc < 0 or list.size( resultList ) == 0 ) then
           warn("[ERROR]<%s:%s> Tree Scan Problem: RC(%d) after a good search",
             MOD, meth, rc );
@@ -4538,9 +4536,9 @@ local function localLListDelete( topRec, binName, key )
   validateRecBinAndMap( topRec, binName, true );
   
   -- Extract the property map and control map from the ldt bin list.
-  ldtList = topRec[ binName ];
-  local propMap = ldtList[1];
-  local ldtMap  = ldtList[2];
+  ldtCtrl = topRec[ binName ];
+  local propMap = ldtCtrl[1];
+  local ldtMap  = ldtCtrl[2];
 
   -- Create our subrecContext, which tracks all open SubRecords during
   -- the call.  Then, allows us to close them all at the end.
@@ -4561,7 +4559,7 @@ local function localLListDelete( topRec, binName, key )
     end
   else
     GP=F and trace("[NOTICE]<%s:%s> Using >>>  TREE DELETE  <<<", MOD, meth);
-    rc = treeDelete(src, topRec, ldtList, key );
+    rc = treeDelete(src, topRec, ldtCtrl, key );
   end
 
   -- update stats if successful
@@ -4572,7 +4570,7 @@ local function localLListDelete( topRec, binName, key )
     ldtMap[R_TotalCount] = totalCount - 1;
     GP=F and trace("[DEBUG]: <%s:%s> itemCount(%d)", MOD, meth, itemCount );
   end
-  topRec[ binName ] = ldtList;
+  topRec[ binName ] = ldtCtrl;
   record.set_flags(topRec, binName, BF_LDT_BIN );--Must set every time
 
   -- Validate results -- if anything bad happened, then the record
@@ -4634,11 +4632,11 @@ local function localLdtDestroy( topRec, binName )
   validateRecBinAndMap( topRec, binName, true );
 
   -- Extract the property map and lso control map from the lso bin list.
-  local ldtList = topRec[ binName ];
-  local propMap = ldtList[1];
+  local ldtCtrl = topRec[ binName ];
+  local propMap = ldtCtrl[1];
 
   GP=F and trace("[STATUS]<%s:%s> propMap(%s) LDT Summary(%s)", MOD, meth,
-    tostring( propMap ), ldtSummaryString( ldtList ));
+    tostring( propMap ), ldtSummaryString( ldtCtrl ));
 
 
   -- Get the ESR and delete it -- if it exists.  If we have ONLY an initial
@@ -4851,9 +4849,9 @@ function create( topRec, ldtBinName, createSpec )
 
 --  -- Create and initialize the LDT MAP -- the main LDT structure
 --  -- initializeLdtCtrl() also assigns the map to the record bin.
---  local ldtList = initializeLdtCtrl( topRec, ldtBinName );
---  local propMap = ldtList[1];
---  local ldtMap  = ldtList[2];
+--  local ldtCtrl = initializeLdtCtrl( topRec, ldtBinName );
+--  local propMap = ldtCtrl[1];
+--  local ldtMap  = ldtCtrl[2];
 --
 --  -- If the user has passed in settings that override the defaults
 --  -- (the createSpec), then process that now.
@@ -4862,8 +4860,8 @@ function create( topRec, ldtBinName, createSpec )
 --    if( createSpecType == "string" ) then
 --      processModule( createSpec );
 --    elseif( createSpecType == "userdata" ) then
---      adjustLdtMap( ldtMap, createSpec ); -- ldtMap here, not ldtList
---      topRec[ldtBinName] = ldtList; -- Update after adjustment
+--      adjustLdtMap( ldtMap, createSpec ); -- ldtMap here, not ldtCtrl
+--      topRec[ldtBinName] = ldtCtrl; -- Update after adjustment
 --      record.set_flags(topRec, binName, BF_LDT_BIN );--Must set every time
 --    else
 --      warn("[WARNING]<%s:%s> Unknown Creation Object(%s)",
@@ -4872,7 +4870,7 @@ function create( topRec, ldtBinName, createSpec )
 --  end
 --
 --  GP=F and trace("[DEBUG]<%s:%s> LLIST after Init(%s)",
---   MOD, meth, ldtSummaryString( ldtList ) );
+--   MOD, meth, ldtSummaryString( ldtCtrl ) );
 --
 --  -- All done, store the record
 --  local rc;
@@ -5048,8 +5046,8 @@ function size( topRec, ldtBinName )
   validateRecBinAndMap( topRec, ldtBinName, true );
 
   -- Extract the property map and control map from the ldt bin list.
-  local ldtList = topRec[ ldtBinName ];
-  local propMap = ldtList[1];
+  local ldtCtrl = topRec[ ldtBinName ];
+  local propMap = ldtCtrl[1];
   local itemCount = propMap[PM_ItemCount];
 
   GP=F and trace("[EXIT]: <%s:%s> : size(%d)", MOD, meth, itemCount );
