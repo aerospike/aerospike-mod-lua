@@ -1,13 +1,11 @@
--- Large Map Operations
--- lmap.lua:  September 11, 2013
---
--- Module Marker: Keep this in sync with the stated version
-local MOD="lmap_2013_09_11.f"; -- the module name used for tracing
+-- Large Map (LMAP) Operations
+-- Track the data and iteration of the last update.
+local MOD="lmap_2013_09_18.c";
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
 -- amount of inter-version compatibility.
-local G_LDT_VERSION = 1.0;
+local G_LDT_VERSION = 1.1;
 
 -- ======================================================================
 -- || GLOBAL PRINT ||
@@ -185,9 +183,10 @@ local PM_SelfDigest            = 'D'; -- (Subrec): Digest of THIS Record
 -- Fields unique to lset & lmap 
 local M_StoreMode              = 'M';
 local M_StoreLimit             = 'L'; -- Used for Eviction (eventually)
-local M_Transform              = 't';
-local M_UnTransform            = 'u';
-local M_LdrEntryCountMax       = 'e';
+local M_UserModule             = 'P'; -- User's Lua file for overrides
+local M_Transform              = 't'; -- Transform Lua to Byte format
+local M_UnTransform            = 'u'; -- UnTransform from Byte to Lua format
+local M_LdrEntryCountMax       = 'e'; -- Max # of items in an LDR
 local M_LdrByteEntrySize       = 's';
 local M_LdrByteCountMax        = 'b';
 local M_StoreState             = 'S'; 
@@ -197,14 +196,14 @@ local M_TotalCount             = 'N';
 local M_Modulo                 = 'O';
 local M_ThreshHold             = 'H';
 local M_KeyFunction            = 'K'; -- User Supplied Key Extract Function
-local M_CompactNameList        = 'Q';--Simple Compact List -- before "dir mode"
+local M_CompactNameList        = 'n';--Simple Compact List -- before "dir mode"
 local M_CompactValueList       = 'v';--Simple Compact List -- before "dir mode"
 
 -- Fields specific to lmap in the standard mode only. In standard mode lmap 
 -- does not resemble lset, it looks like a fixed-size warm-list from lstack
 -- with a digest list pointing to LDR's. 
 
-local M_DigestList             = 'W';
+local M_DigestList             = 'W';-- The Directory of Hash Entries
 local M_TopFull                = 'F';
 local M_ListDigestCount        = 'l';
 local M_ListMax                = 'w';
@@ -227,7 +226,7 @@ local M_TopChunkEntryCount = 'A';
 -- inspection that we haven't reused a character.
 --
 -- A:                         a:                        0:
--- B:                         b:M_LdrByteCountMax       1:
+-- B:M_BinaryStoreSize        b:M_LdrByteCountMax       1:
 -- C:                         c:                        2:
 -- D:                         d:                        3:
 -- E:                         e:M_LdrEntryCountMax      4:
@@ -236,18 +235,18 @@ local M_TopChunkEntryCount = 'A';
 -- H:M_Threshold              h:                        7:
 -- I:                         i:                        8:
 -- J:                         j:                        9:
--- K:                         k:                  
--- L:                         l:M_ListDigestCount
+-- K:M_KeyFunction            k:                  
+-- L:M_StoreLimit             l:M_ListDigestCount
 -- M:M_StoreMode              m:
--- N:                         n:
+-- N:M_TotalCount             n:M_CompactNameList
 -- O:                         o:
--- P:                         p:
+-- P:M_UserModule             p:
 -- Q:                         q:
 -- R:M_ColdDataRecCount       r:
 -- S:M_StoreLimit             s:M_LdrByteEntrySize
 -- T:                         t:M_Transform
 -- U:                         u:M_UnTransform
--- V:                         v:
+-- V:                         v:M_CompactValueList
 -- W:M_DigestList             w:                     
 -- X:                         x:                    
 -- Y:                         y:
@@ -301,6 +300,273 @@ local BF_LDT_BIN     = 1; -- Main LDT Bin (Restricted)
 local BF_LDT_HIDDEN  = 2; -- LDT Bin::Set the Hidden Flag on this bin
 local BF_LDT_CONTROL = 4; -- Main LDT Control Bin (one per record)
 
+
+-- ======================================================================
+-- <USER FUNCTIONS> - <USER FUNCTIONS> - <USER FUNCTIONS> - <USER FUNCTIONS>
+-- ======================================================================
+-- We have several different situations where we need to look up a user
+-- defined function:
+-- (*) Object Transformation (e.g. compression)
+-- (*) Object UnTransformation
+-- (*) Predicate Filter (perform additional predicate tests on an object)
+--
+-- These functions are passed in by name (UDF name, Module Name), so we
+-- must check the existence/validity of the module and UDF each time we
+-- want to use them.  Furthermore, we want to centralize the UDF checking
+-- into one place -- so on entry to those LDT functions that might employ
+-- these UDFs (e.g. insert, filter), we'll set up either READ UDFs or
+-- WRITE UDFs and then the inner routines can call them if they are
+-- non-nil.
+-- ======================================================================
+local G_Filter = nil;
+local G_Transform = nil;
+local G_UnTransform = nil;
+local G_FunctionArgs = nil;
+local G_KeyFunction = nil;
+
+-- <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> 
+-- -----------------------------------------------------------------------
+-- resetPtrs()
+-- -----------------------------------------------------------------------
+-- Reset the UDF Ptrs to nil.
+-- -----------------------------------------------------------------------
+local function resetUdfPtrs()
+  G_Filter = nil;
+  G_Transform = nil;
+  G_UnTransform = nil;
+  G_FunctionArgs = nil;
+  G_KeyFunction = nil;
+end -- resetPtrs()
+
+-- <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> 
+-- -----------------------------------------------------------------------
+-- setKeyFunction()
+-- -----------------------------------------------------------------------
+-- The function that extracts a key value from a complex object can
+-- be in the user's "creation" module, or it can be in the FunctionTable.
+-- The "Key" Function may be slightly misleading, depending on the LDT
+-- that is being used.
+-- (*) LSET: The KeyFunction extracts a unique subset from a complex object
+--           that can be compared (equals only). For LSET, a KeyFunction is
+--           not required, as a complex object can always be converted to a
+--           string for an equals compare.
+-- (*) LMAP: The KeyFunction is not used, since values are found with "name",
+--           which must be an atomic (number or string) value.
+-- (*) LLIST: The KeyFunction extracts an atomic value from a complex object
+--            that can be ordered.  For LLIST, if the object being stored is
+--            complex, then it is REQUIRED that there is a valid KeyFunction
+--            to extract an atomic value that can be compared and ordered.
+--            The type of the FIRST INSERT determines the type of the LLIST.
+-- (*) LSTACK: For regular LSTACK, there is no need for a KeyFunction.
+--            However, for TIMESTACK, a special flavor of LSTACK, the 
+--            KeyFunction extracts a TIME value from the object, which must
+--            be a number that can be used in an ordered compare.
+-- Parms:
+-- (*) ldtMap: The basic control info
+-- (*) required: True when we must have a valid KeyFunction, such as for
+--               LLIST.
+-- -----------------------------------------------------------------------
+local function setKeyFunction( ldtMap, required )
+  local meth = "setKeyFunction()";
+
+  -- Look in the Create Module first, then check the Function Table.
+  local createModule = ldtMap[M_UserModule];
+  local keyFunction = ldtMap[M_KeyFunction];
+  G_KeyFunction = nil;
+  if( keyFunction ~= nil ) then
+    if( type(keyFunction) ~= "string" or filter == "" ) then
+      warn("[ERROR]<%s:%s> Bad KeyFunction Name: type(%s) filter(%s)",
+        MOD, meth, type(filter), tostring(filter) );
+      error( ldte.ERR_KEY_FUN_BAD );
+    else
+      -- Ok -- so far, looks like we have a valid key function name, 
+      -- Look in the Create Module, and if that's not found, then look
+      -- in the system function table.
+      if( G_KeyFunction == nil and createModule ~= nil ) then
+        local createModuleRef = require(createModule);
+        if( createModuleRef ~= nil and createModuleRef[filter] ~= nil ) then
+          G_KeyFunction = createModuleRef[keyFunction];
+        end
+      end
+
+      -- Last we try the UdfFunctionTable, In case the user wants to employ
+      -- one of the standard Key Functions.
+      if( G_KeyFunction == nil and functionTable ~= nil ) then
+        G_KeyFunction = functionTable[keyFunction];
+      end
+
+      -- If we didn't find anything, BUT the user supplied a function name,
+      -- then we have a problem.  We have to complain.
+      if( G_KeyFunction == nil ) then
+        warn("[ERROR]<%s:%s> KeyFunction not found: type(%s) KeyFunction(%s)",
+          MOD, meth, type(keyFunction), tostring(keyFunction) );
+        error( ldte.ERR_KEY_FUN_NOT_FOUND );
+      end
+    end
+  elseif( required == true ) then
+    warn("[ERROR]<%s:%s> Key Function is Required for LLIST Complex Objects",
+      MOD, meth );
+    error( ldte.ERR_KEY_FUN_NOT_FOUND );
+  end
+end -- setKeyFunction()
+
+-- -----------------------------------------------------------------------
+-- setReadFunctions()()
+-- -----------------------------------------------------------------------
+-- Set the Filter and UnTransform Function pointers for Reading values.
+-- We follow this hierarchical lookup pattern for the read filter function:
+-- (*) User Supplied Module (might be different from create module)
+-- (*) Create Module
+-- (*) UdfFunctionTable
+--
+-- We follow this lookup pattern for the UnTransform function:
+-- (*) Create Module
+-- (*) UdfFunctionTable
+-- Notice that it would be generally dangerous to use some sort of ad hoc
+-- UnTransform filter -- the Transform/UnTransform should be defined at
+-- the LDT Instance Creation, and then left alone.
+--
+-- -----------------------------------------------------------------------
+local function setReadFunctions( ldtMap, userModule, filter, filterArgs )
+  local meth = "setReadFunctions()";
+  GP=E and trace("[ENTER]<%s:%s> Process Filter(%s)",
+    MOD, meth, tostring(filter));
+
+  -- Do the Filter First. If not nil, then process.  Complain if things
+  -- go badly.
+  local createModule = ldtMap[M_UserModule];
+  G_Filter = nil;
+  G_FunctionArgs = filterArgs;
+  if( filter ~= nil ) then
+    if( type(filter) ~= "string" or filter == "" ) then
+      warn("[ERROR]<%s:%s> Bad filter Name: type(%s) filter(%s)",
+        MOD, meth, type(filter), tostring(filter) );
+      error( ldte.ERR_FILTER_BAD );
+    else
+      -- Ok -- so far, looks like we have a valid filter name, 
+      if( userModule ~= nil and type(userModule) == "string" ) then
+        local userModuleRef = require(userModule);
+        if( userModuleRef ~= nil and userModuleRef[filter] ~= nil ) then
+          G_Filter = userModuleRef[filter];
+        end
+      end
+      -- If we didn't find a good filter, keep looking.  Try the createModule.
+      if( G_Filter == nil and createModule ~= nil ) then
+        local createModuleRef = require(createModule);
+        if( createModuleRef ~= nil and createModuleRef[filter] ~= nil ) then
+          G_Filter = createModuleRef[filter];
+        end
+      end
+      -- Last we try the UdfFunctionTable, In case the user wants to employ
+      -- one of the standard Functions.
+      if( G_Filter == nil and functionTable ~= nil ) then
+        G_Filter = functionTable[filter];
+      end
+
+      -- If we didn't find anything, BUT the user supplied a function name,
+      -- then we have a problem.  We have to complain.
+      if( G_Filter == nil ) then
+        warn("[ERROR]<%s:%s> filter not found: type(%s) filter(%s)",
+          MOD, meth, type(filter), tostring(filter) );
+        error( ldte.ERR_FILTER_NOT_FOUND );
+      end
+    end
+  end -- if filter not nil
+
+  -- That wraps up the Filter handling.  Now do  the UnTransform Function.
+  local untrans = ldtMap[M_UnTransform];
+  G_UnTransform = nil;
+  if( untrans ~= nil ) then
+    if( type(untrans) ~= "string" or untrans == "" ) then
+      warn("[ERROR]<%s:%s> Bad UnTransformation Name: type(%s) function(%s)",
+        MOD, meth, type(untrans), tostring(untrans) );
+      error( ldte.ERR_UNTRANS_FUN_BAD );
+    else
+      -- Ok -- so far, looks like we have a valid untransformation func name, 
+      if( createModule ~= nil ) then
+        local createModuleRef = require(createModule);
+        if( createModuleRef ~= nil and createModuleRef[untrans] ~= nil ) then
+          G_UnTransform = createModuleRef[untrans];
+        end
+      end
+      -- Last we try the UdfFunctionTable, In case the user wants to employ
+      -- one of the standard Functions.
+      if( G_UnTransform == nil and functionTable ~= nil ) then
+        G_UnTransform = functionTable[untrans];
+      end
+
+      -- If we didn't find anything, BUT the user supplied a function name,
+      -- then we have a problem.  We have to complain.
+      if( G_UnTransform == nil ) then
+        warn("[ERROR]<%s:%s> UnTransform Func not found: type(%s) Func(%s)",
+          MOD, meth, type(untrans), tostring(untrans) );
+        error( ldte.ERR_UNTRANS_FUN_NOT_FOUND );
+      end
+    end
+  end -- if untransform not nil
+
+  GP=E and trace("[EXIT]<%s:%s>", MOD, meth );
+end -- setReadFunctions()
+
+
+-- <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> 
+-- -----------------------------------------------------------------------
+-- setWriteFunctions()()
+-- -----------------------------------------------------------------------
+-- Set the Transform Function pointer for Writing values.
+-- We follow a hierarchical lookup pattern for the transform function.
+-- (*) Create Module
+-- (*) UdfFunctionTable
+--
+-- -----------------------------------------------------------------------
+local function setWriteFunctions( ldtMap )
+  local meth = "setWriteFunctions()";
+  GP=E and trace("[ENTER]<%s:%s> Process Filter(%s)",
+    MOD, meth, tostring(filter));
+
+  -- Look in the create module first, then the UdfFunctionTable to find
+  -- the transform function (if there is one).
+  local createModule = ldtMap[M_UserModule];
+  local trans = ldtMap[M_Transform];
+  G_Transform = nil;
+  if( trans ~= nil ) then
+    if( type(trans) ~= "string" or trans == "" ) then
+      warn("[ERROR]<%s:%s> Bad Transformation Name: type(%s) function(%s)",
+        MOD, meth, type(trans), tostring(trans) );
+      error( ldte.ERR_TRANS_FUN_BAD );
+    else
+      -- Ok -- so far, looks like we have a valid transformation func name, 
+      if( createModule ~= nil ) then
+        local createModuleRef = require(createModule);
+        if( createModuleRef ~= nil and createModuleRef[trans] ~= nil ) then
+          G_Transform = createModuleRef[trans];
+        end
+      end
+      -- Last we try the UdfFunctionTable, In case the user wants to employ
+      -- one of the standard Functions.
+      if( G_Transform == nil and functionTable ~= nil ) then
+        G_Transform = functionTable[trans];
+      end
+
+      -- If we didn't find anything, BUT the user supplied a function name,
+      -- then we have a problem.  We have to complain.
+      if( G_Transform == nil ) then
+        warn("[ERROR]<%s:%s> Transform Func not found: type(%s) Func(%s)",
+          MOD, meth, type(trans), tostring(trans) );
+        error( ldte.ERR_TRANS_FUN_NOT_FOUND );
+      end
+    end
+  end
+
+  GP=E and trace("[EXIT]<%s:%s>", MOD, meth );
+end -- setWriteFunctions()
+
+-- ======================================================================
+-- <USER FUNCTIONS> - <USER FUNCTIONS> - <USER FUNCTIONS> - <USER FUNCTIONS>
+-- ======================================================================
+
+
+-- -----------------------------------------------------------------------
 -- ------------------------------------------------------------------------
 -- =============================
 -- Begin SubRecord Function Area (MOVE THIS TO LDT_COMMON)
@@ -710,11 +976,12 @@ local function ldtSummary( ldtCtrl )
   resultMap.StoreMode            = ldtMap[M_StoreMode];
   resultMap.Transform            = ldtMap[M_Transform];
   resultMap.UnTransform          = ldtMap[M_UnTransform];
+  resultMap.UserModule           = ldtMap[M_UserModule];
   resultMap.BinaryStoreSize      = ldtMap[M_BinaryStoreSize];
   resultMap.KeyType              = ldtMap[M_KeyType];
   resultMap.TotalCount	         = ldtMap[M_TotalCount];		
-  resultMap.Modulo 		 = ldtMap[M_Modulo];
-  resultMap.ThreshHold		 = ldtMap[M_ThreshHold];
+  resultMap.Modulo 		         = ldtMap[M_Modulo];
+  resultMap.ThreshHold		     = ldtMap[M_ThreshHold];
   
   -- LSO Data Record Chunk Settings:
   resultMap.LdrEntryCountMax     = ldtMap[M_LdrEntryCountMax];
@@ -1120,9 +1387,8 @@ local function adjustLdtMap( ldtCtrl, argListMap )
   return ldtCtrl;
 end -- adjustLdtMap
 
-
 -- ======================================================================
--- processModule( moduleName )
+-- processModule()
 -- ======================================================================
 -- We expect to see several things from a user module.
 -- (*) An adjust_settings() function: where a user overrides default settings
@@ -1135,23 +1401,35 @@ end -- adjustLdtMap
 local function processModule( ldtCtrl, moduleName )
   local meth = "processModule()";
   GP=E and trace("[ENTER]<%s:%s> Process User Module(%s)", MOD, meth,
-  tostring( moduleName ));
+    tostring( moduleName ));
 
   local propMap = ldtCtrl[1];
   local ldtMap = ldtCtrl[2];
 
-  local userModule = require(moduleName);
-  if( userModule == nil ) then
-    warn("[ERROR]<%s:%s> User Module(%s) is not valid", MOD, meth, moduleName);
-  else
-    local userSettings =  userModule[G_SETTINGS];
-    if( userSettings ~= nil ) then
-      userSettings( ldtMap ); -- hope for the best.
-      ldtMap[M_UserModule] = moduleName;
+  if( moduleName ~= nil ) then
+    if( type(moduleName) ~= "string" ) then
+      warn("[ERROR]<%s:%s>User Module(%s) not valid::wrong type(%s)",
+        MOD, meth, tostring(moduleName), type(moduleName));
+      error( ldte.ERR_USER_MODULE_BAD );
     end
+
+    local userModule = require(moduleName);
+    if( userModule == nil ) then
+      warn("[ERROR]<%s:%s>User Module(%s) not valid", MOD, meth, moduleName);
+      error( ldte.ERR_USER_MODULE_NOT_FOUND );
+    else
+      local userSettings =  userModule[G_SETTINGS];
+      if( userSettings ~= nil ) then
+        userSettings( ldtMap ); -- hope for the best.
+        ldtMap[M_UserModule] = moduleName;
+      end
+    end
+  else
+    warn("[ERROR]<%s:%s>User Module is NIL", MOD, meth );
   end
+
   GP=E and trace("[EXIT]<%s:%s> Module(%s) LDT CTRL(%s)", MOD, meth,
-    tostring( moduleName ), ldtSummary(ldtCtrl));
+    tostring( moduleName ), ldtSummaryString(ldtCtrl));
 
 end -- processModule()
 
@@ -1239,7 +1517,7 @@ end -- searchList()
 -- in this bin.
 -- ALSO:: Caller write out the LDT bin after this function returns.
 -- ======================================================================
-local function setupLdtBin( topRec, ldtBinName, createSpec ) 
+local function setupLdtBin( topRec, ldtBinName, userModule ) 
   local meth = "setupLdtBin()";
   GP=E and trace("[ENTER]<%s:%s> binName(%s)",MOD,meth,tostring(ldtBinName));
 
@@ -1251,16 +1529,16 @@ local function setupLdtBin( topRec, ldtBinName, createSpec )
   record.set_type( topRec, RT_LDT ); -- LDT Type Rec
   
   -- If the user has passed in settings that override the defaults
-  -- (the createSpec), then process that now.
-  if( createSpec ~= nil )then
-    local createSpecType = type(createSpec);
+  -- (the userModule), then process that now.
+  if( userModule ~= nil )then
+    local createSpecType = type(userModule);
     if( createSpecType == "string" ) then
-      processModule( createSpec );
+      processModule( userModule );
     elseif( createSpecType == "userdata" ) then
-      adjustLdtMap( ldtMap, createSpec );
+      adjustLdtMap( ldtMap, userModule );
     else
       warn("[WARNING]<%s:%s> Unknown Creation Object(%s)",
-        MOD, meth, tostring( createSpec ));
+        MOD, meth, tostring( userModule ));
     end
   end
 
@@ -2250,18 +2528,6 @@ local function simpleScanList(topRec, ldtBinName, resultMap, newName, newValue,
   local valueList = ldtMap[M_CompactValueList]; 
   
   local rc = 0;
-  -- Check once for the transform/untransform functions -- so we don't need
-  -- to do it inside the loop.
-  local transform = nil;
-  local unTransform = nil;
-  
-  if ldtMap[M_Transform] ~= nil then
-    transform = functionTable[ldtMap[M_Transform]];
-  end
-
-  if ldtMap[M_UnTransform] ~= nil then
-    unTransform = functionTable[ldtMap[M_UnTransform]];
-  end
 
   -- Scan the list for the item, return true if found,
   -- Later, we may return a set of things 
@@ -2519,13 +2785,16 @@ local function scanList( topRec, ldtBinName, resultMap, newName, newValue,
   local propMap = ldtCtrl[1]; 
   local ldtMap = ldtCtrl[2];
 
-  GP=F and info(" !!!!!! scanList:  Key-Type: %s !!!!!", tostring(ldtMap[M_KeyType]));
+  GP=F and trace("[DEBUG]<%s:%s> Key-Type(%s)",
+    MOD, meth, tostring(ldtMap[M_KeyType]));
+
+  -- Set up the functions for UnTransform and Filter.
+  setReadFunctions( ldtMap, userModule, filter, fargs );
+
   if ldtMap[M_KeyType] == KT_ATOMIC then
-    return simpleScanList( topRec, ldtBinName, resultMap, newName, newValue, 
-       flag, userModule, filter, fargs ); 
+    return simpleScanList(topRec,ldtBinName,resultMap,newName,newValue,flag);
   else
-    return complexScanList( topRec, ldtBinName, resultMap, newName, newValue, 
-       flag, userModule, filter, fargs ); 
+    return complexScanList(topRec,ldtBinName,resultMap,newName,newValue,flag);
   end
 end
 
@@ -2851,7 +3120,7 @@ local function
 localLMapInsert( topRec, ldtBinName, newName, newValue, createSpec )
   local meth = "localLMapInsert()";
    
-  GP=E and trace("[ENTRY]<%s:%s> Bin(%s) name(%s) value(%s) spec(%s)",
+  GP=E and trace("[ENTRY]<%s:%s> Bin(%s) name(%s) value(%s) module(%s)",
     MOD, meth, tostring(ldtBinName), tostring(newName),tostring(newValue),
     tostring(createSpec) );
 
@@ -2872,6 +3141,10 @@ localLMapInsert( topRec, ldtBinName, newName, newValue, createSpec )
   local ldtCtrl = topRec[ldtBinName]; -- The main lmap
   local propMap = ldtCtrl[1]; 
   local ldtMap = ldtCtrl[2]; 
+
+  -- Set up the Read/Write Functions (KeyFunction, Transform, Untransform)
+  setReadFunctions( ldtMap, nil, nil, nil );
+  setWriteFunctions( ldtMap );
   
   -- When we're in "Compact" mode, before each insert, look to see if 
   -- it's time to rehash our single bin into all bins.
@@ -2930,6 +3203,9 @@ local function ldrDeleteList(topRec, ldtBinName, ldrChunkRec, listIndex,
   local ldtMap = ldtCtrl[2];
   local binName = propMap[PM_BinName];
   local self_digest = record.digest( ldrChunkRec ); 
+
+  -- Set up the Read/Write Functions (KeyFunction, Transform, Untransform)
+  setReadFunctions( ldtMap, nil, nil, nil );
 
   -- These 2 get assigned in lmapLdrListChunkCreate() to point to the ctrl-map. 
   local ldrNameList =  ldrChunkRec[LDR_NLIST_BIN];
@@ -3040,9 +3316,9 @@ local function ldrDeleteList(topRec, ldtBinName, ldrChunkRec, listIndex,
 end -- ldrDeleteList()
 
 -- ==========================================================================
-
+-- ==========================================================================
 local function localLMapDelete( topRec, ldtBinName, searchValue,
-                          filter, fargs )
+                          userModule, filter, fargs )
   local meth = "localLMapDelete()";
                             
   GP=E and info("[ENTER]:<%s:%s> Bin-Name(%s) Delete-Value(%s) ",
@@ -3055,19 +3331,13 @@ local function localLMapDelete( topRec, ldtBinName, searchValue,
   -- Some simple protection of faulty records or bad bin names
   validateRecBinAndMap( topRec, ldtBinName, true );
 
-  -- Check that the Set Structure is already there, otherwise, error
-  if( topRec[ldtBinName] == nil ) then
-    GP=E and info("[ERROR EXIT]: <%s:%s> LMapCtrlBin does not Exist",
-                   MOD, meth );
-     error( ldte.ERR_INTERNAL );
-  end
-  
-    -- When we're in "Compact" mode, before each insert, look to see if 
-  -- it's time to rehash our single bin into all bins.
   local ldtCtrl = topRec[ldtBinName]; -- The main lmap
   local propMap = ldtCtrl[1]; 
   local ldtMap = ldtCtrl[2]; 
   local index = 0; 
+
+  -- Set up the Read functions (filter, unTransform)
+  setReadFunctions( ldtMap, userModule, filter, fargs );
   
   if ldtMap[M_StoreState] == SS_COMPACT then 
     -- local binList = ldtMap[M_CompactList];
@@ -3087,7 +3357,7 @@ local function localLMapDelete( topRec, ldtBinName, searchValue,
     elseif rc == 0 and map.size( resultMap ) == 0 then 
       -- This item does not exist
       -- return a not-found error  
-            error( ldte.ERR_DELETE );
+      error( ldte.ERR_DELETE );
     end
 	  
     return rc;
@@ -3096,64 +3366,67 @@ local function localLMapDelete( topRec, ldtBinName, searchValue,
   	GP=E and info("[ENTER]:<%s:%s> Doing LMAP delete in regular mode ",
         MOD, meth );
   	
-        local digestlist = ldtMap[M_DigestList]; 
+    local digestlist = ldtMap[M_DigestList]; 
   	
-  	GP=F and info(" DigestList %s Size: %s", tostring(digestlist), tostring(list.size(digestlist)));
+  	GP=F and info(" DigestList %s Size: %s",
+      tostring(digestlist), tostring(list.size(digestlist)));
   	
   	-- First obtain the hash for this entry
   	local digest_bin = computeSetBin( searchValue, ldtMap );  	
 	
         -- sanity check for absent entries 
 	if  digestlist[digest_bin] == 0 then 
-	  warn("[ERROR]: <%s:%s>: Digest-List index is empty for this value %s ", MOD, meth, tostring(searchValue));
-          error( ldte.ERR_INTERNAL );
+	  warn("[ERROR]: <%s:%s>: Digest-List index is empty for this value %s ",
+        MOD, meth, tostring(searchValue));
+      error( ldte.ERR_INTERNAL );
 	end 
 	
 	local stringDigest = tostring( digestlist[digest_bin] );
 	local src = createSubrecContext();
-	
-        local IndexLdrChunk = openSubrec( src, topRec, stringDigest );
+    local IndexLdrChunk = openSubrec( src, topRec, stringDigest );
    	
 	if IndexLdrChunk == nil then
  	  -- sanity check 
-          warn("[ERROR]: <%s:%s>: IndexLdrChunk nil or empty", MOD, meth);
-          error( ldte.ERR_INTERNAL );
-        end
+      warn("[ERROR]: <%s:%s>: IndexLdrChunk nil or empty", MOD, meth);
+      error( ldte.ERR_INTERNAL );
+    end
     
-        local ldrMap = IndexLdrChunk[LDR_CTRL_BIN];
-        local ldrValueList = IndexLdrChunk[LDR_VLIST_BIN];
-        local ldrNameList = IndexLdrChunk[LDR_NLIST_BIN];
+    local ldrMap = IndexLdrChunk[LDR_CTRL_BIN];
+    local ldrValueList = IndexLdrChunk[LDR_VLIST_BIN];
+    local ldrNameList = IndexLdrChunk[LDR_NLIST_BIN];
 
-        GP=F and info("[DEBUG]: <%s:%s> !!!!!!!!!! NList(%s) VList(%s)",
+    GP=F and info("[DEBUG]: <%s:%s> !!!!!!!!!! NList(%s) VList(%s)",
              MOD, meth, tostring(ldrNameList), tostring( ldrValueList ));
 
     
-       local delChunkDigest = record.digest( IndexLdrChunk );
+    local delChunkDigest = record.digest( IndexLdrChunk );
     
-       GP=F and info("!!!!!!!!! Find match digest value: %s", tostring(delChunkDigest));
+    GP=F and info("!!!!!!!!! Find match digest value: %s",
+      tostring(delChunkDigest));
     
-       -- HACK : TODO : Fix this number to list conversion  
-       local entryList = list(); 
-       list.append(entryList, searchValue); 
+    -- HACK : TODO : Fix this number to list conversion  
+    local entryList = list(); 
+    list.append(entryList, searchValue); 
   
-       local totalEntryCount = list.size( entryList );
-       GP=F and info("[DEBUG]: <%s:%s> Calling ldrDeleteList: List(%s) Count: %s",
-                       MOD, meth, tostring( entryList ), tostring(totalEntryCount));
+    local totalEntryCount = list.size( entryList );
+    GP=F and info("[DEBUG]: <%s:%s> Calling ldrDeleteList: List(%s) Count: %s",
+      MOD, meth, tostring( entryList ), tostring(totalEntryCount));
   
-       -- The magical function that is going to fix our deletion :)
-       local num_deleted = ldrDeleteList(topRec, ldtBinName, IndexLdrChunk, 1, entryList, filter, fargs);
+     -- The magical function that is going to fix our deletion :)
+    local num_deleted =
+      ldrDeleteList(topRec, ldtBinName, IndexLdrChunk, 1, entryList );
     
-       if( num_deleted == -1 ) then
-         warn("[ERROR]: <%s:%s>: Internal Error in Chunk Delete", MOD, meth);
-         error( ldte.ERR_DELETE );
-       end
+    if( num_deleted == -1 ) then
+      warn("[ERROR]: <%s:%s>: Internal Error in Chunk Delete", MOD, meth);
+      error( ldte.ERR_DELETE );
+    end
   
-       rc = closeAllSubrecs( src );
-       local itemsLeft = totalEntryCount - num_deleted;
+    rc = closeAllSubrecs( src );
+    local itemsLeft = totalEntryCount - num_deleted;
 
-      if itemsLeft > 0 then  
-         warn("[ERROR]: <%s:%s>: Some items might not have been deleted from lmap list-size : %d deleted-items : %d", 
-	  	      MOD, meth, list.size( entryList ),  itemsLeft);
+     if itemsLeft > 0 then  
+       warn("[ERROR]: <%s:%s>: Some items might not have been deleted from lmap list-size : %d deleted-items : %d", 
+            MOD, meth, list.size( entryList ),  itemsLeft);
       end 
     GP=F and info("[DEBUG]: <%s:%s> Chunk Summary before storage(%s) Digest-List %s ",
     MOD, meth, ldrChunkSummary( IndexLdrChunk ), tostring(ldtMap[M_DigestList]));
@@ -3165,7 +3438,8 @@ end -- localLMapDelete()
 
 -- ==========================================================================
 -- ==========================================================================
-local function ldrSearchList(topRec, ldtBinName, resultMap, ldrChunkRec, listIndex, entryList, userModule, filter, fargs)
+local function ldrSearchList(topRec, ldtBinName, resultMap, ldrChunkRec,
+                listIndex, entryList )
 
   local meth = "ldrSearchList()";
   GP=E and info("[ENTER]<%s:%s> Index(%d) List(%s)",
@@ -3203,8 +3477,8 @@ local function ldrSearchList(topRec, ldtBinName, resultMap, ldrChunkRec, listInd
     for i = 0, list.size( ldrNameList ), 1 do
       if ldrNameList[i] ~= nil then 
         local resultFiltered = ldrValueList[i];
-        if filter ~= nil and fargs ~= nil then
-          resultFiltered = functionTable[filter]( ldrValueList[i], fargs );
+        if( G_Filter ~= nil ) then
+          resultFiltered = G_Filter( ldrValueList[i], G_FunctionArgs );
         else
       	  resultFiltered = ldrValueList[i];
         end
@@ -3241,11 +3515,11 @@ local function ldrSearchList(topRec, ldtBinName, resultMap, ldrChunkRec, listInd
 
   for j = 0, list.size( entryList ), 1 do
     for i = 0, list.size( ldrNameList ), 1 do
-    if ldrNameList[i] ~= nil then 
+      if ldrNameList[i] ~= nil then 
         if(tostring(ldrNameList[i]) == tostring(entryList[j])) then 
           local resultFiltered;
-	  if filter ~= nil and fargs ~= nil then
-            resultFiltered = functionTable[filter]( ldrValueList[i], fargs );
+          if( G_Filter ~= nil ) then
+            resultFiltered = G_Filter( ldrValueList[i], G_FunctionArgs );
     	  else
       	    resultFiltered = ldrValueList[i];
     	  end
@@ -3290,29 +3564,19 @@ local function simpleScanListAll(topRec, binName, resultMap, filter, fargs)
   local unTransform = nil;
   local retValue = nil;
 
-  -- Check once for the transform/untransform functions -- so we don't need
-  -- to do it inside the loop.
-  if ldtMap[M_Transform] ~= nil then
-    transform = functionTable[ldtMap[M_Transform]];
-  end
-
-  if ldtMap[M_UnTransform] ~= nil then
-    unTransform = functionTable[ldtMap[M_UnTransform]];
-  end
-   
   GP=F and info(" Parsing through :%s ", tostring(binName))
 
   if nameList ~= nil then
     for i = 1, list.size( nameList ), 1 do
       if nameList[i] ~= nil and nameList[i] ~= FV_EMPTY then
         retValue = valueList[i]; 
-        if unTransform ~= nil then
-          retValue = unTransform( valueList[i] );
+        if G_UnTransform ~= nil then
+          retValue = G_UnTransform( valueList[i] );
         end
 
         local resultFiltered;
-        if filter ~= nil and fargs ~= nil then
-          resultFiltered = functionTable[filter]( retValue, fargs );
+        if( G_Filter ~= nil ) then
+          resultFiltered = G_Filter( retValue, G_FunctionArgs );
         else
           resultFiltered = retValue;
         end
@@ -3411,7 +3675,7 @@ end -- simpleDumpListAll
 -- using the compare function, to write a new complexScanListAll()  
 --
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
-local function complexScanListAll(topRec, binName, resultMap, filter, fargs) 
+local function complexScanListAll(topRec, binName, resultMap )
   local meth = "complexScanListAll()";
   GP=E and info("[ENTER]: <%s:%s> Appending all the elements of List ",
                  MOD, meth)
@@ -3427,33 +3691,22 @@ local function complexScanListAll(topRec, binName, resultMap, filter, fargs)
   local unTransform = nil;
   local retValue = nil;
 
-  -- Check once for the transform/untransform functions -- so we don't need
-  -- to do it inside the loop.
-  if ldtMap[M_Transform] ~= nil then
-    transform = functionTable[ldtMap[M_Transform]];
-  end
-
-  if ldtMap[M_UnTransform] ~= nil then
-    unTransform = functionTable[ldtMap[M_UnTransform]];
-  end
-   
   GP=F and info(" Parsing through :%s ", tostring(binName))
 
   if nameList ~= nil then
     for i = 1, list.size( nameList ), 1 do
       if nameList[i] ~= nil and nameList[i] ~= FV_EMPTY then
         retValue = valueList[i]; 
-	if unTransform ~= nil then
-	  retValue = unTransform( valueList[i] );
-	end
-
+        if G_UnTransform ~= nil then
+          retValue = G_UnTransform( valueList[i] );
+        end
         local resultFiltered;
 
-	if filter ~= nil and fargs ~= nil then
- 	  resultFiltered = functionTable[filter]( retValue, fargs );
-	else
-      resultFiltered = retValue;
-    end
+        if( G_Filter ~= nil ) then
+          resultFiltered = G_Filter( retValue, G_FunctionArgs );
+        else
+          resultFiltered = retValue;
+        end
     -- local newString = nameList[i]..":"..resultFiltered; 
 	-- list.append( resultList, newString );
     resultMap[nameList[i]] = resultFiltered;
@@ -3539,32 +3792,37 @@ complexDumpListAll(topRec, resultMap, ldtCtrl, binName, filter, fargs)
 --
 end -- complexDumpListAll
 
-local function localLMapSearchAll(topRec,ldtBinName,filter,fargs)
-  
+-- =======================================================================
+-- =======================================================================
+local function localLMapSearchAll(topRec,ldtBinName,userModule,filter,fargs)
   local meth = "localLMapSearchAll()";
   rc = 0; -- start out OK.
   GP=E and info("[ENTER]: <%s:%s> Bin-Name: %s Search for Value(%s)",
                  MOD, meth, tostring(ldtBinName), tostring( searchValue ) );
                  
+  -- Validate the topRec, the bin and the map.  If anything is weird, then
+  -- this will kick out with a long jump error() call.
+  validateRecBinAndMap( topRec, ldtBinName, true );
+
   local ldtCtrl = topRec[ldtBinName]; -- The main lmap
   local propMap = ldtCtrl[1]; 
   local ldtMap = ldtCtrl[2]; 
   local binName = ldtBinName;
   local resultMap = map();
-  
-  -- Validate the topRec, the bin and the map.  If anything is weird, then
-  -- this will kick out with a long jump error() call.
-  validateRecBinAndMap( topRec, ldtBinName, true );
+
+  -- Set up the Read Functions (UnTransform, Filter)
+  setReadFunctions( ldtMap, userModule, filter, fargs );
 
   if ldtMap[M_StoreState] == SS_COMPACT then 
     -- Find the appropriate bin for the Search value
-    GP=F and info(" !!!!!! Compact Mode LMAP Search Key-Type: %s !!!!!", tostring(ldtMap[M_KeyType]));
+    GP=F and info(" !!!!!! Compact Mode LMAP Search Key-Type: %s !!!!!",
+      tostring(ldtMap[M_KeyType]));
     -- local binList = ldtMap[M_CompactList];
 	  
     if ldtMap[M_KeyType] == KT_ATOMIC then
-      rc = simpleScanListAll(topRec, binName, resultMap, filter, fargs) 
+      rc = simpleScanListAll(topRec, binName, resultMap );
     else
-      rc = complexScanListAll(topRec, binName, resultMap, filter, fargs)
+      rc = complexScanListAll(topRec, binName, resultMap );
     end
 	
     GP=E and info("[EXIT]: <%s:%s>: Search Returns (%s)",
@@ -3582,8 +3840,7 @@ local function localLMapSearchAll(topRec,ldtBinName,filter,fargs)
       if digestlist[i] ~= 0 then 
         local stringDigest = tostring( digestlist[i] );
         local IndexLdrChunk = openSubrec( src, topRec, stringDigest );
-        GP=F and info("[DEBUG]: <%s:%s> Calling ldrSearchList: List(%s)",
-			           MOD, meth, tostring( entryList ));
+        GP=F and info("[DEBUG]: <%s:%s> Calling ldrSearchList", MOD, meth);
 			  
         -- temporary list having result per digest-entry LDR 
         local ldrlist = list(); 
@@ -3617,22 +3874,25 @@ end -- end of localLMapSearchAll
 --
 -- ======================================================================
 local function
-localLMapSearch(topRec, ldtBinName, searchValue, filter, fargs)
+localLMapSearch(topRec, ldtBinName, searchValue, userModule, filter, fargs)
   local meth = "localLMapSearch()";
-  rc = 0; -- start out OK.
 
   GP=E and trace("[ENTER]<%s:%s> Search for Value(%s)",
                  MOD, meth, tostring( searchValue ) );
                  
+  -- Validate the topRec, the bin and the map.  If anything is weird, then
+  -- this will kick out with a long jump error() call.
+  validateRecBinAndMap( topRec, ldtBinName, true );
+
   local ldtCtrl = topRec[ldtBinName]; -- The main lmap
   local propMap = ldtCtrl[1]; 
   local ldtMap = ldtCtrl[2]; 
   local binName = ldtBinName;
   local resultMap = map(); -- add results to this list.
+  local rc = 0; -- start out OK.
   
-  -- Validate the topRec, the bin and the map.  If anything is weird, then
-  -- this will kick out with a long jump error() call.
-  validateRecBinAndMap( topRec, ldtBinName, true );
+  -- Set up the Read Functions (UnTransform, Filter)
+  setReadFunctions( ldtMap, userModule, filter, fargs );
 
   if ldtMap[M_StoreState] == SS_COMPACT then 
     -- Find the appropriate bin for the Search value
@@ -3919,18 +4179,13 @@ function lmap_search( topRec, ldtBinName, searchName )
   -- the same as a nil or a NULL searchValue
 
   validateRecBinAndMap( topRec, ldtBinName, true );
-  if( searchName == nil ) then
-    -- if no search value, use the faster SCAN (searchALL)
-    return localLMapSearchAll(topRec,ldtBinName,resultMap,nil,nil)
-  else
-    return localLMapSearch(topRec,ldtBinName,searchName,nil,nil)
-  end
+    return localLMapSearch(topRec,ldtBinName,searchName,nil,nil,nil)
 end -- lmap_search()
 
 -- ======================================================================
 
 function
-lmap_search_then_filter( topRec, ldtBinName, searchName, filter, fargs )
+lmap_search_then_filter(topRec,ldtBinName,searchName,userModule,filter,fargs )
   GP=F and info("\n\n >>>>>>> API[ lmap_search_then_filter ] <<<<<<<< \n");
   resultMap = map();
   -- if we dont have a searchValue, get all the list elements.
@@ -3938,12 +4193,7 @@ lmap_search_then_filter( topRec, ldtBinName, searchName, filter, fargs )
   -- the same as a nil or a NULL searchValue
 
   validateRecBinAndMap( topRec, ldtBinName, true );
-  if( searchName == nil ) then
-    -- if no search value, use the faster SCAN (searchALL)
-    return localLMapSearchAll(topRec,ldtBinName,resultMap,filter,fargs)
-  else
-    return localLMapSearch(topRec,ldtBinName,searchName,filter, fargs)
-  end
+  return localLMapSearch(topRec,ldtBinName,searchName,userModule,filter,fargs);
 end -- lmap_search_then_filter()
 
 -- =======================================================================
@@ -3965,7 +4215,7 @@ function lmap_scan( topRec, ldtBinName )
   resultMap = map();
   GP=F and info("\n\n  >>>>>>>> API[ SCAN ] <<<<<<<<<<<<<<<<<< \n");
 
-  return localLMapSearchAll(topRec,ldtBinName,resultMap,nil,nil);
+  return localLMapSearchAll(topRec, ldtBinName, resultMap, nil, nil, nil);
 end -- end llist_scan()
 
 -- ========================================================================
@@ -4027,13 +4277,12 @@ end -- function lmap_config()
 -- (*) If error: resultMap will be an empty list.
 -- ======================================================================
 function lmap_delete( topRec, ldtBinName, searchName )
-  return localLMapDelete(topRec, ldtBinName, searchName, nil, nil )
+  return localLMapDelete(topRec, ldtBinName, searchName, nil, nil, nil);
 end -- lmap_delete()
 
 function lmap_delete_then_filter( topRec, ldtBinName, searchName,
                                   filter, fargs )
-  return localLMapDelete( topRec, ldtBinName, searchName,
-                          filter, fargs )
+  return localLMapDelete( topRec, ldtBinName, searchName, nil, filter, fargs);
 end -- lmap_delete_then_filter()
 
 -- ======================================================================
@@ -4239,9 +4488,9 @@ end -- scan()
 -- filter() -- Return a map containing all Name/Value pairs that passed
 --             thru the supplied filter( fargs ).
 -- ========================================================================
-function filter( topRec, ldtBinName, filter, fargs )
+function filter( topRec, ldtBinName, userModule, filter, fargs )
   GP=B and info("\n\n  >>>>>>>> API[ FILTER ] <<<<<<<<<<<<<<<<<< \n");
-  return localLMapSearchAll(topRec, ldtBinName, filter, fargs);
+  return localLMapSearchAll(topRec, ldtBinName, userModule, filter, fargs);
 end -- filter()
 
 -- ========================================================================
@@ -4249,7 +4498,7 @@ end -- filter()
 -- ========================================================================
 function remove( topRec, ldtBinName, searchName )
   GP=B and info("\n\n  >>>>>>>> API[ REMOVE ] <<<<<<<<<<<<<<<<<< \n");
-  return localLMapDelete(topRec, ldtBinName, searchName, nil, nil )
+  return localLMapDelete(topRec, ldtBinName, searchName, nil, nil, nil )
 end -- remove()
 
 -- ========================================================================

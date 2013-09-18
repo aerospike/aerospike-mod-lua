@@ -1,6 +1,6 @@
 -- Large Ordered List (llist.lua)
 -- Track the date and iteration of the last update:
-local MOD = "llist_2013_09_16.a";
+local MOD = "llist_2013_09_18.g";
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -494,6 +494,7 @@ local R_UnTransFunc         = 'u';-- Reverse transform (from storage to user)
 local R_StoreState          = 'S';-- Compact or Regular Storage
 local R_Threshold           = 'H';-- After this#:Move from compact to tree mode
 local R_KeyFunction         = 'F';-- Function to compute Key from Object
+local R_UserModule          = 'P';-- User's Lua file for overrides
 local R_StoreLimit          = 'L';-- Storage Capacity Limit
 -- Key and Object Sizes, when using fixed length (byte array stuff)
 local R_KeyByteSize         = 'B';-- Fixed Size (in bytes) of Key
@@ -530,10 +531,10 @@ local R_LeafByteCountMax    = 'y';-- Max # of BYTES for obj space in a leaf
 -- J:R_KeyByteArray           j:R_DigestByteArray       9:
 -- K:R_RootKeyList            k:R_KeyType         
 -- L:                         l:R_TreeLevel          
--- M:R_StoreMode              m:
+-- M:R_StoreMode              m:                
 -- N:                         n:
 -- O:                         o:
--- P:                         p:
+-- P:R_UserModule             p:
 -- Q:R_CompactList            q:R_LeafByteEntrySize
 -- R:R_RootListMax            r:R_RootByteCountMax      
 -- S:R_StoreState             s:                        
@@ -576,7 +577,270 @@ local KH_DEFAULT="keyHash";         -- Key Hash used only in complex mode
 --   + All Record Field access is done using brackets, with either a
 --     variable or a constant (in single quotes).
 --     (e.g. topRec[binName] or ldrRec['NodeCtrlBin']);
+
+-- ======================================================================
+-- <USER FUNCTIONS> - <USER FUNCTIONS> - <USER FUNCTIONS> - <USER FUNCTIONS>
+-- ======================================================================
+-- We have several different situations where we need to look up a user
+-- defined function:
+-- (*) Object Transformation (e.g. compression)
+-- (*) Object UnTransformation
+-- (*) Predicate Filter (perform additional predicate tests on an object)
 --
+-- These functions are passed in by name (UDF name, Module Name), so we
+-- must check the existence/validity of the module and UDF each time we
+-- want to use them.  Furthermore, we want to centralize the UDF checking
+-- into one place -- so on entry to those LDT functions that might employ
+-- these UDFs (e.g. insert, filter), we'll set up either READ UDFs or
+-- WRITE UDFs and then the inner routines can call them if they are
+-- non-nil.
+-- ======================================================================
+local G_Filter = nil;
+local G_Transform = nil;
+local G_UnTransform = nil;
+local G_FunctionArgs = nil;
+local G_KeyFunction = nil;
+
+-- <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> 
+-- -----------------------------------------------------------------------
+-- resetPtrs()
+-- -----------------------------------------------------------------------
+-- Reset the UDF Ptrs to nil.
+-- -----------------------------------------------------------------------
+local function resetUdfPtrs()
+  G_Filter = nil;
+  G_Transform = nil;
+  G_UnTransform = nil;
+  G_FunctionArgs = nil;
+  G_KeyFunction = nil;
+end -- resetPtrs()
+
+-- <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> 
+-- -----------------------------------------------------------------------
+-- setKeyFunction()
+-- -----------------------------------------------------------------------
+-- The function that extracts a key value from a complex object can
+-- be in the user's "creation" module, or it can be in the FunctionTable.
+-- The "Key" Function may be slightly misleading, depending on the LDT
+-- that is being used.
+-- (*) LSET: The KeyFunction extracts a unique subset from a complex object
+--           that can be compared (equals only). For LSET, a KeyFunction is
+--           not required, as a complex object can always be converted to a
+--           string for an equals compare.
+-- (*) LMAP: The KeyFunction is not used, since values are found with "name",
+--           which must be an atomic (number or string) value.
+-- (*) LLIST: The KeyFunction extracts an atomic value from a complex object
+--            that can be ordered.  For LLIST, if the object being stored is
+--            complex, then it is REQUIRED that there is a valid KeyFunction
+--            to extract an atomic value that can be compared and ordered.
+--            The type of the FIRST INSERT determines the type of the LLIST.
+-- (*) LSTACK: For regular LSTACK, there is no need for a KeyFunction.
+--            However, for TIMESTACK, a special flavor of LSTACK, the 
+--            KeyFunction extracts a TIME value from the object, which must
+--            be a number that can be used in an ordered compare.
+-- Parms:
+-- (*) ldtMap: The basic control info
+-- (*) required: True when we must have a valid KeyFunction, such as for
+--               LLIST.
+-- -----------------------------------------------------------------------
+local function setKeyFunction( ldtMap, required )
+  local meth = "setKeyFunction()";
+  -- Look in the Create Module first, then check the Function Table.
+  local createModule = ldtMap[R_UserModule];
+  local keyFunction = ldtMap[R_KeyFunction];
+  G_KeyFunction = nil;
+  if( keyFunction ~= nil ) then
+    if( type(keyFunction) ~= "string" or filter == "" ) then
+      warn("[ERROR]<%s:%s> Bad KeyFunction Name: type(%s) filter(%s)",
+        MOD, meth, type(filter), tostring(filter) );
+      error( ldte.ERR_KEY_FUN_BAD );
+    else
+      -- Ok -- so far, looks like we have a valid key function name, 
+      -- Look in the Create Module, and if that's not found, then look
+      -- in the system function table.
+      if( G_KeyFunction == nil and createModule ~= nil ) then
+        local createModuleRef = require(createModule);
+        if( createModuleRef ~= nil and createModuleRef[filter] ~= nil ) then
+          G_KeyFunction = createModuleRef[keyFunction];
+        end
+      end
+
+      -- Last we try the UdfFunctionTable, In case the user wants to employ
+      -- one of the standard Key Functions.
+      if( G_KeyFunction == nil and functionTable ~= nil ) then
+        G_KeyFunction = functionTable[keyFunction];
+      end
+
+      -- If we didn't find anything, BUT the user supplied a function name,
+      -- then we have a problem.  We have to complain.
+      if( G_KeyFunction == nil ) then
+        warn("[ERROR]<%s:%s> KeyFunction not found: type(%s) KeyFunction(%s)",
+          MOD, meth, type(keyFunction), tostring(keyFunction) );
+        error( ldte.ERR_KEY_FUN_NOT_FOUND );
+      end
+    end
+  elseif( ldtMap[R_KeyType] == KT_COMPLEX and required == true ) then
+    warn("[ERROR]<%s:%s> Key Function is Required for LLIST Complex Objects",
+      MOD, meth );
+    error( ldte.ERR_KEY_FUN_NOT_FOUND );
+  end
+end -- setKeyFunction()
+
+-- -----------------------------------------------------------------------
+-- setReadFunctions()()
+-- -----------------------------------------------------------------------
+-- Set the Filter and UnTransform Function pointers for Reading values.
+-- We follow this hierarchical lookup pattern for the read filter function:
+-- (*) User Supplied Module (might be different from create module)
+-- (*) Create Module
+-- (*) UdfFunctionTable
+--
+-- We follow this lookup pattern for the UnTransform function:
+-- (*) Create Module
+-- (*) UdfFunctionTable
+-- Notice that it would be generally dangerous to use some sort of ad hoc
+-- UnTransform filter -- the Transform/UnTransform should be defined at
+-- the LDT Instance Creation, and then left alone.
+--
+-- -----------------------------------------------------------------------
+local function setReadFunctions( ldtMap, userModule, filter, filterArgs )
+  local meth = "setReadFunctions()";
+  GP=E and trace("[ENTER]<%s:%s> Process Filter(%s)",
+    MOD, meth, tostring(filter));
+
+  -- Do the Filter First. If not nil, then process.  Complain if things
+  -- go badly.
+  local createModule = ldtMap[R_UserModule];
+  G_Filter = nil;
+  G_FunctionArgs = filterArgs;
+  if( filter ~= nil ) then
+    if( type(filter) ~= "string" or filter == "" ) then
+      warn("[ERROR]<%s:%s> Bad filter Name: type(%s) filter(%s)",
+        MOD, meth, type(filter), tostring(filter) );
+      error( ldte.ERR_FILTER_BAD );
+    else
+      -- Ok -- so far, looks like we have a valid filter name, 
+      if( userModule ~= nil and type(userModule) == "string" ) then
+        local userModuleRef = require(userModule);
+        if( userModuleRef ~= nil and userModuleRef[filter] ~= nil ) then
+          G_Filter = userModuleRef[filter];
+        end
+      end
+      -- If we didn't find a good filter, keep looking.  Try the createModule.
+      if( G_Filter == nil and createModule ~= nil ) then
+        local createModuleRef = require(createModule);
+        if( createModuleRef ~= nil and createModuleRef[filter] ~= nil ) then
+          G_Filter = createModuleRef[filter];
+        end
+      end
+      -- Last we try the UdfFunctionTable, In case the user wants to employ
+      -- one of the standard Functions.
+      if( G_Filter == nil and functionTable ~= nil ) then
+        G_Filter = functionTable[filter];
+      end
+
+      -- If we didn't find anything, BUT the user supplied a function name,
+      -- then we have a problem.  We have to complain.
+      if( G_Filter == nil ) then
+        warn("[ERROR]<%s:%s> filter not found: type(%s) filter(%s)",
+          MOD, meth, type(filter), tostring(filter) );
+        error( ldte.ERR_FILTER_NOT_FOUND );
+      end
+    end
+  end -- if filter not nil
+
+  -- That wraps up the Filter handling.  Now do  the UnTransform Function.
+  local untrans = ldtMap[R_UnTransform];
+  G_UnTransform = nil;
+  if( untrans ~= nil ) then
+    if( type(untrans) ~= "string" or untrans == "" ) then
+      warn("[ERROR]<%s:%s> Bad UnTransformation Name: type(%s) function(%s)",
+        MOD, meth, type(untrans), tostring(untrans) );
+      error( ldte.ERR_UNTRANS_FUN_BAD );
+    else
+      -- Ok -- so far, looks like we have a valid untransformation func name, 
+      if( createModule ~= nil ) then
+        local createModuleRef = require(createModule);
+        if( createModuleRef ~= nil and createModuleRef[untrans] ~= nil ) then
+          G_UnTransform = createModuleRef[untrans];
+        end
+      end
+      -- Last we try the UdfFunctionTable, In case the user wants to employ
+      -- one of the standard Functions.
+      if( G_UnTransform == nil and functionTable ~= nil ) then
+        G_UnTransform = functionTable[untrans];
+      end
+
+      -- If we didn't find anything, BUT the user supplied a function name,
+      -- then we have a problem.  We have to complain.
+      if( G_UnTransform == nil ) then
+        warn("[ERROR]<%s:%s> UnTransform Func not found: type(%s) Func(%s)",
+          MOD, meth, type(untrans), tostring(untrans) );
+        error( ldte.ERR_UNTRANS_FUN_NOT_FOUND );
+      end
+    end
+  end -- if untransform not nil
+
+  GP=E and trace("[EXIT]<%s:%s>", MOD, meth );
+end -- setReadFunctions()
+
+
+-- <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> 
+-- -----------------------------------------------------------------------
+-- setWriteFunctions()()
+-- -----------------------------------------------------------------------
+-- Set the Transform Function pointer for Writing values.
+-- We follow a hierarchical lookup pattern for the transform function.
+-- (*) Create Module
+-- (*) UdfFunctionTable
+--
+-- -----------------------------------------------------------------------
+local function setWriteFunctions( ldtMap )
+  local meth = "setWriteFunctions()";
+  GP=E and trace("[ENTER]<%s:%s> Process Filter(%s)",
+    MOD, meth, tostring(filter));
+
+  -- Look in the create module first, then the UdfFunctionTable to find
+  -- the transform function (if there is one).
+  local createModule = ldtMap[R_UserModule];
+  local trans = ldtMap[R_Transform];
+  G_Transform = nil;
+  if( trans ~= nil ) then
+    if( type(trans) ~= "string" or trans == "" ) then
+      warn("[ERROR]<%s:%s> Bad Transformation Name: type(%s) function(%s)",
+        MOD, meth, type(trans), tostring(trans) );
+      error( ldte.ERR_TRANS_FUN_BAD );
+    else
+      -- Ok -- so far, looks like we have a valid transformation func name, 
+      if( createModule ~= nil ) then
+        local createModuleRef = require(createModule);
+        if( createModuleRef ~= nil and createModuleRef[trans] ~= nil ) then
+          G_Transform = createModuleRef[trans];
+        end
+      end
+      -- Last we try the UdfFunctionTable, In case the user wants to employ
+      -- one of the standard Functions.
+      if( G_Transform == nil and functionTable ~= nil ) then
+        G_Transform = functionTable[trans];
+      end
+
+      -- If we didn't find anything, BUT the user supplied a function name,
+      -- then we have a problem.  We have to complain.
+      if( G_Transform == nil ) then
+        warn("[ERROR]<%s:%s> Transform Func not found: type(%s) Func(%s)",
+          MOD, meth, type(trans), tostring(trans) );
+        error( ldte.ERR_TRANS_FUN_NOT_FOUND );
+      end
+    end
+  end
+
+  GP=E and trace("[EXIT]<%s:%s>", MOD, meth );
+end -- setWriteFunctions()
+
+-- ======================================================================
+-- <USER FUNCTIONS> - <USER FUNCTIONS> - <USER FUNCTIONS> - <USER FUNCTIONS>
+-- ======================================================================
+
 
 -- ======================================================================
 -- local function Tree Summary( ldtCtrl ) (DEBUG/Trace Function)
@@ -616,6 +880,7 @@ local function ldtSummary( ldtCtrl )
   resultMap.TransFunc         = ldtMap[R_TransFunc];
   resultMap.UnTransFunc       = ldtMap[R_UnTransFunc];
   resultMap.KeyFunction       = ldtMap[R_KeyFunction];
+  resultMap.UserModule        = ldtMap[R_UserModule];
 
   -- Top Node Tree Root Directory
   resultMap.RootListMax        = ldtMap[R_RootListMax];
@@ -1563,36 +1828,61 @@ end -- closeAllSubrecs()
 -- ===========================
 
 -- ======================================================================
--- The value is either simple (atomic) or an object (complex).  Complex
--- objects either have a key function defined, or they have a field called
--- "key" that will give us a key value.
--- If none of these are true -- then return -1 to show our displeasure.
+-- Produce a COMPARABLE value (our overloaded term here is "key") from
+-- the user's value.
+-- The value is either simple (atomic), in which case we just return the
+-- value, or an object (complex), in which case we must perform some operation
+-- to extract an atomic value that can be compared.  For LLIST, we do one
+-- additional thing, which is to look for a field in the complex object
+-- called "key" (lower case "key") if no other KeyFunction is supplied.
+--
+-- Parms:
+-- (*) ldtMap: The basic LDT Control structure
+-- (*) value: The value from which we extract a "keyValue" that can be
+--            compared in an ordered compare operation.
+-- Return a comparable keyValue:
+-- ==> The original value, if it is an atomic type
+-- ==> A Unique Identifier subset (that is atomic)
+-- ==> The entire object, in string form.
 -- ======================================================================
 local function getKeyValue( ldtMap, value )
   local meth = "getKeyValue()";
   GP=E and trace("[ENTER]<%s:%s> value(%s) KeyType(%s)",
-    MOD, meth, tostring(value), tostring(ldtMap[R_KeyType]) );
+    MOD, meth, tostring(value), tostring(ldtMap[M_KeyType]) );
+
+  if( value == nil ) then
+    GP=E and trace("[Early EXIT]<%s:%s> Value is nil", MOD, meth );
+    return nil;
+  end
+
+  GP=E and trace("[DEBUG]<%s:%s> Value type(%s)", MOD, meth,
+    tostring( type(value)));
 
   local keyValue;
-  if( ldtMap[R_KeyType] == KT_ATOMIC ) then
+  if( ldtMap[M_KeyType] == KT_ATOMIC or type(value) ~= "userdata" ) then
     keyValue = value;
   else
-    -- Employ the user's supplied function (keyFunction) and if that's not
-    -- there, look for the special case where the object has a field
-    -- called 'key'.  If not, then, well ... tough.  We tried.
-    local keyFunction = ldtMap[R_KeyFunction];
-    if( keyFunction ~= nil ) and functionTable[keyFunction] ~= nil then
-      keyValue = functionTable[keyFunction]( value );
-    elseif value["key"] ~= nil then
+    if( G_KeyFunction ~= nil ) then
+      -- Employ the user's supplied function (keyFunction) and if that's not
+      -- there, look for the special case where the object has a field
+      -- called 'key'.  If not, then, well ... tough.  We tried.
+      keyValue = G_KeyFunction( value );
+    elseif( value["key"] ~= nil ) then
+      -- Use the default action of using the object's "key" field
       keyValue = value["key"];
     else
-      keyValue = -1;
+      -- It's an ERROR in Large List to have a Complex Object and NOT
+      -- define either a KeyFunction or a Key Field.  Complain.
+      warn("[ERROR]<%s:%s> LLIST requires a KeyFunction for Objects",
+        MOD, meth );
+      error( ldte.ERR_KEY_FUN_NOT_FOUND );
     end
   end
 
   GP=E and trace("[EXIT]<%s:%s> Result(%s)", MOD, meth, tostring(keyValue) );
   return keyValue;
 end -- getKeyValue();
+
 
 -- ======================================================================
 -- keyCompare: (Compare ONLY Key values, not Object values)
@@ -1618,13 +1908,13 @@ local function keyCompare( searchKey, dataKey )
     warn("[WARNING]<%s:%s> DataKey is nil", MOD, meth );
     result = CR_ERROR;
   elseif( searchKey == nil ) then
-    -- a nil search key is always less than everything.
+    -- a nil search key is always LESS THAN everything.
     result = CR_LESS_THAN;
   else
     if searchKey == dataKey then
       result = CR_EQUAL;
     elseif searchKey < dataKey then
-        result = CR_LESS_THAN;
+      result = CR_LESS_THAN;
     else
       result = CR_GREATER_THAN;
     end
@@ -1826,6 +2116,9 @@ end -- createAndInitESR()
 -- Search the key list, return the index of the value that represents the
 -- child pointer that we should follow.  Notice that this is DIFFERENT
 -- from the Leaf Search, which treats the EQUAL case differently.
+-- ALSO -- the Objects in the Leaves may be TRANSFORMED (e.g. compressed),
+-- so they potentially need to be UN-TRANSFORMED before they can be
+-- read.
 --
 -- For this example:
 --              +---+---+---+---+
@@ -1865,20 +2158,20 @@ local function searchKeyList( ldtMap, keyList, searchKey )
   local compareResult = 0;
   -- Do the List page mode search here
   local listSize = list.size( keyList );
-  local listValue;
+  local entryKey;
   for i = 1, listSize, 1 do
     GP=F and trace("[DEBUG]<%s:%s>searchKey(%s) i(%d) keyList(%s)",
     MOD, meth, tostring(searchKey), i, tostring(keyList));
 
-    listValue = keyList[i];
-    compareResult = keyCompare( searchKey, listValue );
+    entryKey = keyList[i];
+    compareResult = keyCompare( searchKey, entryKey );
     if compareResult == CR_ERROR then
       return ERR_GENERAL; -- error result.
     end
     if compareResult  == CR_LESS_THAN then
       -- We want the child pointer that goes with THIS index (left ptr)
-      GP=F and trace("[Stop Search: Key < Data]: <%s:%s> : SV(%s) V(%s) I(%d)",
-        MOD, meth, tostring(searchKey), tostring( listValue ), i );
+      GP=F and trace("[Stop Search: Key < Data]: <%s:%s> : SK(%s) EK(%s) I(%d)",
+        MOD, meth, tostring(searchKey), tostring( entryKey ), i );
         return i; -- Left Child Pointer
     elseif compareResult == CR_EQUAL then
       -- Found it -- return the "right child" index (right ptr)
@@ -1890,8 +2183,8 @@ local function searchKeyList( ldtMap, keyList, searchKey )
   end -- for each list item
 
   -- Remember: Can't use "i" outside of Loop.   
-  GP=F and trace("[FOUND GREATER THAN]: <%s:%s> :Key(%s) Value(%s) Index(%d)",
-    MOD, meth, tostring(searchKey), tostring(listValue), listSize + 1 );
+  GP=F and trace("[FOUND GREATER THAN]: <%s:%s> SKey(%s) EKey(%s) Index(%d)",
+    MOD, meth, tostring(searchKey), tostring(entryKey), listSize + 1 );
 
   return listSize + 1; -- return furthest right child pointer
 end -- searchKeyList()
@@ -1960,27 +2253,38 @@ local function searchObjectList( ldtMap, objectList, searchKey )
   local resultIndex = 0;
   local compareResult = 0;
   local objectKey;
+  local storeObject; -- the stored (transformed) representation of the object
+  local liveObject; -- the live (untransformed) representation of the object
+
   -- Do the List page mode search here
   local listSize = list.size( objectList );
 
   GP=F and trace("[Starting LOOP]<%s:%s>", MOD, meth );
 
   for i = 1, listSize, 1 do
-    compareResult = objectCompare( ldtMap, searchKey, objectList[i] );
+    -- If we have a transform/untransform, do that here.
+    storedObject = objectList[i];
+    if( G_UnTransform ~= nil ) then
+      liveObject = G_UnTransform( storedObject );
+    else
+      liveObject = storedObject;
+    end
+
+    compareResult = objectCompare( ldtMap, searchKey, liveObject );
     if compareResult == CR_ERROR then
       resultMap.status = ERR_GENERAL;
       return resultMap;
     end
     if compareResult  == CR_LESS_THAN then
       -- We want the child pointer that goes with THIS index (left ptr)
-      GP=F and trace("[NOT FOUND LESS THAN]: <%s:%s> : SV(%s) V(%s) I(%d)",
-        MOD, meth, tostring(searchKey), tostring( objectList[i] ), i );
+      GP=F and trace("[NOT FOUND LESS THAN]: <%s:%s> : SV(%s) Obj(%s) I(%d)",
+        MOD, meth, tostring(searchKey), tostring(liveObject), i );
       resultMap.Position = i;
       return resultMap;
     elseif compareResult == CR_EQUAL then
       -- Found it -- return the index of THIS value
       GP=F and trace("[FOUND KEY]: <%s:%s> :Key(%s) Value(%s) Index(%d)",
-        MOD, meth, tostring(searchKey), tostring(objectList[i]), i );
+        MOD, meth, tostring(searchKey), tostring(liveObject), i );
       resultMap.Position = i; -- Index of THIS value.
       resultMap.Found = true;
       return resultMap;
@@ -2025,9 +2329,9 @@ local function printTree( src, topRec, ldtBinName )
   local treeLevel = ldtMap[R_TreeLevel];
 
   trace("\n ===========================================================\n");
-  trace("\n <PT>begin <PT> <PT>                          <PT> <PT> <PT>\n");
-  trace("\n <PT> <PT> <PT>       P R I N T   T R E E     <PT> <PT> <PT>\n");
-  trace("\n <PT> <PT> <PT> <PT>                          <PT> <PT> <PT>\n");
+  trace("\n <PT>begin <PT> <PT> :::::::::::::::::::::::: <PT> <PT> <PT>\n");
+  trace("\n <PT> <PT> <PT> :::::   P R I N T   T R E E  ::::: <PT> <PT>\n");
+  trace("\n <PT> <PT> <PT> <PT> :::::::::::::::::::::::: <PT> <PT> <PT>\n");
   trace("\n ===========================================================\n");
 
   trace("\n ======  ROOT SUMMARY ======\n(%s)", rootNodeSummary( ldtCtrl ));
@@ -2312,8 +2616,8 @@ end -- updateSearchPath()
 -- A: Instruction: 0 (stop), 1 (continue scanning)
 -- B: Error Code: B==0 ok.   B < 0 Error.
 -- ======================================================================
-local function listScan(objectList, startPosition, ldtMap, resultList,
-                          searchKey, func, fargs, flag)
+local function
+listScan(objectList, startPosition, ldtMap, resultList, searchKey, flag)
   local meth = "listScan()";
   local rc = 0;
   GP=E and trace("[ENTER]<%s:%s>StartPosition(%d) SearchKey(%s)",
@@ -2324,10 +2628,10 @@ local function listScan(objectList, startPosition, ldtMap, resultList,
   local compareResult = 0;
   local uniqueKey = ldtMap[R_KeyUnique];
   local scanStatus = SCAN_CONTINUE;
+  local storeObject; -- the transformed User Object (what's stored).
+  local liveObject; -- the untransformed storeObject.
 
-  local filter = functionTable[func];
-
-  -- Later: Split the loop search into two -- atomic and map objects
+  -- Later: Maybe .. Split the loop search into two -- atomic and map objects
   local listSize = list.size( objectList );
   -- We expect that the FIRST compare (at location "start") should be
   -- equal, and then potentially some number of objects after that (assuming
@@ -2335,24 +2639,32 @@ local function listScan(objectList, startPosition, ldtMap, resultList,
   -- next compare.
   GP=F and trace("[LIST SCAN]<%s:%s>Position(%d)", MOD, meth, startPosition);
   for i = startPosition, listSize, 1 do
-    compareResult = objectCompare( ldtMap, searchKey, objectList[i] );
+    -- UnTransform the object, if needed.
+    storeObject = objectList[i];
+    if( G_UnTransform ~= nil ) then
+      liveObject = G_UnTransform( storeObject );
+    else
+      liveObject = storeObject;
+    end
+
+    compareResult = objectCompare( ldtMap, searchKey, liveObject );
     if compareResult == CR_ERROR then
       warn("[WARNING]<%s:%s> Compare Error", MOD, meth );
       return 0, CR_ERROR; -- error result.
     end
     if( compareResult == CR_EQUAL ) then
       -- This one qualifies -- save it in result -- if it passes the filter.
-      local filterResult = objectList[i];
-      if( filter ~= nil ) then
-        filterResult = filter( objectList[i], fargs );
+      local filterResult = liveObject;
+      if( G_Filter ~= nil ) then
+        filterResult = G_Filter( liveObject, fargs );
       end
       if( filterResult ~= nil ) then
-        list.append( resultList, objectList[i] );
+        list.append( resultList, liveObject );
         filterPass = true;
       end
 
       GP=F and trace("[Scan]<%s:%s> Pos(%d) Key(%s) Obj(%s) FilterRes(%s)",
-        MOD, meth, i, tostring(searchKey), tostring(objectList[i]),
+        MOD, meth, i, tostring(searchKey), tostring(liveObject),
         tostring(filterResult));
 
       if( uniqueKey == true and searchKey ~= nil ) then
@@ -2362,7 +2674,7 @@ local function listScan(objectList, startPosition, ldtMap, resultList,
     else
       -- First non-equals means we're done.
       GP=F and trace("[Scan:NON_MATCH]<%s:%s> Pos(%d) Key(%s) Object(%s)",
-        MOD, meth, i, tostring(searchKey), tostring(objectList[i]));
+        MOD, meth, i, tostring(searchKey), tostring(liveObject));
       scanStatus = SCAN_DONE;
       break;
     end
@@ -2375,7 +2687,6 @@ local function listScan(objectList, startPosition, ldtMap, resultList,
     rc, tostring(resultList), tostring(resultA), tostring(resultB));
   return resultA, resultB;
 end -- listScan()
-
 
 -- ======================================================================
 -- scanByteArray(): Scan a Byte Array, gathering up all of the the
@@ -2396,7 +2707,7 @@ end -- listScan()
 -- B: Error Code: B==0 ok.   B < 0 Error.
 -- ======================================================================
 local function scanByteArray(byteArray, startPosition, ldtMap, resultList,
-                          searchKey, func, fargs, flag)
+                          searchKey, flag)
   local meth = "scanByteArray()";
   local rc = 0;
   GP=E and trace("[ENTER]<%s:%s>StartPosition(%s) SearchKey(%s)",
@@ -2453,7 +2764,7 @@ end -- scanByteArray()
 -- NOTE: Need to pass in leaf Rec and Start Position -- because the
 -- searchPath will be WRONG if we continue the search on a second page.
 local function scanLeaf(topRec, leafRec, startPosition, ldtMap, resultList,
-                          searchKey, func, fargs, flag)
+                          searchKey, flag)
   local meth = "scanLeaf()";
   local rc = 0;
   GP=E and trace("[ENTER]<%s:%s>StartPosition(%s) SearchKey(%s)",
@@ -2475,7 +2786,7 @@ local function scanLeaf(topRec, leafRec, startPosition, ldtMap, resultList,
     GP=F and trace("[DEBUG]<%s:%s> BINARY MODE SCAN", MOD, meth );
     local byteArray = leafRec[LSR_BINARY_BIN];
     resultA, resultB = scanByteArray( byteArray, startPosition, ldtMap,
-                        resultList, searchKey, func, fargs, flag);
+                        resultList, searchKey, flag);
   else
     -- >>>>>>>>>>>>>>>>>>>>>>>>>  LIST  MODE <<<<<<<<<<<<<<<<<<<<<<<<<<<
     GP=F and trace("[DEBUG]<%s:%s> LIST MODE SCAN", MOD, meth );
@@ -2483,7 +2794,7 @@ local function scanLeaf(topRec, leafRec, startPosition, ldtMap, resultList,
     -- Later: Split the loop search into two -- atomic and map objects
     local objectList = leafRec[LSR_LIST_BIN];
     resultA, resultB = listScan(objectList, startPosition, ldtMap,
-                  resultList, searchKey, func, fargs, flag);
+                  resultList, searchKey, flag);
   end -- else list mode
 
   GP=E and trace("[EXIT]<%s:%s> rc(%d) resultList(%s) A(%s) B(%s)", MOD, meth,
@@ -3688,118 +3999,118 @@ end -- treeInsert
 -- is present, then return the original value (as is).
 -- NOTE: This can be made more efficient.
 -- =======================================================================
-local function applyTransform( transformFunc, value )
-  local meth = "applyTransform()";
-  GP=E and trace("[ENTER]<%s:%s> transform(%s) type(%s) Value(%s)",
- MOD, meth, tostring(transformFunc), type(transformFunc), tostring(value));
-
-  local storeValue = value;
-  if transformFunc ~= nil then 
-    storeValue = transformFunc( value );
-  end
-
-  GP=F and trace("[EXIT]<%s:%s>storeValue(%s)",MOD,meth,tostring(storeValue));
-  return storeValue;
-end -- applyTransform()
-
--- =======================================================================
--- Apply UnTransform Function
--- Take the UnTransform defined in the ldtMap, if present, and apply
--- it to the dbValue, returning the unTransformed value.  If no unTransform
--- is present, then return the original value (as is).
--- NOTE: This can be made more efficient.
--- =======================================================================
-local function applyUnTransform( ldtMap, storeValue )
-  local meth = "applyUnTransform()";
-  GP=E and trace("[ENTER]<%s:%s>storeValue(%s)",MOD,meth,tostring(storeValue));
-
-  local returnValue = storeValue;
-  if ldtMap[R_UnTransform] ~= nil and
-    functionTable[ldtMap[R_UnTransform]] ~= nil then
-    returnValue = functionTable[ldtMap[R_UnTransform]]( storeValue );
-  end
-  GP=F and trace("[EXIT]<%s:%s>RetValue(%s)",MOD,meth,tostring(returnValue));
-  return returnValue;
-end -- applyUnTransform( value )
-
--- =======================================================================
--- unTransformSimpleCompare()
--- Apply the unTransform function (if not nil) and perform an EQUAL compare
--- on the key and DB Value.  Note that we are just doing equals here of
--- simple types, so we can just use the equals (==) operator.
--- Return the unTransformed search value if the values match.
--- =======================================================================
-local function unTransformSimpleCompare(unTransform, dbValue, key)
-  local meth = "unTransformSimpleCompare()";
-  GP=E and trace("[ENTER]<%s:%s> storeVal(%s) Key(%s)",
-    MOD, meth, tostring(dbValue), tostring(key));
-
-  local modDbValue = dbValue;
-  local resultValue = nil;
-  local compareResult = false; -- used for debugging (remove later)
-
-  if unTransform ~= nil then
-    modDbValue = unTransform( dbValue );
-  end
-
-  -- If we have NO search Key, or it matches the result, we have a match.
-  if( key == nil or key == modDbValue ) then
-    resultValue = modDbValue;
-    compareResult = true; -- used for debugging (remove later)
-  end
-
-  GP=F and trace("[EXIT]<%s:%s> resultValue(%s) CompResult(%s)",
-    MOD, meth, tostring(resultValue), tostring(compareResult));
-  return resultValue;
-end -- unTransformSimpleCompare()
-
--- =======================================================================
--- unTransformComplexCompare()
--- Apply the unTransform function (if not nil) and compare the values,
--- using the objectCompare function (it's a complex compare).
--- Return the unTransformed search value if the values match.
--- parms:
--- (*) ldtMap: Main LDT Control Structure
--- (*) unTransform: The transformation function: Perform if not null
--- (*) dbValue: The value pulled from the DB
--- (*) key: The value we're looking for.
--- =======================================================================
-local function
-unTransformComplexCompare(ldtMap, unTransform, dbValue, key)
-  local meth = "unTransformComplexCompare()";
-  GP=E and trace("[ENTER]<%s:%s> storeVal(%s) Key(%s)",
-    MOD, meth, tostring(dbValue), tostring(key));
-
-  -- REMEMBER that if we use this mechanism, we'll have to ALSO account
-  -- for the FILTER/FARGS mechanism -- which may be out at the caller level,
-  -- but it has to be handled.  Right now (8/8/2013) no one is calling
-  -- this function.
-
-  local modDbValue = dbValue;
-  local resultValue = nil;
-  local compareResult;
-
-  if unTransform ~= nil then
-    modDbValue = unTransform( dbValue );
-  end
-
-  -- If no search key -- then everything matches.
-  if( key == nil ) then
-    resultValue = modDbValue;
-    compareResult = CR_EQUAL;
-  else
-    compareResult = objectCompare( ldtMap, key, modDbValue );
-    if( compareResult == CR_EQUAL ) then
-      resultValue = modDbValue;
-    end
-  end
-
-  GP=F and trace("[EXIT]<%s:%s> resultValue(%s) CompResult(%s)",
-    MOD, meth, tostring(resultValue), tostring(compareResult));
-
-  return resultValue;
-end -- unTransformComplexCompare()
-
+-- local function applyTransform( transformFunc, value )
+--   local meth = "applyTransform()";
+--   GP=E and trace("[ENTER]<%s:%s> transform(%s) type(%s) Value(%s)",
+--  MOD, meth, tostring(transformFunc), type(transformFunc), tostring(value));
+-- 
+--   local storeValue = value;
+--   if transformFunc ~= nil then 
+--     storeValue = transformFunc( value );
+--   end
+-- 
+--   GP=F and trace("[EXIT]<%s:%s>storeValue(%s)",MOD,meth,tostring(storeValue));
+--   return storeValue;
+-- end -- applyTransform()
+--
+---- =======================================================================
+---- Apply UnTransform Function
+---- Take the UnTransform defined in the ldtMap, if present, and apply
+---- it to the dbValue, returning the unTransformed value.  If no unTransform
+---- is present, then return the original value (as is).
+---- NOTE: This can be made more efficient.
+---- =======================================================================
+--local function applyUnTransform( ldtMap, storeValue )
+--  local meth = "applyUnTransform()";
+--  GP=E and trace("[ENTER]<%s:%s>storeValue(%s)",MOD,meth,tostring(storeValue));
+--
+--  local returnValue = storeValue;
+--  if ldtMap[R_UnTransform] ~= nil and
+--    functionTable[ldtMap[R_UnTransform]] ~= nil then
+--    returnValue = functionTable[ldtMap[R_UnTransform]]( storeValue );
+--  end
+--  GP=F and trace("[EXIT]<%s:%s>RetValue(%s)",MOD,meth,tostring(returnValue));
+--  return returnValue;
+--end -- applyUnTransform( value )
+--
+---- =======================================================================
+---- unTransformSimpleCompare()
+---- Apply the unTransform function (if not nil) and perform an EQUAL compare
+---- on the key and DB Value.  Note that we are just doing equals here of
+---- simple types, so we can just use the equals (==) operator.
+---- Return the unTransformed search value if the values match.
+---- =======================================================================
+--local function unTransformSimpleCompare(unTransform, dbValue, key)
+--  local meth = "unTransformSimpleCompare()";
+--  GP=E and trace("[ENTER]<%s:%s> storeVal(%s) Key(%s)",
+--    MOD, meth, tostring(dbValue), tostring(key));
+--
+--  local modDbValue = dbValue;
+--  local resultValue = nil;
+--  local compareResult = false; -- used for debugging (remove later)
+--
+--  if unTransform ~= nil then
+--    modDbValue = unTransform( dbValue );
+--  end
+--
+--  -- If we have NO search Key, or it matches the result, we have a match.
+--  if( key == nil or key == modDbValue ) then
+--    resultValue = modDbValue;
+--    compareResult = true; -- used for debugging (remove later)
+--  end
+--
+--  GP=F and trace("[EXIT]<%s:%s> resultValue(%s) CompResult(%s)",
+--    MOD, meth, tostring(resultValue), tostring(compareResult));
+--  return resultValue;
+--end -- unTransformSimpleCompare()
+--
+---- =======================================================================
+---- unTransformComplexCompare()
+---- Apply the unTransform function (if not nil) and compare the values,
+---- using the objectCompare function (it's a complex compare).
+---- Return the unTransformed search value if the values match.
+---- parms:
+---- (*) ldtMap: Main LDT Control Structure
+---- (*) unTransform: The transformation function: Perform if not null
+---- (*) dbValue: The value pulled from the DB
+---- (*) key: The value we're looking for.
+---- =======================================================================
+--local function
+--unTransformComplexCompare(ldtMap, unTransform, dbValue, key)
+--  local meth = "unTransformComplexCompare()";
+--  GP=E and trace("[ENTER]<%s:%s> storeVal(%s) Key(%s)",
+--    MOD, meth, tostring(dbValue), tostring(key));
+--
+--  -- REMEMBER that if we use this mechanism, we'll have to ALSO account
+--  -- for the FILTER/FARGS mechanism -- which may be out at the caller level,
+--  -- but it has to be handled.  Right now (8/8/2013) no one is calling
+--  -- this function.
+--
+--  local modDbValue = dbValue;
+--  local resultValue = nil;
+--  local compareResult;
+--
+--  if unTransform ~= nil then
+--    modDbValue = unTransform( dbValue );
+--  end
+--
+--  -- If no search key -- then everything matches.
+--  if( key == nil ) then
+--    resultValue = modDbValue;
+--    compareResult = CR_EQUAL;
+--  else
+--    compareResult = objectCompare( ldtMap, key, modDbValue );
+--    if( compareResult == CR_EQUAL ) then
+--      resultValue = modDbValue;
+--    end
+--  end
+--
+--  GP=F and trace("[EXIT]<%s:%s> resultValue(%s) CompResult(%s)",
+--    MOD, meth, tostring(resultValue), tostring(compareResult));
+--
+--  return resultValue;
+--end -- unTransformComplexCompare()
+--
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
@@ -3974,8 +4285,7 @@ end -- convertList()
 -- Given the searchPath result from treeSearch(), Scan the leaves for all
 -- values that satisfy the searchPredicate and the filter.
 -- ======================================================================
-local function 
-treeScan(src, resultList, topRec, sp, ldtCtrl, key, func, fargs )
+local function treeScan(src, resultList, topRec, sp, ldtCtrl, key )
   local meth = "treeScan()";
   local rc = 0;
   local scan_A = 0;
@@ -4000,7 +4310,7 @@ treeScan(src, resultList, topRec, sp, ldtCtrl, key, func, fargs )
     -- return code.  So, if scan_B is "ok" (0), then we look to scan_A to see
     -- if we should continue the scan.
     scan_A, scan_B  = scanLeaf(topRec, leafRec, startPosition, ldtMap,
-                              resultList, key, func, fargs, flag)
+                              resultList, key, flag)
 
 -- Uncomment this line to see the "LEAF BOUNDARIES" in the data.
 -- It's purely for debugging
@@ -4241,25 +4551,32 @@ local function processModule( ldtCtrl, moduleName )
   local propMap = ldtCtrl[1];
   local ldtMap = ldtCtrl[2];
 
-  if( moduleName ~= nil and type(moduleName) == "string" ) then
+  if( moduleName ~= nil ) then
+    if( type(moduleName) ~= "string" ) then
+      warn("[ERROR]<%s:%s>User Module(%s) not valid::wrong type(%s)",
+        MOD, meth, tostring(moduleName), type(moduleName));
+      error( ldte.ERR_USER_MODULE_BAD );
+    end
+
     local userModule = require(moduleName);
     if( userModule == nil ) then
       warn("[ERROR]<%s:%s>User Module(%s) not valid", MOD, meth, moduleName);
+      error( ldte.ERR_USER_MODULE_NOT_FOUND );
     else
       local userSettings =  userModule[G_SETTINGS];
       if( userSettings ~= nil ) then
         userSettings( ldtMap ); -- hope for the best.
-        ldtMap[M_UserModule] = moduleName;
+        ldtMap[R_UserModule] = moduleName;
       end
     end
   else
-    warn("[ERROR]<%s:%s>User Module(%s) invalid",MOD,meth,tostring(moduleName));
+    warn("[ERROR]<%s:%s>User Module is NIL", MOD, meth );
   end
+
   GP=E and trace("[EXIT]<%s:%s> Module(%s) LDT CTRL(%s)", MOD, meth,
-    tostring( moduleName ), ldtSummaryString(ldtCtrl));
+  tostring( moduleName ), ldtSummaryString(ldtCtrl));
 
 end -- processModule()
-
 
 -- ======================================================================
 -- setupLdtBin()
@@ -4268,9 +4585,9 @@ end -- processModule()
 -- in this bin.
 -- ALSO:: Caller write out the LDT bin after this function returns.
 -- ======================================================================
-local function setupLdtBin( topRec, ldtBinName, createSpec ) 
-  local meth = "setupLdtBin()";
-  GP=E and trace("[ENTER]<%s:%s> binName(%s)",MOD,meth,tostring(ldtBinName));
+local function setupLdtBin( topRec, ldtBinName, userModule ) 
+local meth = "setupLdtBin()";
+GP=E and trace("[ENTER]<%s:%s> binName(%s)",MOD,meth,tostring(ldtBinName));
 
   local ldtCtrl = initializeLdtCtrl( topRec, ldtBinName );
   local propMap = ldtCtrl[1]; 
@@ -4280,16 +4597,16 @@ local function setupLdtBin( topRec, ldtBinName, createSpec )
   record.set_type( topRec, RT_LDT ); -- LDT Type Rec
   
   -- If the user has passed in settings that override the defaults
-  -- (the createSpec), then process that now.
-  if( createSpec ~= nil )then
-    local createSpecType = type(createSpec);
+  -- (the userModule), then process that now.
+  if( userModule ~= nil )then
+    local createSpecType = type(userModule);
     if( createSpecType == "string" ) then
-      processModule( ldtCtrl, createSpec );
+      processModule( ldtCtrl, userModule );
     elseif( createSpecType == "userdata" ) then
-      adjustLdtMap( ldtMap, createSpec );
+      adjustLdtMap( ldtMap, userModule );
     else
       warn("[WARNING]<%s:%s> Unknown Creation Object(%s)",
-        MOD, meth, tostring( createSpec ));
+        MOD, meth, tostring( userModule ));
     end
   end
 
@@ -4350,6 +4667,11 @@ local function localLListInsert( topRec, ldtBinName, newValue, createSpec )
   local ldtCtrl = topRec[ ldtBinName ];
   local propMap = ldtCtrl[1];
   local ldtMap  = ldtCtrl[2];
+
+  -- Set up the Read/Write Functions (KeyFunction, Transform, Untransform)
+  setKeyFunction( ldtMap, true )
+  setReadFunctions( ldtMap, nil, nil, nil );
+  setWriteFunctions( ldtMap );
   
   -- DESIGN NOTE: All "outer" functions, like this one, will create a
   -- "subrecContext" object, which will hold all of the open subrecords.
@@ -4434,7 +4756,7 @@ end -- function localLListInsert()
 -- (*) func:
 -- (*) fargs:
 -- ======================================================================
-local function localLListSearch( topRec, ldtBinName, key, func, fargs )
+local function localLListSearch(topRec,ldtBinName,key,userModule,filter,fargs)
   local meth = "localLListSearch()";
   GP=E and trace("[ENTER]<%s:%s> bin(%s) key(%s) ", MOD, meth,
       tostring( ldtBinName), tostring(key) );
@@ -4452,6 +4774,10 @@ local function localLListSearch( topRec, ldtBinName, key, func, fargs )
   local propMap = ldtCtrl[1];
   local ldtMap  = ldtCtrl[2];
 
+  -- set up the Read Functions (UnTransform, Filter)
+  setKeyFunction( ldtMap, true );
+  setReadFunctions( ldtMap, userModule, filter, fargs );
+
   -- Create our subrecContext, which tracks all open SubRecords during
   -- the call.  Then, allows us to close them all at the end.
   local src = createSubrecContext();
@@ -4467,8 +4793,8 @@ local function localLListSearch( topRec, ldtBinName, key, func, fargs )
     local resultMap = searchObjectList( ldtMap, objectList, key );
     if( resultMap.Status == ERR_OK and resultMap.Found == true ) then
       local position = resultMap.Position;
-      resultA, resultB =  listScan(objectList, position, ldtMap,
-                    resultList, key, func, fargs, flag);
+      resultA, resultB = 
+          listScan(objectList, position, ldtMap, resultList, key, flag);
       GP=F and trace("[DEBUG]<%s:%s> Scan Compact List:Res(%s) A(%s) B(%s)",
         MOD, meth, tostring(resultList), tostring(resultA), tostring(resultB));
       if( resultB < 0 ) then
@@ -4487,7 +4813,7 @@ local function localLListSearch( topRec, ldtBinName, key, func, fargs )
     local sp = createSearchPath(ldtMap);
     rc = treeSearch( src, topRec, sp, ldtCtrl, key );
     if( rc == ST_FOUND ) then
-      rc = treeScan( src, resultList, topRec, sp, ldtCtrl, key, func, fargs );
+      rc = treeScan( src, resultList, topRec, sp, ldtCtrl, key );
       if( rc < 0 or list.size( resultList ) == 0 ) then
           warn("[ERROR]<%s:%s> Tree Scan Problem: RC(%d) after a good search",
             MOD, meth, rc );
@@ -4539,6 +4865,10 @@ local function localLListDelete( topRec, binName, key )
   ldtCtrl = topRec[ binName ];
   local propMap = ldtCtrl[1];
   local ldtMap  = ldtCtrl[2];
+  --
+  -- Set up the Read Functions (KeyFunction, Transform, Untransform)
+  setKeyFunction( ldtMap, true )
+  setReadFunctions( ldtMap, nil, nil, nil );
 
   -- Create our subrecContext, which tracks all open SubRecords during
   -- the call.  Then, allows us to close them all at the end.
@@ -4717,7 +5047,7 @@ local function localSetCapacity( topRec, ldtBinName, capacity )
   -- Extract the property map and lso control map from the lso bin list.
   local ldtMap = ldtCtrl[2];
   if( capacity ~= nil and type(capacity) == "number" and capacity >= 0 ) then
-    ldtMap[M_StoreLimit] = capacity;
+    ldtMap[R_StoreLimit] = capacity;
   else
     warn("[ERROR]<%s:%s> Bad Capacity Value(%s)",MOD,meth,tostring(capacity));
     error( ldte.ERR_INTERNAL );
@@ -4750,7 +5080,7 @@ local function localGetCapacity( topRec, ldtBinName )
   local ldtCtrl = topRec[ ldtBinName ];
   -- Extract the property map and lso control map from the lso bin list.
   local ldtMap = ldtCtrl[2];
-  local capacity = ldtMap[M_StoreLimit];
+  local capacity = ldtMap[R_StoreLimit];
   if( capacity == nil ) then
     capacity = 0;
   end
@@ -4947,10 +5277,10 @@ function find( topRec, ldtBinName, searchKey )
   GP=E and trace("[ENTER]<%s:%s> LLIST BIN(%s) searchKey(%s)",
     MOD, meth, tostring(ldtBinName), tostring(searchKey) )
 
-  return localLListSearch( topRec, ldtBinName, searchKey, nil, nil );
+  return localLListSearch( topRec, ldtBinName, searchKey, nil, nil, nil );
 end -- end find()
 
-function find_then_filter(topRec,ldtBinName,searchKey,func,fargs )
+function find_then_filter(topRec,ldtBinName,searchKey,userModule,filter,fargs )
   GP=B and trace("\n\n >>>>>>>> API[ LLIST FIND Then FILTER] <<<<<<<(%s)\n",
     tostring(searchKey));
   local meth = "find_then_filter()";
@@ -4958,7 +5288,7 @@ function find_then_filter(topRec,ldtBinName,searchKey,func,fargs )
     MOD, meth, tostring(ldtBinName), tostring(searchKey),
     tostring(func), tostring(fargs));
 
-  return localLListSearch( topRec, ldtBinName, searchKey, func, fargs );
+  return localLListSearch(topRec,ldtBinName,searchKey,userModule,filter,fargs);
 end -- end find_then_filter()
 
 -- =======================================================================
@@ -4982,13 +5312,14 @@ function scan( topRec, ldtBinName )
   return localLListSearch( topRec, ldtBinName, nil, nil, nil );
 end -- end scan()
 
-function filter( topRec, ldtBinName, func, fargs )
+function filter( topRec, ldtBinName, userModule, filter, fargs )
   GP=F and trace("\n\n  >>>>>>>>> API[ SCAN and FILTER ]<<<<<<<< \n");
   local meth = "filter()";
-  GP=E and trace("[ENTER]<%s:%s> BIN(%s) func(%s) fargs(%s)",
-    MOD, meth, tostring(ldtBinName), tostring(func), tostring(fargs));
+  GP=E and trace("[ENTER]<%s:%s> BIN(%s) module(%s) func(%s) fargs(%s)",
+    MOD, meth, tostring(ldtBinName), tostring(userModule),
+    tostring(func), tostring(fargs));
 
-  return localLListSearch( topRec, ldtBinName, nil, func, fargs );
+  return localLListSearch( topRec, ldtBinName, userModule, filter, fargs );
 end -- end filter()
 
 -- ======================================================================
@@ -5158,3 +5489,4 @@ end -- debug()
 --  \_____/\_____/\___/\____/  \_/  
 --                                  
 -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> --
+

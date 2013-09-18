@@ -1,6 +1,6 @@
 -- AS Large Set (LSET) Operations
 -- Track the date and iteration of the last update.
-local MOD="lset_2013_09_17.l"; 
+local MOD="lset_2013_09_18.d"; 
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -312,198 +312,6 @@ local ERR_OK            =  0; -- HEY HEY!!  Success
 local ERR_GENERAL       = -1; -- General Error
 local ERR_NOT_FOUND     = -2; -- Search Error
 
-
--- ======================================================================
--- <USER FUNCTIONS> - <USER FUNCTIONS> - <USER FUNCTIONS> - <USER FUNCTIONS>
--- ======================================================================
--- We have several different situations where we need to look up a user
--- defined function:
--- (*) Object Transformation (e.g. compression)
--- (*) Object UnTransformation
--- (*) Predicate Filter (perform additional predicate tests on an object)
---
--- These functions are passed in by name (UDF name, Module Name), so we
--- must check the existence/validity of the module and UDF each time we
--- want to use them.  Furthermore, we want to centralize the UDF checking
--- into one place -- so on entry to those LDT functions that might employ
--- these UDFs (e.g. insert, filter), we'll set up either READ UDFs or
--- WRITE UDFs and then the inner routines can call them if they are
--- non-nil.
--- ======================================================================
-local G_Filter = nil;
-local G_Transform = nil;
-local G_UnTransform = nil;
-local G_FunctionArgs = nil;
-
--- <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> 
--- -----------------------------------------------------------------------
--- resetPtrs()
--- -----------------------------------------------------------------------
--- Reset the UDF Ptrs to nil.
--- -----------------------------------------------------------------------
-local function resetUdfPtrs()
-  G_Filter = nil;
-  G_Transform = nil;
-  G_UnTransform = nil;
-  G_FunctionArgs = nil;
-end -- resetPtrs()
-
-
--- <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> 
--- -----------------------------------------------------------------------
--- setReadFunctions()()
--- -----------------------------------------------------------------------
--- Set the Filter and UnTransform Function pointers for Reading values.
--- We follow this hierarchical lookup pattern for the read filter function:
--- (*) User Supplied Module (might be different from create module)
--- (*) Create Module
--- (*) UdfFunctionTable
---
--- We follow this lookup pattern for the UnTransform function:
--- (*) Create Module
--- (*) UdfFunctionTable
--- Notice that it would be generally dangerous to use some sort of ad hoc
--- UnTransform filter -- the Transform/UnTransform should be defined at
--- the LDT Instance Creation, and then left alone.
---
--- -----------------------------------------------------------------------
-local function setReadFunctions( ldtMap, userModule, filter, filterArgs )
-  local meth = "setReadFunctions()";
-  GP=E and trace("[ENTER]<%s:%s> Process Filter(%s)",
-    MOD, meth, tostring(filter));
-
-  -- Do the Filter First. If not nil, then process.  Complain if things
-  -- go badly.
-  local createModule = ldtMap[M_UserModule];
-  G_Filter = nil;
-  G_FunctionArgs = filterArgs;
-  if( filter ~= nil ) then
-    if( type(filter) ~= "string" or filter == "" ) then
-      warn("[ERROR]<%s:%s> Bad filter Name: type(%s) filter(%s)",
-        MOD, meth, type(filter), tostring(filter) );
-      error( ldte.ERR_FILTER_BAD );
-    else
-      -- Ok -- so far, looks like we have a valid filter name, 
-      if( userModule ~= nil and type(userModule) == "string" ) then
-        local userModuleRef = require(userModule);
-        if( userModuleRef ~= nil and userModuleRef[filter] ~= nil ) then
-          G_Filter = userModuleRef[filter];
-        end
-      end
-      -- If we didn't find a good filter, keep looking.  Try the createModule.
-      if( G_Filter == nil and createModule ~= nil ) then
-        local createModuleRef = require(createModule);
-        if( createModuleRef ~= nil and createModuleRef[filter] ~= nil ) then
-          G_Filter = createModuleRef[filter];
-        end
-      end
-      -- Last we try the UdfFunctionTable, In case the user wants to employ
-      -- one of the standard Functions.
-      if( G_Filter == nil and functionTable ~= nil ) then
-        G_Filter = functionTable[filter];
-      end
-
-      -- If we didn't find anything, BUT the user supplied a function name,
-      -- then we have a problem.  We have to complain.
-      if( G_Filter == nil ) then
-        warn("[ERROR]<%s:%s> filter not found: type(%s) filter(%s)",
-          MOD, meth, type(filter), tostring(filter) );
-        error( ldte.ERR_FILTER_NOT_FOUND );
-      end
-    end
-  end
-
-  -- That wraps up the Filter handling.  Now do  the UnTransform Function.
-  local untrans = ldtMap[M_UnTransform];
-  G_UnTransform = nil;
-  if( untrans ~= nil ) then
-    if( type(untrans) ~= "string" or untrans == "" ) then
-      warn("[ERROR]<%s:%s> Bad UnTransformation Name: type(%s) function(%s)",
-        MOD, meth, type(untrans), tostring(untrans) );
-      error( ldte.ERR_UNTRANS_FUN_BAD );
-    else
-      -- Ok -- so far, looks like we have a valid untransformation func name, 
-      if( createModule ~= nil ) then
-        local createModuleRef = require(createModule);
-        if( createModuleRef ~= nil and createModuleRef[untrans] ~= nil ) then
-          G_UnTransform = createModuleRef[untrans];
-        end
-      end
-      -- Last we try the UdfFunctionTable, In case the user wants to employ
-      -- one of the standard Functions.
-      if( G_UnTransform == nil and functionTable ~= nil ) then
-        G_UnTransform = functionTable[untrans];
-      end
-
-      -- If we didn't find anything, BUT the user supplied a function name,
-      -- then we have a problem.  We have to complain.
-      if( G_UnTransform == nil ) then
-        warn("[ERROR]<%s:%s> UnTransform Func not found: type(%s) Func(%s)",
-          MOD, meth, type(untrans), tostring(untrans) );
-        error( ldte.ERR_UNTRANS_FUN_NOT_FOUND );
-      end
-    end
-  end
-
-  GP=E and trace("[EXIT]<%s:%s>", MOD, meth );
-end -- setReadFunctions()
-
-
--- <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> 
--- -----------------------------------------------------------------------
--- setWriteFunctions()()
--- -----------------------------------------------------------------------
--- Set the Transform Function pointer for Writing values.
--- We follow a hierarchical lookup pattern for the transform function.
--- (*) Create Module
--- (*) UdfFunctionTable
---
--- -----------------------------------------------------------------------
-local function setWriteFunctions( ldtMap )
-  local meth = "setWriteFunctions()";
-  GP=E and trace("[ENTER]<%s:%s> Process Filter(%s)",
-    MOD, meth, tostring(filter));
-
-  -- Look in the create module first, then the UdfFunctionTable to find
-  -- the transform function (if there is one).
-  local createModule = ldtMap[M_UserModule];
-  local trans = ldtMap[M_Transform];
-  G_Transform = nil;
-  if( trans ~= nil ) then
-    if( type(trans) ~= "string" or trans == "" ) then
-      warn("[ERROR]<%s:%s> Bad Transformation Name: type(%s) function(%s)",
-        MOD, meth, type(trans), tostring(trans) );
-      error( ldte.ERR_TRANS_FUN_BAD );
-    else
-      -- Ok -- so far, looks like we have a valid transformation func name, 
-      if( createModule ~= nil ) then
-        local createModuleRef = require(createModule);
-        if( createModuleRef ~= nil and createModuleRef[trans] ~= nil ) then
-          G_Transform = createModuleRef[trans];
-        end
-      end
-      -- Last we try the UdfFunctionTable, In case the user wants to employ
-      -- one of the standard Functions.
-      if( G_Transform == nil and functionTable ~= nil ) then
-        G_Transform = functionTable[trans];
-      end
-
-      -- If we didn't find anything, BUT the user supplied a function name,
-      -- then we have a problem.  We have to complain.
-      if( G_Transform == nil ) then
-        warn("[ERROR]<%s:%s> Transform Func not found: type(%s) Func(%s)",
-          MOD, meth, type(trans), tostring(trans) );
-        error( ldte.ERR_TRANS_FUN_NOT_FOUND );
-      end
-    end
-  end
-
-  GP=E and trace("[EXIT]<%s:%s>", MOD, meth );
-end -- setWriteFunctions()
-
-
--- <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> 
--- -----------------------------------------------------------------------
 -- -----------------------------------------------------------------------
 ---- ------------------------------------------------------------------------
 -- Note:  All variables that are field names will be upper case.
@@ -542,6 +350,7 @@ local PM_SelfDigest            = 'D'; -- (Subrec): Digest of THIS Record
 -- Fields unique to lset & lmap 
 local M_StoreMode              = 'M'; -- SM_LIST or SM_BINARY
 local M_StoreLimit             = 'L'; -- Used for Eviction (eventually)
+local M_UserModule             = 'P'; -- User's Lua file for overrides
 local M_Transform              = 't'; -- Transform object to Binary form
 local M_UnTransform            = 'u'; -- UnTransform object from Binary form
 local M_LdrEntryCountMax       = 'e'; -- Max size of the LDR List
@@ -581,7 +390,7 @@ local M_BinListThreshold       = 'l'; -- Threshold for converting from a
 -- M:M_StoreMode              m:M_Modulo
 -- N:                         n:
 -- O:                         o:
--- P:                         p:
+-- P:M_UserModule             p:
 -- Q:                         q:
 -- R:                         r:                     
 -- S:M_StoreState             s:M_LdrByteEntrySize   
@@ -653,6 +462,269 @@ local LDR_LIST_BIN      = "LdrListBin";
 local LDR_BNRY_BIN      = "LdrBinaryBin";
 
 -- Enhancements for LSET end here 
+
+-- ======================================================================
+-- <USER FUNCTIONS> - <USER FUNCTIONS> - <USER FUNCTIONS> - <USER FUNCTIONS>
+-- ======================================================================
+-- We have several different situations where we need to look up a user
+-- defined function:
+-- (*) Object Transformation (e.g. compression)
+-- (*) Object UnTransformation
+-- (*) Predicate Filter (perform additional predicate tests on an object)
+--
+-- These functions are passed in by name (UDF name, Module Name), so we
+-- must check the existence/validity of the module and UDF each time we
+-- want to use them.  Furthermore, we want to centralize the UDF checking
+-- into one place -- so on entry to those LDT functions that might employ
+-- these UDFs (e.g. insert, filter), we'll set up either READ UDFs or
+-- WRITE UDFs and then the inner routines can call them if they are
+-- non-nil.
+-- ======================================================================
+local G_Filter = nil;
+local G_Transform = nil;
+local G_UnTransform = nil;
+local G_FunctionArgs = nil;
+local G_KeyFunction = nil;
+
+-- <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> 
+-- -----------------------------------------------------------------------
+-- resetPtrs()
+-- -----------------------------------------------------------------------
+-- Reset the UDF Ptrs to nil.
+-- -----------------------------------------------------------------------
+local function resetUdfPtrs()
+  G_Filter = nil;
+  G_Transform = nil;
+  G_UnTransform = nil;
+  G_FunctionArgs = nil;
+  G_KeyFunction = nil;
+end -- resetPtrs()
+
+-- <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> 
+-- -----------------------------------------------------------------------
+-- setKeyFunction()
+-- -----------------------------------------------------------------------
+-- The function that extracts a key value from a complex object can
+-- be in the user's "creation" module, or it can be in the FunctionTable.
+-- The "Key" Function may be slightly misleading, depending on the LDT
+-- that is being used.
+-- (*) LSET: The KeyFunction extracts a unique subset from a complex object
+--           that can be compared (equals only). For LSET, a KeyFunction is
+--           not required, as a complex object can always be converted to a
+--           string for an equals compare.
+-- (*) LMAP: The KeyFunction is not used, since values are found with "name",
+--           which must be an atomic (number or string) value.
+-- (*) LLIST: The KeyFunction extracts an atomic value from a complex object
+--            that can be ordered.  For LLIST, if the object being stored is
+--            complex, then it is REQUIRED that there is a valid KeyFunction
+--            to extract an atomic value that can be compared and ordered.
+--            The type of the FIRST INSERT determines the type of the LLIST.
+-- (*) LSTACK: For regular LSTACK, there is no need for a KeyFunction.
+--            However, for TIMESTACK, a special flavor of LSTACK, the 
+--            KeyFunction extracts a TIME value from the object, which must
+--            be a number that can be used in an ordered compare.
+-- Parms:
+-- (*) ldtMap: The basic control info
+-- (*) required: True when we must have a valid KeyFunction, such as for
+--               LLIST.
+-- -----------------------------------------------------------------------
+local function setKeyFunction( ldtMap, required )
+  local meth = "setKeyFunction()";
+  -- Look in the Create Module first, then check the Function Table.
+  local createModule = ldtMap[M_UserModule];
+  local keyFunction = ldtMap[M_KeyFunction];
+  G_KeyFunction = nil;
+  if( keyFunction ~= nil ) then
+    if( type(keyFunction) ~= "string" or filter == "" ) then
+      warn("[ERROR]<%s:%s> Bad KeyFunction Name: type(%s) filter(%s)",
+        MOD, meth, type(filter), tostring(filter) );
+      error( ldte.ERR_KEY_FUN_BAD );
+    else
+      -- Ok -- so far, looks like we have a valid key function name, 
+      -- Look in the Create Module, and if that's not found, then look
+      -- in the system function table.
+      if( G_KeyFunction == nil and createModule ~= nil ) then
+        local createModuleRef = require(createModule);
+        if( createModuleRef ~= nil and createModuleRef[filter] ~= nil ) then
+          G_KeyFunction = createModuleRef[keyFunction];
+        end
+      end
+
+      -- Last we try the UdfFunctionTable, In case the user wants to employ
+      -- one of the standard Key Functions.
+      if( G_KeyFunction == nil and functionTable ~= nil ) then
+        G_KeyFunction = functionTable[keyFunction];
+      end
+
+      -- If we didn't find anything, BUT the user supplied a function name,
+      -- then we have a problem.  We have to complain.
+      if( G_KeyFunction == nil ) then
+        warn("[ERROR]<%s:%s> KeyFunction not found: type(%s) KeyFunction(%s)",
+          MOD, meth, type(keyFunction), tostring(keyFunction) );
+        error( ldte.ERR_KEY_FUN_NOT_FOUND );
+      end
+    end
+  elseif( required == true ) then
+    warn("[ERROR]<%s:%s> Key Function is Required for LDT Complex Objects",
+      MOD, meth );
+    error( ldte.ERR_KEY_FUN_NOT_FOUND );
+  end
+end -- setKeyFunction()
+
+-- -----------------------------------------------------------------------
+-- setReadFunctions()()
+-- -----------------------------------------------------------------------
+-- Set the Filter and UnTransform Function pointers for Reading values.
+-- We follow this hierarchical lookup pattern for the read filter function:
+-- (*) User Supplied Module (might be different from create module)
+-- (*) Create Module
+-- (*) UdfFunctionTable
+--
+-- We follow this lookup pattern for the UnTransform function:
+-- (*) Create Module
+-- (*) UdfFunctionTable
+-- Notice that it would be generally dangerous to use some sort of ad hoc
+-- UnTransform filter -- the Transform/UnTransform should be defined at
+-- the LDT Instance Creation, and then left alone.
+--
+-- -----------------------------------------------------------------------
+local function setReadFunctions( ldtMap, userModule, filter, filterArgs )
+  local meth = "setReadFunctions()";
+  GP=E and trace("[ENTER]<%s:%s> Process Filter(%s)",
+    MOD, meth, tostring(filter));
+
+  -- Do the Filter First. If not nil, then process.  Complain if things
+  -- go badly.
+  local createModule = ldtMap[M_UserModule];
+  G_Filter = nil;
+  G_FunctionArgs = filterArgs;
+  if( filter ~= nil ) then
+    if( type(filter) ~= "string" or filter == "" ) then
+      warn("[ERROR]<%s:%s> Bad filter Name: type(%s) filter(%s)",
+        MOD, meth, type(filter), tostring(filter) );
+      error( ldte.ERR_FILTER_BAD );
+    else
+      -- Ok -- so far, looks like we have a valid filter name, 
+      if( userModule ~= nil and type(userModule) == "string" ) then
+        local userModuleRef = require(userModule);
+        if( userModuleRef ~= nil and userModuleRef[filter] ~= nil ) then
+          G_Filter = userModuleRef[filter];
+        end
+      end
+      -- If we didn't find a good filter, keep looking.  Try the createModule.
+      if( G_Filter == nil and createModule ~= nil ) then
+        local createModuleRef = require(createModule);
+        if( createModuleRef ~= nil and createModuleRef[filter] ~= nil ) then
+          G_Filter = createModuleRef[filter];
+        end
+      end
+      -- Last we try the UdfFunctionTable, In case the user wants to employ
+      -- one of the standard Functions.
+      if( G_Filter == nil and functionTable ~= nil ) then
+        G_Filter = functionTable[filter];
+      end
+
+      -- If we didn't find anything, BUT the user supplied a function name,
+      -- then we have a problem.  We have to complain.
+      if( G_Filter == nil ) then
+        warn("[ERROR]<%s:%s> filter not found: type(%s) filter(%s)",
+          MOD, meth, type(filter), tostring(filter) );
+        error( ldte.ERR_FILTER_NOT_FOUND );
+      end
+    end
+  end -- if filter not nil
+
+  -- That wraps up the Filter handling.  Now do  the UnTransform Function.
+  local untrans = ldtMap[M_UnTransform];
+  G_UnTransform = nil;
+  if( untrans ~= nil ) then
+    if( type(untrans) ~= "string" or untrans == "" ) then
+      warn("[ERROR]<%s:%s> Bad UnTransformation Name: type(%s) function(%s)",
+        MOD, meth, type(untrans), tostring(untrans) );
+      error( ldte.ERR_UNTRANS_FUN_BAD );
+    else
+      -- Ok -- so far, looks like we have a valid untransformation func name, 
+      if( createModule ~= nil ) then
+        local createModuleRef = require(createModule);
+        if( createModuleRef ~= nil and createModuleRef[untrans] ~= nil ) then
+          G_UnTransform = createModuleRef[untrans];
+        end
+      end
+      -- Last we try the UdfFunctionTable, In case the user wants to employ
+      -- one of the standard Functions.
+      if( G_UnTransform == nil and functionTable ~= nil ) then
+        G_UnTransform = functionTable[untrans];
+      end
+
+      -- If we didn't find anything, BUT the user supplied a function name,
+      -- then we have a problem.  We have to complain.
+      if( G_UnTransform == nil ) then
+        warn("[ERROR]<%s:%s> UnTransform Func not found: type(%s) Func(%s)",
+          MOD, meth, type(untrans), tostring(untrans) );
+        error( ldte.ERR_UNTRANS_FUN_NOT_FOUND );
+      end
+    end
+  end -- if untransform not nil
+
+  GP=E and trace("[EXIT]<%s:%s>", MOD, meth );
+end -- setReadFunctions()
+
+
+-- <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> 
+-- -----------------------------------------------------------------------
+-- setWriteFunctions()()
+-- -----------------------------------------------------------------------
+-- Set the Transform Function pointer for Writing values.
+-- We follow a hierarchical lookup pattern for the transform function.
+-- (*) Create Module
+-- (*) UdfFunctionTable
+--
+-- -----------------------------------------------------------------------
+local function setWriteFunctions( ldtMap )
+  local meth = "setWriteFunctions()";
+  GP=E and trace("[ENTER]<%s:%s> Process Filter(%s)",
+    MOD, meth, tostring(filter));
+
+  -- Look in the create module first, then the UdfFunctionTable to find
+  -- the transform function (if there is one).
+  local createModule = ldtMap[M_UserModule];
+  local trans = ldtMap[M_Transform];
+  G_Transform = nil;
+  if( trans ~= nil ) then
+    if( type(trans) ~= "string" or trans == "" ) then
+      warn("[ERROR]<%s:%s> Bad Transformation Name: type(%s) function(%s)",
+        MOD, meth, type(trans), tostring(trans) );
+      error( ldte.ERR_TRANS_FUN_BAD );
+    else
+      -- Ok -- so far, looks like we have a valid transformation func name, 
+      if( createModule ~= nil ) then
+        local createModuleRef = require(createModule);
+        if( createModuleRef ~= nil and createModuleRef[trans] ~= nil ) then
+          G_Transform = createModuleRef[trans];
+        end
+      end
+      -- Last we try the UdfFunctionTable, In case the user wants to employ
+      -- one of the standard Functions.
+      if( G_Transform == nil and functionTable ~= nil ) then
+        G_Transform = functionTable[trans];
+      end
+
+      -- If we didn't find anything, BUT the user supplied a function name,
+      -- then we have a problem.  We have to complain.
+      if( G_Transform == nil ) then
+        warn("[ERROR]<%s:%s> Transform Func not found: type(%s) Func(%s)",
+          MOD, meth, type(trans), tostring(trans) );
+        error( ldte.ERR_TRANS_FUN_NOT_FOUND );
+      end
+    end
+  end
+
+  GP=E and trace("[EXIT]<%s:%s>", MOD, meth );
+end -- setWriteFunctions()
+
+-- ======================================================================
+-- <USER FUNCTIONS> - <USER FUNCTIONS> - <USER FUNCTIONS> - <USER FUNCTIONS>
+-- ======================================================================
 
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- AS Large Set Utility Functions
@@ -825,6 +897,7 @@ local function ldtSummary( ldtCtrl )
   resultMap.StoreLimit           = ldtMap[M_StoreLimit];
   resultMap.Transform            = ldtMap[M_Transform];
   resultMap.UnTransform          = ldtMap[M_UnTransform];
+  resultMap.UserModule           = ldtMap[M_UserModule];
   resultMap.BinaryStoreSize      = ldtMap[M_BinaryStoreSize];
   resultMap.KeyType              = ldtMap[M_KeyType];
   resultMap.TotalCount			 = ldtMap[M_TotalCount];		
@@ -998,10 +1071,24 @@ local function setupNewBin( topRec, binNum )
 end -- setupNewBin
 
 -- ======================================================================
+-- Produce a COMPARABLE value (our overloaded term here is "key") from
+-- the user's value.
 -- The value is either simple (atomic) or an object (complex).  Complex
--- objects either have a key function defined, or they have a field called
--- "key" that will give us a key value.
--- If none of these are true -- then return -1 to show our displeasure.
+-- objects either have a key function defined, or we produce a comparable
+-- "keyValue" from "value" by performing a tostring() operation.
+--
+-- NOTE: According to Chris (yes, everybody hates Chris), the tostring()
+-- method will ALWAYS create the same string for complex objects that
+-- have the same value.  We've noticed that tostring() does not always
+-- show maps with fields in the same order, but in theory two objects (maps)
+-- with the same content will have the same tostring() value.
+-- Parms:
+-- (*) ldtMap: The basic LDT Control structure
+-- (*) value: The value from which we extract a compare-able "keyValue".
+-- Return a comparable value:
+-- ==> The original value, if it is an atomic type
+-- ==> A Unique Identifier subset (that is atomic)
+-- ==> The entire object, in string form.
 -- ======================================================================
 local function getKeyValue( ldtMap, value )
   local meth = "getKeyValue()";
@@ -1020,12 +1107,9 @@ local function getKeyValue( ldtMap, value )
   if( ldtMap[M_KeyType] == KT_ATOMIC or type(value) ~= "userdata" ) then
     keyValue = value;
   else
-    local keyFuncName = ldtMap[M_KeyFunction];
-    if( keyFuncName ~= nil ) and functionTable[keyFuncName] ~= nil then
-      -- Employ the user's supplied function (keyFunction) and if that's not
-      -- there, look for the special case where the object has a field
-      -- called 'key'.  If not, then, well ... tough.  We tried.
-      keyValue = functionTable[keyFuncName]( value );
+    if( G_KeyFunction ~= nil ) then
+      -- Employ the user's supplied function (keyFunction).
+      keyValue = G_KeyFunction( value );
     else
       -- If there's no shortcut, then take the "longcut" to get an atomic
       -- value that represents this entire object.
@@ -1095,101 +1179,10 @@ local function listAppend( baseList, additionalList )
 
   return baseList;
 end -- listAppend()
---
 
 -- =======================================================================
--- Apply Transform Function
--- Take the Transform defined in the ldtMap, if present, and apply
--- it to the value, returning the transformed value.  If no transform
--- is present, then return the original value (as is).
--- NOTE: This can be made more efficient.
 -- =======================================================================
-local function applyTransform( transformFunc, newValue )
-  local meth = "applyTransform()";
-  GP=E and trace("[ENTER]: <%s:%s> transform(%s) type(%s) Value(%s)",
- MOD, meth, tostring(transformFunc), type(transformFunc), tostring(newValue));
-
-  local storeValue = newValue;
-  if transformFunc ~= nil then 
-    storeValue = transformFunc( newValue );
-  end
-  return storeValue;
-end -- applyTransform()
-
 -- =======================================================================
--- Apply UnTransform Function
--- Take the UnTransform defined in the ldtMap, if present, and apply
--- it to the dbValue, returning the unTransformed value.  If no unTransform
--- is present, then return the original value (as is).
--- NOTE: This can be made more efficient.
--- =======================================================================
-local function applyUnTransform( ldtMap, storeValue )
-  local returnValue = storeValue;
-  local untransformName = ldtMap[M_UnTransform];
-  if( untransformName  ~= nil ) then
-    local untransformFunction = functionTable[untransformName];
-    if untransformFunction ~= nil then
-      returnValue = untransformFunction( storeValue );
-    end
-  end
-  return returnValue;
-end -- applyUnTransform( value )
-
--- =======================================================================
--- unTransformSimpleCompare()
--- Apply the unTransform function to the DB value and compare the transformed
--- value with the searchKey.
--- Return the unTransformed DB value if the values match.
--- =======================================================================
-local function unTransformSimpleCompare(unTransform, dbValue, searchKey)
-  local modValue = dbValue;
-  local resultValue = nil;
-
-  if unTransform ~= nil then
-    modValue = unTransform( dbValue );
-  end
-
-  if dbValue == searchKey then
-    resultValue = modValue;
-  end
-
-  return resultValue;
-end -- unTransformSimpleCompare()
-
--- =======================================================================
--- unTransformComplexCompare()
--- Apply the unTransform function to the DB value, extract the key,
--- then compare the values, using simple equals compare.
--- Return the unTransformed DB value if the values match.
--- parms:
--- (*) ldtMap
--- (*) trans: The transformation function: Perform if not null
--- (*) dbValue: The value pulled from the DB
--- (*) searchValue: The value we're looking for.
--- =======================================================================
-local function unTransformComplexCompare(ldtMap,unTransform,dbValue,searchKey)
-  local meth = "unTransformComplexCompare()";
-
-  GP=E and trace("[ENTER]: <%s:%s> unTransform(%s) dbVal(%s) key(%s)",
-     MOD, meth, tostring(unTransform), tostring(dbValue), tostring(searchKey));
-
-  local modValue = dbValue;
-  local resultValue = nil;
-
-  if unTransform ~= nil then
-    GP=F and trace("[WOW!!]<%s:%s> Calling unTransform(%s)", 
-      MOD, meth, tostring( unTransform ));
-    modValue = unTransform( dbValue );
-  end
-  local dbKey = getKeyValue( ldtMap, modValue );
-
-  if dbKey == searchKey then
-    resultValue = modValue;
-  end
-
-  return resultValue;
-end -- unTransformComplexCompare()
-
 
 -- =============================
 -- Begin SubRecord Function Area
@@ -1524,7 +1517,13 @@ local function localTopRecInsert( topRec, ldtCtrl, newValue, stats )
       error(ldte.ERR_UNIQUE_KEY);
     end
   end
-  list.append( binList, newValue );
+  -- If we have a transform, apply it now and store the transformed value.
+  local storeValue = newValue;
+  if( G_Transform ~= nil ) then
+    storeValue = G_Transform( newValue );
+  end
+  list.append( binList, storeValue );
+
   topRec[binName] = binList; 
   record.set_flags(topRec, binName, BF_LDT_HIDDEN );--Must set every time
 
@@ -1857,17 +1856,6 @@ local function topRecSearch( topRec, ldtCtrl, searchKey )
   local resultFitlered = nil;
   local position = 0;
 
---  local unTransformFunc = nil;
---  local untransName =  ldtMap[M_UnTransform];
---  if ( untransName ~= nil and functionTable[untransName] ~= nil ) then
---    unTransformFunc = functionTable[untransName];
---  end
-
---  local filterFunction = nil;
---  if( filter ~= nil and functionTable[filter] ~= nil ) then
---    filterFunction = functionTable[filter];
---  end
-
   GP=F and trace("[DEBUG]<%s:%s> UnTrans(%s) Filter(%s) SrchKey(%s) List(%s)",
     MOD, meth, tostring(G_UnTransform), tostring( G_Filter),
     tostring(searchKey), tostring(binList));
@@ -2171,7 +2159,7 @@ end -- validateRecBinAndMap()
 
 
 -- ======================================================================
--- processModule( ldtCtrl, moduleName )
+-- processModule()
 -- ======================================================================
 -- We expect to see several things from a user module.
 -- (*) An adjust_settings() function: where a user overrides default settings
@@ -2189,10 +2177,17 @@ local function processModule( ldtCtrl, moduleName )
   local propMap = ldtCtrl[1];
   local ldtMap = ldtCtrl[2];
 
-  if( moduleName ~= nil and type(moduleName) == "string" ) then
+  if( moduleName ~= nil ) then
+    if( type(moduleName) ~= "string" ) then
+      warn("[ERROR]<%s:%s>User Module(%s) not valid::wrong type(%s)",
+        MOD, meth, tostring(moduleName), type(moduleName));
+      error( ldte.ERR_USER_MODULE_BAD );
+    end
+
     local userModule = require(moduleName);
     if( userModule == nil ) then
       warn("[ERROR]<%s:%s>User Module(%s) not valid", MOD, meth, moduleName);
+      error( ldte.ERR_USER_MODULE_NOT_FOUND );
     else
       local userSettings =  userModule[G_SETTINGS];
       if( userSettings ~= nil ) then
@@ -2201,7 +2196,7 @@ local function processModule( ldtCtrl, moduleName )
       end
     end
   else
-    warn("[ERROR]<%s:%s>User Module(%s) invalid",MOD,meth,tostring(moduleName));
+    warn("[ERROR]<%s:%s>User Module is NIL", MOD, meth );
   end
 
   GP=E and trace("[EXIT]<%s:%s> Module(%s) LDT CTRL(%s)", MOD, meth,
@@ -2266,7 +2261,7 @@ local function setupLdtBin( topRec, ldtBinName, userModule )
 
   -- NOTE: The Caller will write out the LDT bin.
   return 0;
-end -- setupLdtBin( topRec, ldtBinName, userModule ) 
+end -- setupLdtBin()
 
 
 -- ======================================================================
@@ -2509,7 +2504,9 @@ local function localLSetInsert( topRec, ldtBinName, newValue, userModule )
   local propMap = ldtCtrl[1];
   local ldtMap  = ldtCtrl[2];
 
-  -- Set up the Transform (write) function if needed.
+  -- Set up the Read/Write Functions (KeyFunction, Transform, Untransform)
+  setKeyFunction( ldtMap, false )
+  setReadFunctions( ldtMap, nil, nil, nil );
   setWriteFunctions( ldtMap );
 
   if(ldtMap[M_SetTypeStore] ~= nil and ldtMap[M_SetTypeStore] == ST_SUBRECORD)
@@ -2601,6 +2598,7 @@ local function localLSetExists( topRec, ldtBinName, searchValue )
   -- Set up our global "UnTransform" and Filter Functions. This lets us
   -- process the function pointers once per call, and consistently for
   -- all LSET operations. (However, filter not used here.)
+  setKeyFunction( ldtMap, false )
   setReadFunctions( ldtMap, nil, nil, nil );
 
   if(ldtMap[M_SetTypeStore] ~= nil and ldtMap[M_SetTypeStore] == ST_SUBRECORD)
@@ -2666,6 +2664,7 @@ local function localLSetSearch( topRec, ldtBinName, searchValue,
   -- Set up our global "UnTransform" and Filter Functions.  This lets us
   -- process the function pointers once per call, and consistently for
   -- all LSET operations.
+  setKeyFunction( ldtMap, false )
   setReadFunctions( ldtMap, userModule, filter, fargs );
 
   if(ldtMap[M_SetTypeStore] ~= nil and ldtMap[M_SetTypeStore] == ST_SUBRECORD)
@@ -2719,6 +2718,7 @@ local function localLSetScan(topRec, ldtBinName, userModule, filter, fargs)
   local resultList = list();
   --
   -- Set up our global "UnTransform" and Filter Functions.
+  setKeyFunction( ldtMap, false )
   setReadFunctions( ldtMap, userModule, filter, fargs );
   
   if(ldtMap[M_SetTypeStore] ~= nil and ldtMap[M_SetTypeStore] == ST_SUBRECORD)
@@ -2871,6 +2871,7 @@ local function localLSetDelete( topRec, ldtBinName, deleteValue, userModule,
   local key = getKeyValue( ldtMap, deleteValue );
 
   -- Set up our global "UnTransform" and Filter Functions.
+  setKeyFunction( ldtMap, false )
   setReadFunctions( ldtMap, userModule, filter, fargs );
   
   if(ldtMap[M_SetTypeStore] ~= nil and ldtMap[M_SetTypeStore] == ST_SUBRECORD)
@@ -3040,6 +3041,7 @@ local function localDump( topRec, ldtBinName )
 
   -- Check once for the untransform functions -- so we don't need
   -- to do it inside the loop.  No filters here, though.
+  setKeyFunction( ldtMap, false )
   setReadFunctions( ldtMap, nil, nil, nil );
 
   if(ldtMap[M_SetTypeStore] ~= nil and ldtMap[M_SetTypeStore] == ST_SUBRECORD)

@@ -1,8 +1,6 @@
 -- Large Stack Object (LSO or LSTACK) Operations
--- lstack.lua:  September 11, 2013
---
--- Module Marker: Keep this in sync with the stated version
-local MOD="lstack_2013_09_11.c"; -- the module name used for tracing
+-- Track the data and iteration of the last update.
+local MOD="lstack_2013_09_18.e";
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -571,7 +569,7 @@ local CDM_DigestCount          = 'C';-- Current Digest Count
 -- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 local M_StoreMode              = 'M'; -- List or Binary Mode
 local M_StoreLimit             = 'S'; -- Max Item Count for stack
-local M_UserModule             = 'U'; -- Name of the User Module
+local M_UserModule             = 'P'; -- Name of the User Module
 local M_Transform              = 't'; -- User's Transform function
 local M_UnTransform            = 'u'; -- User's UNTransform function
 local M_LdrEntryCountMax       = 'e'; -- Max # of entries in an LDR
@@ -633,12 +631,12 @@ local M_ColdDirRecCount        = 'r';-- # of Cold Dir sub-Records
 -- M:M_StoreMode              m:
 -- N:                         n:
 -- O:                         o:
--- P:                         p:
+-- P:M_UserModule             p:
 -- Q:                         q:
 -- R:M_ColdDataRecCount       r:M_ColdDirRecCount
 -- S:M_StoreLimit             s:M_LdrByteEntrySize
 -- T:M_ColdTopListCount       t:M_Transform
--- U:M_UserModule             u:M_UnTransform
+-- U:                         u:M_UnTransform
 -- V:                         v:
 -- W:M_WarmDigestList         w:M_WarmListMax
 -- X:M_HotListTransfer        x:M_WarmListTransfer
@@ -650,6 +648,8 @@ local M_ColdDirRecCount        = 'r';-- # of Cold Dir sub-Records
 -- inspection to make sure that nothing overlaps.  And, note that these
 -- Variable/Char mappings need to be unique ONLY per map -- not globally.
 -- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+-- ======================================================================
+
 -- ======================================================================
 -- <USER FUNCTIONS> - <USER FUNCTIONS> - <USER FUNCTIONS> - <USER FUNCTIONS>
 -- ======================================================================
@@ -671,6 +671,7 @@ local G_Filter = nil;
 local G_Transform = nil;
 local G_UnTransform = nil;
 local G_FunctionArgs = nil;
+local G_KeyFunction = nil;
 
 -- <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> 
 -- -----------------------------------------------------------------------
@@ -683,46 +684,237 @@ local function resetUdfPtrs()
   G_Transform = nil;
   G_UnTransform = nil;
   G_FunctionArgs = nil;
+  G_KeyFunction = nil;
 end -- resetPtrs()
 
+-- <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> 
+-- -----------------------------------------------------------------------
+-- setKeyFunction()
+-- -----------------------------------------------------------------------
+-- The function that extracts a key value from a complex object can
+-- be in the user's "creation" module, or it can be in the FunctionTable.
+-- The "Key" Function may be slightly misleading, depending on the LDT
+-- that is being used.
+-- (*) LSET: The KeyFunction extracts a unique subset from a complex object
+--           that can be compared (equals only). For LSET, a KeyFunction is
+--           not required, as a complex object can always be converted to a
+--           string for an equals compare.
+-- (*) LMAP: The KeyFunction is not used, since values are found with "name",
+--           which must be an atomic (number or string) value.
+-- (*) LLIST: The KeyFunction extracts an atomic value from a complex object
+--            that can be ordered.  For LLIST, if the object being stored is
+--            complex, then it is REQUIRED that there is a valid KeyFunction
+--            to extract an atomic value that can be compared and ordered.
+--            The type of the FIRST INSERT determines the type of the LLIST.
+-- (*) LSTACK: For regular LSTACK, there is no need for a KeyFunction.
+--            However, for TIMESTACK, a special flavor of LSTACK, the 
+--            KeyFunction extracts a TIME value from the object, which must
+--            be a number that can be used in an ordered compare.
+-- Parms:
+-- (*) ldtMap: The basic control info
+-- (*) required: True when we must have a valid KeyFunction, such as for
+--               LLIST.
+-- -----------------------------------------------------------------------
+local function setKeyFunction( ldtMap, required )
+  local meth = "setKeyFunction()";
+  -- Look in the Create Module first, then check the Function Table.
+  local createModule = ldtMap[M_UserModule];
+  local keyFunction = ldtMap[M_KeyFunction];
+  G_KeyFunction = nil;
+  if( keyFunction ~= nil ) then
+    if( type(keyFunction) ~= "string" or filter == "" ) then
+      warn("[ERROR]<%s:%s> Bad KeyFunction Name: type(%s) filter(%s)",
+        MOD, meth, type(filter), tostring(filter) );
+      error( ldte.ERR_KEY_FUN_BAD );
+    else
+      -- Ok -- so far, looks like we have a valid key function name, 
+      -- Look in the Create Module, and if that's not found, then look
+      -- in the system function table.
+      if( G_KeyFunction == nil and createModule ~= nil ) then
+        local createModuleRef = require(createModule);
+        if( createModuleRef ~= nil and createModuleRef[filter] ~= nil ) then
+          G_KeyFunction = createModuleRef[keyFunction];
+        end
+      end
+
+      -- Last we try the UdfFunctionTable, In case the user wants to employ
+      -- one of the standard Key Functions.
+      if( G_KeyFunction == nil and functionTable ~= nil ) then
+        G_KeyFunction = functionTable[keyFunction];
+      end
+
+      -- If we didn't find anything, BUT the user supplied a function name,
+      -- then we have a problem.  We have to complain.
+      if( G_KeyFunction == nil ) then
+        warn("[ERROR]<%s:%s> KeyFunction not found: type(%s) KeyFunction(%s)",
+          MOD, meth, type(keyFunction), tostring(keyFunction) );
+        error( ldte.ERR_KEY_FUN_NOT_FOUND );
+      end
+    end
+  elseif( required == true ) then
+    warn("[ERROR]<%s:%s> Key Function is Required for this LDT Complex Object",
+      MOD, meth );
+    error( ldte.ERR_KEY_FUN_NOT_FOUND );
+  end
+end -- setKeyFunction()
+
+-- -----------------------------------------------------------------------
+-- setReadFunctions()()
+-- -----------------------------------------------------------------------
+-- Set the Filter and UnTransform Function pointers for Reading values.
+-- We follow this hierarchical lookup pattern for the read filter function:
+-- (*) User Supplied Module (might be different from create module)
+-- (*) Create Module
+-- (*) UdfFunctionTable
+--
+-- We follow this lookup pattern for the UnTransform function:
+-- (*) Create Module
+-- (*) UdfFunctionTable
+-- Notice that it would be generally dangerous to use some sort of ad hoc
+-- UnTransform filter -- the Transform/UnTransform should be defined at
+-- the LDT Instance Creation, and then left alone.
+--
+-- -----------------------------------------------------------------------
+local function setReadFunctions( ldtMap, userModule, filter, filterArgs )
+  local meth = "setReadFunctions()";
+  GP=E and trace("[ENTER]<%s:%s> Process Filter(%s)",
+    MOD, meth, tostring(filter));
+
+  -- Do the Filter First. If not nil, then process.  Complain if things
+  -- go badly.
+  local createModule = ldtMap[M_UserModule];
+  G_Filter = nil;
+  G_FunctionArgs = filterArgs;
+  if( filter ~= nil ) then
+    if( type(filter) ~= "string" or filter == "" ) then
+      warn("[ERROR]<%s:%s> Bad filter Name: type(%s) filter(%s)",
+        MOD, meth, type(filter), tostring(filter) );
+      error( ldte.ERR_FILTER_BAD );
+    else
+      -- Ok -- so far, looks like we have a valid filter name, 
+      if( userModule ~= nil and type(userModule) == "string" ) then
+        local userModuleRef = require(userModule);
+        if( userModuleRef ~= nil and userModuleRef[filter] ~= nil ) then
+          G_Filter = userModuleRef[filter];
+        end
+      end
+      -- If we didn't find a good filter, keep looking.  Try the createModule.
+      if( G_Filter == nil and createModule ~= nil ) then
+        local createModuleRef = require(createModule);
+        if( createModuleRef ~= nil and createModuleRef[filter] ~= nil ) then
+          G_Filter = createModuleRef[filter];
+        end
+      end
+      -- Last we try the UdfFunctionTable, In case the user wants to employ
+      -- one of the standard Functions.
+      if( G_Filter == nil and functionTable ~= nil ) then
+        G_Filter = functionTable[filter];
+      end
+
+      -- If we didn't find anything, BUT the user supplied a function name,
+      -- then we have a problem.  We have to complain.
+      if( G_Filter == nil ) then
+        warn("[ERROR]<%s:%s> filter not found: type(%s) filter(%s)",
+          MOD, meth, type(filter), tostring(filter) );
+        error( ldte.ERR_FILTER_NOT_FOUND );
+      end
+    end
+  end -- if filter not nil
+
+  -- That wraps up the Filter handling.  Now do  the UnTransform Function.
+  local untrans = ldtMap[M_UnTransform];
+  G_UnTransform = nil;
+  if( untrans ~= nil ) then
+    if( type(untrans) ~= "string" or untrans == "" ) then
+      warn("[ERROR]<%s:%s> Bad UnTransformation Name: type(%s) function(%s)",
+        MOD, meth, type(untrans), tostring(untrans) );
+      error( ldte.ERR_UNTRANS_FUN_BAD );
+    else
+      -- Ok -- so far, looks like we have a valid untransformation func name, 
+      if( createModule ~= nil ) then
+        local createModuleRef = require(createModule);
+        if( createModuleRef ~= nil and createModuleRef[untrans] ~= nil ) then
+          G_UnTransform = createModuleRef[untrans];
+        end
+      end
+      -- Last we try the UdfFunctionTable, In case the user wants to employ
+      -- one of the standard Functions.
+      if( G_UnTransform == nil and functionTable ~= nil ) then
+        G_UnTransform = functionTable[untrans];
+      end
+
+      -- If we didn't find anything, BUT the user supplied a function name,
+      -- then we have a problem.  We have to complain.
+      if( G_UnTransform == nil ) then
+        warn("[ERROR]<%s:%s> UnTransform Func not found: type(%s) Func(%s)",
+          MOD, meth, type(untrans), tostring(untrans) );
+        error( ldte.ERR_UNTRANS_FUN_NOT_FOUND );
+      end
+    end
+  end -- if untransform not nil
+
+  GP=E and trace("[EXIT]<%s:%s>", MOD, meth );
+end -- setReadFunctions()
+
 
 -- <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> 
 -- -----------------------------------------------------------------------
--- setTransformPtr()()
+-- setWriteFunctions()()
 -- -----------------------------------------------------------------------
--- Set the Transform Function pointer for writing new values.
--- Look for the transform function "transform"
+-- Set the Transform Function pointer for Writing values.
+-- We follow a hierarchical lookup pattern for the transform function.
+-- (*) Create Module
+-- (*) UdfFunctionTable
+--
 -- -----------------------------------------------------------------------
-local function setTransformPtr( ldtMap, userModule, transform )
-end -- setTransformPtr()
+local function setWriteFunctions( ldtMap )
+  local meth = "setWriteFunctions()";
+  GP=E and trace("[ENTER]<%s:%s> Process Filter(%s)",
+    MOD, meth, tostring(filter));
 
+  -- Look in the create module first, then the UdfFunctionTable to find
+  -- the transform function (if there is one).
+  local createModule = ldtMap[M_UserModule];
+  local trans = ldtMap[M_Transform];
+  G_Transform = nil;
+  if( trans ~= nil ) then
+    if( type(trans) ~= "string" or trans == "" ) then
+      warn("[ERROR]<%s:%s> Bad Transformation Name: type(%s) function(%s)",
+        MOD, meth, type(trans), tostring(trans) );
+      error( ldte.ERR_TRANS_FUN_BAD );
+    else
+      -- Ok -- so far, looks like we have a valid transformation func name, 
+      if( createModule ~= nil ) then
+        local createModuleRef = require(createModule);
+        if( createModuleRef ~= nil and createModuleRef[trans] ~= nil ) then
+          G_Transform = createModuleRef[trans];
+        end
+      end
+      -- Last we try the UdfFunctionTable, In case the user wants to employ
+      -- one of the standard Functions.
+      if( G_Transform == nil and functionTable ~= nil ) then
+        G_Transform = functionTable[trans];
+      end
 
--- <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> 
--- -----------------------------------------------------------------------
--- setUnTransformPtr()()
--- -----------------------------------------------------------------------
--- Set the UnTransform Function pointer for Reading values.
--- -----------------------------------------------------------------------
-local function setUnTransformPtr( ldtMap, userModule, untransform )
-end -- setUnTransformPtr()
+      -- If we didn't find anything, BUT the user supplied a function name,
+      -- then we have a problem.  We have to complain.
+      if( G_Transform == nil ) then
+        warn("[ERROR]<%s:%s> Transform Func not found: type(%s) Func(%s)",
+          MOD, meth, type(trans), tostring(trans) );
+        error( ldte.ERR_TRANS_FUN_NOT_FOUND );
+      end
+    end
+  end
 
-
--- <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> 
--- -----------------------------------------------------------------------
--- setFilterPtr()()
--- -----------------------------------------------------------------------
--- Set the Filter Function pointer for Reading values.
--- -----------------------------------------------------------------------
-local function setFilterPtr( ldtMap, userModule, filter )
-end -- setFilterPtr()
-
--- <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> <udf> 
--- -----------------------------------------------------------------------
--- -----------------------------------------------------------------------
-
+  GP=E and trace("[EXIT]<%s:%s>", MOD, meth );
+end -- setWriteFunctions()
 
 -- ======================================================================
 -- <USER FUNCTIONS> - <USER FUNCTIONS> - <USER FUNCTIONS> - <USER FUNCTIONS>
+-- ======================================================================
+
+
+-- ======================================================================
 -- ======================================================================
 -- local function lsoSummary( ldtCtrl ) (DEBUG/Trace Function)
 -- ======================================================================
@@ -1576,33 +1768,21 @@ end -- coldDirRecSummary()
 --   (*) ldtCtrl:
 --   (*) entryList:
 --   (*) count:
---   (*) func:
---   (*) fargs:
 --   (*) all:
 -- Return:
 --   Implicit: entries are added to the result list
 --   Explicit: Number of Elements Read.
 -- ======================================================================
-local function readEntryList( resultList, ldtCtrl, entryList, count,
-    filter, fargs, all)
+local function readEntryList( resultList, ldtCtrl, entryList, count, all)
 
   local meth = "readEntryList()";
   GP=E and trace("[ENTER]: <%s:%s> Count(%s) filter(%s) fargs(%s) all(%s)",
-      MOD,meth,tostring(count), tostring(filter), tostring(fargs),tostring(all));
+      MOD,meth,tostring(count), tostring(G_Filter), tostring(G_FunctionArgs),
+      tostring(all));
 
   -- Extract the property map and lso control map from the lso bin list.
   local propMap = ldtCtrl[1];
   local ldtMap  = ldtCtrl[2];
-
-  local doUnTransform = false; 
-  if( ldtMap[M_UnTransform] ~= nil ) then
-    doUnTransform = true; 
-  end
-
-  local applyFilter = false;
-  if filter ~= nil and fargs ~= nil then
-    applyFilter = true;
-  end
 
   -- Iterate thru the entryList, gathering up items in the result list.
   -- There are two modes:
@@ -1622,8 +1802,8 @@ local function readEntryList( resultList, ldtCtrl, entryList, count,
   for i = listSize, 1, -1 do
 
     -- Apply the transform to the item, if present
-    if doUnTransform == true then -- apply the transform
-      readValue = functionTable[ldtMap[M_UnTransform]]( entryList[i] );
+    if( G_UnTransform ~= nil ) then
+      readValue = G_UnTransform( entryList[i] );
     else
       readValue = entryList[i];
     end
@@ -1632,8 +1812,8 @@ local function readEntryList( resultList, ldtCtrl, entryList, count,
     -- the value passes the filter (or if there is no filter), then add it
     -- to the resultList.
     local resultValue;
-    if applyFilter == true then
-      resultValue = functionTable[filter]( readValue, fargs );
+    if( G_Filter ~= nil ) then
+      resultValue = G_Filter( readValue, fargs );
     else
       resultValue = readValue;
     end
@@ -1757,8 +1937,8 @@ local function readByteArray( resultList, ldtCtrl, ldrChunk, count,
 --    MOD, meth, i, byteIndex, tostring( byteValue ));
 
     -- Apply the UDF to the item, if present, and if result NOT NULL, then
-    if doUnTransform == true then -- apply the "UnTransform" function
-      readValue = functionTable[ldtMap[M_UnTransform]]( byteValue );
+    if( G_UnTransform ~= nil ) then
+      readValue = G_UnTransform( byteValue );
     else
       readValue = byteValue;
     end
@@ -1767,8 +1947,8 @@ local function readByteArray( resultList, ldtCtrl, ldrChunk, count,
     -- the value passes the filter (or if there is no filter), then add it
     -- to the resultList.
     local resultValue;
-    if applyFilter == true then
-      resultValue = functionTable[func]( readValue, fargs );
+    if( G_Filter ~= nil ) then
+      resultValue = G_Filter( readValue, fargs );
     else
       resultValue = readValue;
     end
@@ -3533,7 +3713,7 @@ end -- validateRecBinAndMap()
 -- buildSubRecList()
 -- ========================================================================
 -- Build the list of subrecs starting at location N.  ZERO means, get them
--- all (which is what lstack_delete() uses).
+-- all.
 -- Parms:
 -- (1) topRec: the user-level record holding the LSO Bin
 -- (2) ldtCtrl: The main LDT control structure
@@ -3950,19 +4130,30 @@ local function processModule( ldtCtrl, moduleName )
   local propMap = ldtCtrl[1];
   local ldtMap = ldtCtrl[2];
 
-  local userModule = require(moduleName);
-  if( userModule == nil ) then
-    warn("[ERROR]<%s:%s> User Module(%s) is not valid", MOD, meth, moduleName);
-  else
-    local userSettings =  userModule[G_SETTINGS];
-    if( userSettings ~= nil ) then
-      userSettings( ldtMap ); -- hope for the best.
-      ldtMap[M_UserModule] = moduleName;
+  if( moduleName ~= nil ) then
+    if( type(moduleName) ~= "string" ) then
+      warn("[ERROR]<%s:%s>User Module(%s) not valid::wrong type(%s)",
+        MOD, meth, tostring(moduleName), type(moduleName));
+      error( ldte.ERR_USER_MODULE_BAD );
     end
+
+    local userModule = require(moduleName);
+    if( userModule == nil ) then
+      warn("[ERROR]<%s:%s>User Module(%s) not valid", MOD, meth, moduleName);
+      error( ldte.ERR_USER_MODULE_NOT_FOUND );
+    else
+      local userSettings =  userModule[G_SETTINGS];
+      if( userSettings ~= nil ) then
+        userSettings( ldtMap ); -- hope for the best.
+        ldtMap[M_UserModule] = moduleName;
+      end
+    end
+  else
+    warn("[ERROR]<%s:%s>User Module is NIL", MOD, meth );
   end
 
-  warn("[ERROR]<%s:%s> Mod(%s) THIS FUNCTION NOT YET IMPLEMENTED", MOD, meth,
-    tostring( moduleName));
+  GP=E and trace("[EXIT]<%s:%s> Module(%s) LDT CTRL(%s)", MOD, meth,
+  tostring( moduleName ), ldtSummaryString(ldtCtrl));
 
 end -- processModule()
 
@@ -3973,29 +4164,29 @@ end -- processModule()
 -- in this bin.
 -- ALSO:: Caller write out the LDT bin after this function returns.
 -- ======================================================================
-local function setupLdtBin( topRec, ldtBinName, createSpec ) 
+local function setupLdtBin( topRec, ldtBinName, userModule ) 
   local meth = "setupLdtBin()";
   GP=E and trace("[ENTER]<%s:%s> binName(%s)",MOD,meth,tostring(ldtBinName));
 
   local ldtCtrl = initializeLdtCtrl( topRec, ldtBinName );
   local propMap = ldtCtrl[1]; 
   local ldtMap = ldtCtrl[2]; 
-  
+
   -- Set the type of this record to LDT (it might already be set)
   -- No Longer needed.  The Set Type is handled in initializeLdtCtrl()
   -- record.set_type( topRec, RT_LDT ); -- LDT Type Rec
-  
+
   -- If the user has passed in settings that override the defaults
-  -- (the createSpec), then process that now.
-  if( createSpec ~= nil )then
-    local createSpecType = type(createSpec);
+  -- (the userModule), then process that now.
+  if( userModule ~= nil )then
+    local createSpecType = type(userModule);
     if( createSpecType == "string" ) then
-      processModule( createSpec );
+      processModule( userModule );
     elseif( createSpecType == "userdata" ) then
-      adjustLdtMap( ldtMap, createSpec );
+      adjustLdtMap( ldtMap, userModule );
     else
       warn("[WARNING]<%s:%s> Unknown Creation Object(%s)",
-        MOD, meth, tostring( createSpec ));
+        MOD, meth, tostring( userModule ));
     end
   end
 
@@ -4009,8 +4200,7 @@ local function setupLdtBin( topRec, ldtBinName, createSpec )
 
   -- NOTE: The Caller will write out the LDT bin.
   return 0;
-end -- setupLdtBin( topRec, ldtBinName, createSpec ) 
-
+end -- setupLdtBin()
 
 -- ======================================================================
 -- || localCreate ||
@@ -4082,64 +4272,6 @@ local function localCreate( topRec, ldtBinName, createSpec )
   -- We need a new LDT bin -- set it up.
   setupLdtBin( topRec, ldtBinName, createSpec );
 
---  if createSpec == nil then
---    GP=E and trace("[ENTER1]: <%s:%s> ldtBinName(%s) NULL createSpec",
---      MOD, meth, tostring(ldtBinName));
---  else
---    GP=E and trace("[ENTER2]: <%s:%s> ldtBinName(%s) createSpec(%s) ",
---    MOD, meth, tostring( ldtBinName), tostring( createSpec ));
---  end
---
---  -- Some simple protection of faulty records or bad bin names
---  validateRecBinAndMap( topRec, ldtBinName, false );
---
---  -- Create and initialize the LSO Object:: The List that holds both
---  -- the Property Map and the LSO Map;
---  -- NOTE: initializeLso() also assigns the ldtCtrl to the record bin.
---  local ldtCtrl = initializeLso( topRec, ldtBinName );
---
---  -- If the user has passed in settings that override the defaults
---  -- (the createSpec), then process that now.
---  if( createSpec ~= nil )then
---    local createSpecType = type(createSpec);
---    if( createSpecType == "string" ) then
---      processModule( ldtCtrl, createSpec );
---    elseif( createSpecType == "userdata" ) then
---      adjustLdtMap( ldtCtrl, createSpec )
---    else
---      warn("[WARNING]<%s:%s> Unknown Creation Object(%s)::Ignored",
---        MOD, meth, tostring( createSpec ));
---    end
---  end
---
---  GP=F and trace("[DEBUG]:<%s:%s>:LsoList after Init(%s)",
---    MOD, meth, tostring(ldtCtrl));
---
---  -- Update the Record.
---  topRec[ldtBinName] = ldtCtrl;
---  record.set_flags(topRec, ldtBinName, BF_LDT_BIN );--Must set every time
---
---  -- All done, store the record (Create if needed, or just Update).
---  local rc;
---  if( not aerospike:exists( topRec ) ) then
---    GP=F and trace("[DEBUG]:<%s:%s>:Create Record()", MOD, meth );
---    rc = aerospike:create( topRec );
---  else
---    GP=F and trace("[DEBUG]:<%s:%s>:Update Record()", MOD, meth );
---    rc = aerospike:update( topRec );
---  end
---
---  if( rc == nil or rc == 0 ) then
---    GP=E and trace("[Normal EXIT]:<%s:%s> Return(0)", MOD, meth );
---    return 0;
---  else
---    GP=E and trace("[ERROR EXIT]:<%s:%s> Return(%s)", MOD, meth,tostring(rc));
---    error( ldte.ERR_CREATE );
---  end
-
-  -- All done, store the record
-  -- With recent changes, we know that the record is now already created
-  -- so all we need to do is perform the update (no create needed).
   GP=F and trace("[DEBUG]:<%s:%s>:Update Record()", MOD, meth );
   local rc = aerospike:update( topRec );
   
@@ -4184,8 +4316,6 @@ local function localStackPush( topRec, ldtBinName, newValue, createSpec )
 
   GP=F and trace("\n\n >>>>>>>>> API[ LSTACK PUSH ] <<<<<<<<<< \n");
 
-  -- Note: functionTable is "global" to this module, defined at top of file.
-
   GP=E and trace("[ENTER1]:<%s:%s>LSO BIN(%s) NewVal(%s) createSpec(%s)",
       MOD, meth, tostring(ldtBinName), tostring( newValue ),
       tostring( createSpec ) );
@@ -4207,61 +4337,22 @@ local function localStackPush( topRec, ldtBinName, newValue, createSpec )
   local ldtCtrl = topRec[ldtBinName]; -- The main lmap
   local propMap = ldtCtrl[1];
   local ldtMap = ldtCtrl[2];
---
---  -- Create the SubrecContext, which will hold all of the open subrecords.
---  -- The key will be the DigestString, and the value will be the subRec
---  -- pointer.
---  local src = createSubrecContext();
---
---  -- Check for existence, and create if not there.  If we create AND there
---  -- is a "createSpec", then configure this LSO appropriately.
---  local ldtCtrl;
---  local ldtMap;
---  local propMap;
---  if( not aerospike:exists( topRec ) ) then
---    GP=F and trace("[NOTICE]:<%s:%s>:Record Does Not exist. Creating",
---      MOD, meth );
---    ldtCtrl = initializeLso( topRec, ldtBinName );
---    if( createSpec ~= nil ) then
---      -- If the CreateSpecification is present, then modify the LSO parms
---      adjustLdtMap( ldtCtrl, createSpec );
---    end
---    aerospike:create( topRec );
---  elseif ( topRec[ldtBinName] == nil ) then
---    GP=F and trace("[NOTICE]: <%s:%s> LSO BIN (%s) DOES NOT Exist: Creating",
---                   MOD, meth, tostring(ldtBinName) );
---    ldtCtrl = initializeLso( topRec, ldtBinName );
---
---    -- If the user has passed in settings that override the defaults
---    -- (the createSpec), then process that now.
---    if( createSpec ~= nil )then
---      local createSpecType = type(createSpec);
---      if( createSpecType == "string" ) then
---        processModule( createSpec );
---      elseif( createSpecType == "userdata" ) then
---        adjustLdtMap( ldtCtrl, createSpec )
---      else
---        warn("[WARNING]<%s:%s> Unknown Creation Object(%s)::Ignored",
---          MOD, meth, tostring( createSpec ));
---      end
---    end
---    aerospike:create( topRec );
---  else
---    -- if the map already exists, then we don't adjust with createSpec.
---    ldtCtrl = topRec[ldtBinName];
---  end
---  -- Extract the Property Map and LsoMap from the LsoList;
---  propMap = ldtCtrl[1];
---  ldtMap  = ldtCtrl[2];
---  
+
+  -- Set up the Write Functions (Transform).  But, just in case we're
+  -- in special TIMESTACK mode, set up the KeyFunction and ReadFunction
+  -- Note that KeyFunction would be used only for special TIMESTACK function.
+  setKeyFunction( ldtMap, false );
+  setReadFunctions( ldtMap, nil, nil, nil );
+  setWriteFunctions( ldtMap );
+
   -- Now, it looks like we're ready to insert.  If there is a transform
   -- function present, then apply it now.
-  -- Note: functionTable is "global" to this module, defined at top of file.
+  -- Note: G_Transform is "global" to this module, defined at top of file.
   local newStoreValue;
-  if ldtMap[M_Transform] ~= nil  then 
+  if( G_Transform ~= nil ) then
     GP=F and trace("[DEBUG]: <%s:%s> Applying Transform (%s)",
-      MOD, meth, tostring(ldtMap[M_Transform] ) );
-    newStoreValue = functionTable[ldtMap[M_Transform]]( newValue );
+      MOD, meth, tostring(G_Transform));
+    newStoreValue = G_Transform( newValue );
   else
     newStoreValue = newValue;
   end
@@ -4377,6 +4468,7 @@ local function localStackPeek( topRec, ldtBinName, peekCount, userModule,
 
   -- Some simple protection of faulty records or bad bin names
   validateRecBinAndMap( topRec, ldtBinName, true );
+
   local ldtCtrl = topRec[ ldtBinName ];
   local propMap = ldtCtrl[1];
   local ldtMap  = ldtCtrl[2];
@@ -4384,6 +4476,10 @@ local function localStackPeek( topRec, ldtBinName, peekCount, userModule,
   GP=F and trace("[DEBUG]: <%s:%s> LSO List Summary(%s)",
     MOD, meth, lsoSummaryString( ldtCtrl ) );
 
+  -- Set up the Read Functions (KeyFunction, Untransform, Filter)
+  -- Note that KeyFunction would be used only for special TIMESTACK function.
+  setKeyFunction( ldtMap, false )
+  setReadFunctions( ldtMap, nil, nil, nil );
 
   -- Create the SubrecContext, which will hold all of the open subrecords.
   -- The key will be the DigestString, and the value will be the subRec
@@ -4417,6 +4513,9 @@ local function localStackPeek( topRec, ldtBinName, peekCount, userModule,
     count = peekCount;
   end
 
+  -- Set up the Read Functions (UnTransform, Filter)
+  setReadFunctions( ldtMap, userModule, filter, fargs );
+
   -- Set up our answer list.
   local resultList = list(); -- everyone will fill this in
 
@@ -4425,7 +4524,7 @@ local function localStackPeek( topRec, ldtBinName, peekCount, userModule,
 
   -- Fetch from the Hot List, then the Warm List, then the Cold List.
   -- Each time we decrement the count and add to the resultlist.
-  local resultList = hotListRead(resultList, ldtCtrl, count, filter, fargs, all);
+  local resultList = hotListRead(resultList, ldtCtrl, count, all);
   local numRead = list.size( resultList );
   GP=F and trace("[DEBUG]: <%s:%s> HotListResult:Summary(%s)",
       MOD, meth, summarizeList(resultList));
@@ -4450,7 +4549,7 @@ local function localStackPeek( topRec, ldtBinName, peekCount, userModule,
   -- If no Warm List, then we're done (assume no cold list if no warm)
   if list.size(ldtMap[M_WarmDigestList]) > 0 then
     warmCount =
-     warmListRead(src,topRec,resultList,ldtCtrl,remainingCount,filter,fargs,all);
+     warmListRead(src,topRec,resultList,ldtCtrl,remainingCount,all);
   end
 
   -- As Agent Smith would say... "MORE!!!".
@@ -4477,7 +4576,7 @@ local function localStackPeek( topRec, ldtBinName, peekCount, userModule,
 
   -- Otherwise, go look for more in the Cold List.
   local coldCount = 
-     coldListRead(src,topRec,resultList,ldtCtrl,remainingCount,filter,fargs,all);
+     coldListRead(src,topRec,resultList,ldtCtrl,remainingCount,all);
 
   GP=E and trace("[EXIT]: <%s:%s>: PeekCount(%d) ResultListSummary(%s)",
     MOD, meth, peekCount, summarizeList(resultList));
@@ -4707,8 +4806,8 @@ function lstack_subrec_list( topRec, ldtBinName )
 end -- lstack_subrec_list()
 
 -- ========================================================================
--- localLdtRemove() -- Remove the LDT entirely from the record.
--- NOTE: This could eventually be moved to COMMON, and be "localLdtRemove()",
+-- localLdtDestroy() -- Remove the LDT entirely from the record.
+-- NOTE: This could eventually be moved to COMMON, and be "localLdtDestroy()",
 -- since it will work the same way for all LDTs.
 -- Remove the ESR, Null out the topRec bin.
 -- ========================================================================
@@ -4724,8 +4823,8 @@ end -- lstack_subrec_list()
 --   res = 0: all is well
 --   res = -1: Some sort of error
 -- ========================================================================
-local function localLdtRemove( topRec, binName )
-  local meth = "localLdtRemove()";
+local function localLdtDestroy( topRec, binName )
+  local meth = "localLdtDestroy()";
 
   GP=F and trace("\n\n >>>>>>>>> API[ LSTACK REMOVE ] <<<<<<<<<< \n");
 
@@ -4794,7 +4893,7 @@ local function localLdtRemove( topRec, binName )
     GP=E and trace("[ERROR EXIT]:<%s:%s> Return(%s)", MOD, meth,tostring(rc));
     error( ldte.ERR_INTERNAL );
   end
-end -- localLdtRemove()
+end -- localLdtDestroy()
 
 -- ========================================================================
 -- localSetCapacity()
@@ -5097,14 +5196,15 @@ function peek( topRec, ldtBinName, peekCount )
 end -- peek()
 
 function filter( topRec, ldtBinName, peekCount, userModule, filter, fargs )
-  return localStackPeek( topRec, ldtBinName, peekCount, userModule, filter, fargs );
+  return localStackPeek(topRec,ldtBinName,peekCount,userModule,filter,fargs );
 end -- peek_then_filter()
 
--- OLD EXTERNAL FUNCTIONS
+-- OLD EXTERNAL FUNCTIONS (didn't have userModule in the first version)
 function lstack_peek( topRec, ldtBinName, peekCount )
   return localStackPeek( topRec, ldtBinName, peekCount, nil, nil, nil )
 end -- lstack_peek()
 
+-- OLD EXTERNAL FUNCTIONS (didn't have userModule in the first version)
 function lstack_peek_then_filter( topRec, ldtBinName, peekCount, filter, fargs )
   return localStackPeek( topRec, ldtBinName, peekCount, nil, filter, fargs );
 end -- lstack_peek_then_filter()
@@ -5180,12 +5280,8 @@ function lstack_config( topRec, ldtBinName )
 end
 
 -- ========================================================================
+-- destroy() -- Remove the LDT entirely from the record.
 -- lstack_remove() -- Remove the LDT entirely from the record.
--- remove() -- Remove the LDT entirely from the record.
---
--- NOTE: This could eventually be moved to COMMON, and be "ldt_remove()",
--- since it will work the same way for all LDTs.
--- Remove the ESR, Null out the topRec bin.
 -- ========================================================================
 -- Release all of the storage associated with this LDT and remove the
 -- control structure of the bin.  If this is the LAST LDT in the record,
@@ -5200,18 +5296,14 @@ end
 --   res = -1: Some sort of error
 -- ========================================================================
 -- NEW EXTERNAL FUNCTIONS
-function remove( topRec, ldtBinName )
-  return localLdtRemove( topRec, ldtBinName );
-end -- lstack_remove()
+function destroy( topRec, ldtBinName )
+  return localLdtDestroy( topRec, ldtBinName );
+end -- destroy()
 
 -- OLD EXTERNAL FUNCTIONS
 function lstack_remove( topRec, ldtBinName )
-  return localLdtRemove( topRec, ldtBinName );
+  return localLdtDestroy( topRec, ldtBinName );
 end -- lstack_remove()
-
-function ldt_remove( topRec, ldtBinName )
-  return localLdtRemove( topRec, ldtBinName );
-end -- ldt_remove()
 -- ========================================================================
 -- lstack_set_storage_limit()
 -- lstack_set_capacity()
@@ -5283,3 +5375,4 @@ end
 --  \_____/\____/  \_/\_| |_/\____/\_| \_/
 --                                        
 -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> --
+--
