@@ -4603,7 +4603,7 @@ GP=E and trace("[ENTER]<%s:%s> binName(%s)",MOD,meth,tostring(ldtBinName));
     if( createSpecType == "string" ) then
       processModule( ldtCtrl, userModule );
     elseif( createSpecType == "userdata" ) then
-      adjustLdtMap( ldtMap, userModule );
+      adjustLdtMap( ldtCtrl, userModule );
     else
       warn("[WARNING]<%s:%s> Unknown Creation Object(%s)",
         MOD, meth, tostring( userModule ));

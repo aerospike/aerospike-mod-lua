@@ -1,6 +1,6 @@
 -- Large Stack Object (LSO or LSTACK) Operations
 -- Track the data and iteration of the last update.
-local MOD="lstack_2013_09_18.e";
+local MOD="lstack_2013_09_19.b";
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -1363,9 +1363,9 @@ local function initializeLdtCtrl( topRec, ldtBinName )
   propMap[PM_BinName]    = ldtBinName; -- Defines the LSO Bin
   propMap[PM_RecType]    = RT_LDT; -- Record Type LDT Top Rec
   propMap[PM_EsrDigest]    = 0; -- not set yet.
-  -- propMap[PM_CreateTime] = aerospike:get_current_time();
-  warn("WARNING:: Please Fix GET CURRENT TIME");
-  propMap[PM_CreateTime] = 0;
+  propMap[PM_CreateTime] = aerospike:get_current_time();
+  -- warn("WARNING:: Please Fix GET CURRENT TIME");
+  -- propMap[PM_CreateTime] = 0;
   propMap[PM_SelfDigest] = record.digest( topRec );
 
   -- Specific LSO Parms: Held in LsoMap
@@ -3969,7 +3969,7 @@ end -- buildSubRecListAll()
 local function locatePosition( topRec, ldtCtrl, sp, position )
   local meth = "locatePosition()";
   GP=E and trace("[ENTER]:<%s:%s> LDT(%s) Position(%d)",
-    MOD, meth, ldtSummaryString( ldtCtrl ), position );
+    MOD, meth, tostring( ldtCtrl ), position );
 
     -- TODO: Finish this later -- if needed at all.
   warn("[WARNING!!]<%s:%s> FUNCTION UNDER CONSTRUCTION!!! ", MOD, meth );
@@ -4153,7 +4153,7 @@ local function processModule( ldtCtrl, moduleName )
   end
 
   GP=E and trace("[EXIT]<%s:%s> Module(%s) LDT CTRL(%s)", MOD, meth,
-  tostring( moduleName ), ldtSummaryString(ldtCtrl));
+  tostring( moduleName ), tostring(ldtCtrl));
 
 end -- processModule()
 
@@ -4181,9 +4181,9 @@ local function setupLdtBin( topRec, ldtBinName, userModule )
   if( userModule ~= nil )then
     local createSpecType = type(userModule);
     if( createSpecType == "string" ) then
-      processModule( userModule );
+      processModule( ldtCtrl, userModule );
     elseif( createSpecType == "userdata" ) then
-      adjustLdtMap( ldtMap, userModule );
+      adjustLdtMap( ldtCtrl, userModule );
     else
       warn("[WARNING]<%s:%s> Unknown Creation Object(%s)",
         MOD, meth, tostring( userModule ));
