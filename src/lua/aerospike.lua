@@ -234,6 +234,9 @@ function apply_stream(f, scope, istream, ostream, ...)
             stream.write(ostream, value)
         end
 
+        -- Write NIL to indicate the end of the stream
+        stream.write(ostream, nil)
+
         -- 0 is success
         return 0
     else
