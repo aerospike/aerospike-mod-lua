@@ -1,6 +1,6 @@
 -- Large Map (LMAP) Operations
 -- Track the data and iteration of the last update.
-local MOD="lmap_2013_09_19.c";
+local MOD="lmap_2013_10_03.a";
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -28,9 +28,9 @@ local G_LDT_VERSION = 1.1;
 -- in the server).
 -- ======================================================================
 local GP=true; -- Leave this ALWAYS true (but value seems not to matter)
-local F=true; -- Set F (flag) to true to turn ON global print
-local E=true; -- Set E (ENTER/EXIT) to true to turn ON Enter/Exit print
-local B=true; -- Set B (Banners) to true to turn ON Banner Print
+local F=false; -- Set F (flag) to true to turn ON global print
+local E=false; -- Set E (ENTER/EXIT) to true to turn ON Enter/Exit print
+local B=false; -- Set B (Banners) to true to turn ON Banner Print
 
 -- ======================================================================
 -- !! Please refer to lmap_design.lua for architecture and design notes!! 
@@ -1148,9 +1148,9 @@ local function initializeLdtCtrl( topRec, ldtBinName )
   propMap[PM_EsrDigest]  = nil; -- not set yet.
   propMap[PM_SelfDigest] = nil; 
   propMap[PM_RecType]    = RT_LDT; -- Record Type LDT Top Rec
---  propMap[PM_CreateTime] = aerospike:get_current_time();
-  warn("WARNING:: Please Fix GET CURRENT TIME");
-  propMap[PM_CreateTime] = 0;
+  propMap[PM_CreateTime] = aerospike:get_current_time();
+  -- warn("WARNING:: Please Fix GET CURRENT TIME");
+  -- propMap[PM_CreateTime] = 0;
   
 -- Specific LMAP Parms: Held in LMap
   ldtMap[M_StoreMode]  = SM_LIST; -- SM_LIST or SM_BINARY:
@@ -3494,7 +3494,7 @@ local function ldrDeleteList(topRec, ldtBinName, ldrChunkRec, listIndex,
   if( rc == nil or rc == 0 ) then
      GP=E and info("[EXIT]: <%s:%s>", MOD, meth );      
   else
-     warn("[ERROR]<%s:%s>Problems Updating TopRec rc(%s)",MOD,meth,tostring(rc));
+     warn("[ERROR]<%s:%s>TopRec Update:rc(%s)",MOD,meth,tostring(rc));
      error( ldte.ERR_SUBREC_UPDATE );
   end 
    
@@ -3502,6 +3502,7 @@ local function ldrDeleteList(topRec, ldtBinName, ldrChunkRec, listIndex,
 end -- ldrDeleteList()
 
 -- ==========================================================================
+-- localLMapDelete()
 -- ==========================================================================
 local function localLMapDelete( topRec, ldtBinName, searchValue,
                           userModule, filter, fargs )

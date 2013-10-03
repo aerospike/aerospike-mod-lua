@@ -7,7 +7,7 @@
 -- Version 08.08.0:    Last Update: (August 08, 2013) tjl
 
 -- Keep this global value in sync with (above) version
-local MOD="UdfFunctionTable_2013_08_14.a"; -- the module name used for tracing
+local MOD="UdfFunctionTable_2013_09_19.a"; -- the module name used for tracing
 
 -- Table of Functions: Used for Transformation and Filter Functions in
 -- conjunction with Large Stack Objects (LSO) and Large Sets (LSET).
@@ -553,7 +553,7 @@ end -- keyCompareEqual()
 -- NOTE that it will be easy to write a new function that looks at ALL
 -- of the fields of the lists (also checks size) to do a true equal compare.
 -- ======================================================================
-local KEY = 'KEY';
+local KEY = 'key';
 function UdfFunctionTable.debugListCompareEqual( searchValue, databaseValue )
   local meth = "debugListCompareEqual()";
   
@@ -582,6 +582,7 @@ end -- debugListCompareEqual()
 -- (2) modulo
 -- Return:
 -- a Number in the range: 0-modulo
+-- NOTE: Must include the CRC32 module for this to work.
 -- ======================================================================
 function UdfFunctionTable.keyHash( complexObject, modulo )
   local meth = "keyHash()";
@@ -596,8 +597,45 @@ end -- keyHash()
 -- ======================================================================
 
 -- ======================================================================
+-- Function compressNumber: Compress an 8 byte Lua number into a 2 byte
+-- number.  We can do this because we know the values will be less than 
+-- 2^16 (64k).
+-- Parms:
+-- (1) numberObject:
+-- (2) arglist (args ignored in this function)
+-- Return: the two byte (compressed) byte object.
+-- ======================================================================
+function UdfFunctionTable.compressNumber( numberObject, arglist )
+local meth = "compressNumber()";
+GP=F and trace("[ENTER]: <%s:%s> numberObject(%s) ArgList(%s) \n",
+  MOD, meth, tostring(numberObject), tostring(arglist));
+
+local b2 = bytes(2);
+bytes.put_int16(b2, 1,  numberObject ); -- 2 byte int
+
+GP=F and trace("[EXIT]: <%s:%s> Result(%s) \n", MOD, meth, tostring(b2));
+return b2;
+end -- compressNumber()
+
+-- ======================================================================
+-- Function unCompressNumber:  Restore a Lua number from a compressed
+-- 2 byte value.
+-- Parms:
+-- (1) b2: 2 byte number
+-- (2) arglist (args ignored in this function)
+-- Return: the regular Lua Number
 -- ======================================================================
 -- ======================================================================
+function UdfFunctionTable.unCompressNumber( b2, arglist )
+local meth = "unCompressNumber()";
+GP=F and trace("[ENTER]: <%s:%s> packedB16(%s) ArgList(%s) \n",
+              MOD, meth, tostring(b16), tostring(arglist));
+
+local numberObject = bytes.get_int16(b2, 1 ); -- 2 byte int
+
+GP=F and trace("[EXIT]<%s:%s>Result(%s)",MOD,meth,tostring(numberObject));
+return numberObject;
+end -- unCompressNumber()
 
 -- ======================================================================
 -- This is needed to export the function table for this module

@@ -1,6 +1,7 @@
--- Example User Module for Large Set (lset)
--- Call the Test package 
---
+-- Example User Module for Large Stack (lstack)
+-- This instance describes Compress/Uncompress Functions for reducing
+-- 8 byte lua numbers into 2 byte values.
+
 -- ======================================================================
 -- || GLOBAL PRINT ||
 -- ======================================================================
@@ -23,7 +24,6 @@ local MOD="user_lstack_number:2013_09_20.a";
 -- additional functions, such as filters, transformations or untransformations.
 local exports = {}
 
-
   -- ======================================================================
   -- Function compressNumber: Compress an 8 byte Lua number into a 2 byte
   -- number.  We can do this because we know the values will be less than 
@@ -36,7 +36,7 @@ local exports = {}
   function exports.compressNumber( numberObject, arglist )
     local meth = "compressNumber()";
     GP=F and trace("[ENTER]: <%s:%s> numberObject(%s) ArgList(%s) \n",
-                  MOD, meth, tostring(entryList), tostring(arglist));
+      MOD, meth, tostring(numberObject), tostring(arglist));
 
     local b2 = bytes(2);
     bytes.put_int16(b2, 1,  numberObject ); -- 2 byte int

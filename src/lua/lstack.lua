@@ -1,6 +1,6 @@
 -- Large Stack Object (LSO or LSTACK) Operations
 -- Track the data and iteration of the last update.
-local MOD="lstack_2013_09_19.b";
+local MOD="lstack_2013_10_03.c";
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -989,6 +989,12 @@ end -- lsoSummary()
 local function lsoSummaryString( ldtCtrl )
   return tostring( lsoSummary( ldtCtrl ) );
 end
+-- ======================================================================
+-- Switch to this name:  ldtSummaryString().  It's the new standard
+-- ======================================================================
+local function ldtSummaryString( ldtCtrl )
+  return tostring( lsoSummary( ldtCtrl ) );
+end
 
 -- =============================
 -- Begin SubRecord Function Area (MOVE THIS TO LDT_COMMON)
@@ -1544,7 +1550,8 @@ end -- createAndInitESR()
 -- ======================================================================
 local function initializeLdrMap(src,topRec,ldrRec,ldrPropMap,ldrMap,ldtCtrl)
   local meth = "initializeLdrMap()";
-  GP=E and trace("[ENTER]: <%s:%s>", MOD, meth );
+  GP=E and trace("[ENTER]: <%s:%s> src(%s) ldtCtrl(%s)", MOD, meth,
+    tostring( src ), ldtSummaryString( ldtCtrl ));
 
   local lsoPropMap = ldtCtrl[1];
   local ldtMap     = ldtCtrl[2];
@@ -2549,7 +2556,8 @@ end -- hotListInsert()
 -- new chunk into the ldtMap (the warm dir list), and return it.
 local function   warmListChunkCreate( src, topRec, ldtCtrl )
   local meth = "warmListChunkCreate()";
-  GP=E and trace("[ENTER]: <%s:%s> ", MOD, meth );
+  GP=E and trace("[ENTER]: <%s:%s> SRC(%s) ldtCtrl(%s)", MOD, meth,
+    tostring( src ), ldtSummaryString( ldtCtrl ));
 
   -- Create the Aerospike Record, initialize the bins: Ctrl, List
   -- Note: All Field Names start with UPPER CASE.
@@ -2794,7 +2802,7 @@ local function warmListInsert( src, topRec, ldtCtrl, entryList )
     aerospike:close_subrec( topWarmChunk );
 
     GP=F and trace("[DEBUG]:<%s:%s>Calling Chunk Create: AGAIN!!", MOD, meth );
-    topWarmChunk = warmListChunkCreate( src, topRec, ldtMap ); -- create new
+    topWarmChunk = warmListChunkCreate( src, topRec, ldtCtrl ); -- create new
     -- Unless we've screwed up our parameters -- we should never have to do
     -- this more than once.  This could be a while loop if it had to be, but
     -- that doesn't make sense that we'd need to create multiple new LDRs to
@@ -4327,7 +4335,7 @@ local function localStackPush( topRec, ldtBinName, newValue, createSpec )
 
   -- Check that the Set Structure is already there, otherwise, create one. 
   if( topRec[ldtBinName] == nil ) then
-    info("[Notice] <%s:%s> LMAP CONTROL BIN does not Exist:Creating",
+    info("[Notice] <%s:%s> LSTACK CONTROL BIN does not Exist:Creating",
       MOD, meth );
 
     -- set up a new LDT bin
@@ -4361,6 +4369,9 @@ local function localStackPush( topRec, ldtBinName, newValue, createSpec )
   -- room, then make room -- transfer half the list out to the warm list.
   -- That may, in turn, have to make room by moving some items to the
   -- cold list.  (Ok to use ldtMap and not ldtCtrl here).
+  -- First -- set up our sub-rec context to track open sub-recs.
+  local src = createSubrecContext();
+
   if hotListHasRoom( ldtMap, newStoreValue ) == false then
     GP=F and trace("[DEBUG]:<%s:%s>: CALLING TRANSFER HOT LIST!!",MOD, meth );
     hotListTransfer( src, topRec, ldtCtrl );

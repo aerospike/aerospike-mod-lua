@@ -1,6 +1,6 @@
 -- Large Ordered List (llist.lua)
 -- Track the date and iteration of the last update:
-local MOD = "llist_2013_09_18.g";
+local MOD = "llist_2013_10_03.g";
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -15,9 +15,9 @@ local G_LDT_VERSION = 1.1;
 -- print debug blocks -- as well as the individual trace/info lines.
 -- ======================================================================
 local GP=true; -- Doesn't matter what this value is.
-local F=true; -- Set F (flag) to true to turn ON global print
-local E=true; -- Set F (flag) to true to turn ON Enter/Exit print
-local B=true; -- Set B (Banners) to true to turn ON Banner Print
+local F=false; -- Set F (flag) to true to turn ON global print
+local E=false; -- Set F (flag) to true to turn ON Enter/Exit print
+local B=false; -- Set B (Banners) to true to turn ON Banner Print
 
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- <<  LLIST Main Functions >>
@@ -797,8 +797,8 @@ end -- setReadFunctions()
 -- -----------------------------------------------------------------------
 local function setWriteFunctions( ldtMap )
   local meth = "setWriteFunctions()";
-  GP=E and trace("[ENTER]<%s:%s> Process Filter(%s)",
-    MOD, meth, tostring(filter));
+  GP=E and trace("[ENTER]<%s:%s> LdtMap(%s)",
+    MOD, meth, tostring( ldtMap ));
 
   -- Look in the create module first, then the UdfFunctionTable to find
   -- the transform function (if there is one).
@@ -1010,9 +1010,9 @@ initializeLdtCtrl( topRec, ldtBinName )
   propMap[PM_BinName]    = ldtBinName; -- Defines the LDT Bin
   propMap[PM_RecType]    = RT_LDT; -- Record Type LDT Top Rec
   propMap[PM_EsrDigest]    = 0; -- not set yet.
-  -- propMap[PM_CreateTime] = aerospike:get_current_time();
-  warn("WARNING:: Please Fix GET CURRENT TIME");
-  propMap[PM_CreateTime] = 0;
+  propMap[PM_CreateTime] = aerospike:get_current_time();
+  -- warn("WARNING:: Please Fix GET CURRENT TIME");
+  -- propMap[PM_CreateTime] = 0;
   propMap[PM_SelfDigest]  = record.digest( topRec );
 
   -- General Tree Settings
@@ -3222,9 +3222,6 @@ end -- populateNode()
 -- ======================================================================
 local function createNodeRec( src, topRec, ldtCtrl )
   local meth = "createNodeRec()";
-
-  GP=F and trace("\n INSIDE createNodeRec\n");
-
   GP=E and trace("[ENTER]<%s:%s> ", MOD, meth );
 
   -- Extract the property map and control map from the ldt bin list.
