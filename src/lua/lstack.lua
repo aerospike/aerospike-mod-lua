@@ -1,6 +1,6 @@
 -- Large Stack Object (LSO or LSTACK) Operations
 -- Track the data and iteration of the last update.
-local MOD="lstack_2013_10_03.c";
+local MOD="lstack_2013_10_04.a";
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -14,9 +14,9 @@ local G_LDT_VERSION = 1.1;
 -- in the server).
 -- ======================================================================
 local GP=true; -- Leave this ALWAYS true (but value seems not to matter)
-local F=true; -- Set F (flag) to true to turn ON global print
-local E=true; -- Set E (ENTER/EXIT) to true to turn ON Enter/Exit print
-local B=true; -- Set B (Banners) to true to turn ON Banner Print
+local F=false; -- Set F (flag) to true to turn ON global print
+local E=false; -- Set E (ENTER/EXIT) to true to turn ON Enter/Exit print
+local B=false; -- Set B (Banners) to true to turn ON Banner Print
 
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- <<  LSTACK Main Functions >>
@@ -1509,9 +1509,7 @@ local function createAndInitESR(src, topRec, ldtCtrl )
 
   
   -- Set the record type as "ESR"
-  trace("[TRACE]<%s:%s> SETTING RECORD TYPE(%s)", MOD, meth, tostring(RT_ESR));
   record.set_type( esrRec, RT_ESR );
-  trace("[TRACE]<%s:%s> DONE SETTING RECORD TYPE", MOD, meth );
 
   GP=E and trace("[EXIT]: <%s:%s> Leaving with ESR Digest(%s)",
     MOD, meth, tostring(esrDigest));
@@ -1617,7 +1615,8 @@ local function initializeColdDirMap( topRec, cdRec, cdPropMap, cdMap, ldtCtrl )
   cdMap[CDM_DigestCount] = 0; -- no digests in the list -- yet.
   local lsopropMap = ldtCtrl[1];
   cdPropMap[PM_EsrDigest] = lsoPropMap[PM_EsrDigest];
-  GP = F and trace("CD MAP: [%s:%s:%s]", tostring(cdPropMap[PM_SelfDigest]), tostring(cdPropMap[PM_EsrDigest]), tostring(cdPropMap[PM_ParentDigest]));
+  GP = F and trace("CD MAP: [%s:%s:%s]", tostring(cdPropMap[PM_SelfDigest]),
+  tostring(cdPropMap[PM_EsrDigest]), tostring(cdPropMap[PM_ParentDigest]));
 
   -- Set the type of this record to LDT (it might already be set by another
   -- LDT in this same record).
@@ -2799,7 +2798,8 @@ local function warmListInsert( src, topRec, ldtCtrl, entryList )
   if itemsLeft > 0 then
     aerospike:update_subrec( topWarmChunk );
 
-    aerospike:close_subrec( topWarmChunk );
+    -- We're not closing dirty subrecs -- they get cleaned up at the end.
+    -- aerospike:close_subrec( topWarmChunk );
 
     GP=F and trace("[DEBUG]:<%s:%s>Calling Chunk Create: AGAIN!!", MOD, meth );
     topWarmChunk = warmListChunkCreate( src, topRec, ldtCtrl ); -- create new

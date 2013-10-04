@@ -2103,7 +2103,7 @@ local function createAndInitESR( src, topRec, ldtCtrl )
   end
 
   -- After the ESR is all buttoned up -- add it to the SubRec Context.
-  addSubrecToContext( src, esrRec );
+  -- addSubrecToContext( src, esrRec );
 
   trace("[EXIT]<%s:%s> EsrDigest(%s)", MOD, meth, tostring(esrDigest));
   return esrDigest;
