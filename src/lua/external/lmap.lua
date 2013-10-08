@@ -1,6 +1,6 @@
 -- Large Map (LMAP) Operations
 -- Track the data and iteration of the last update.
-local MOD="lmap_2013_10_03.a";
+local MOD="lmap_2013_10_07.a";
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -28,9 +28,9 @@ local G_LDT_VERSION = 1.1;
 -- in the server).
 -- ======================================================================
 local GP=true; -- Leave this ALWAYS true (but value seems not to matter)
-local F=false; -- Set F (flag) to true to turn ON global print
-local E=false; -- Set E (ENTER/EXIT) to true to turn ON Enter/Exit print
-local B=false; -- Set B (Banners) to true to turn ON Banner Print
+local F=true; -- Set F (flag) to true to turn ON global print
+local E=true; -- Set E (ENTER/EXIT) to true to turn ON Enter/Exit print
+local B=true; -- Set B (Banners) to true to turn ON Banner Print
 
 -- ======================================================================
 -- !! Please refer to lmap_design.lua for architecture and design notes!! 
@@ -60,7 +60,7 @@ local B=false; -- Set B (Banners) to true to turn ON Banner Print
 -- Set up our "outside" links.
 -- Get addressability to the Function Table: Used for compress/transform,
 -- keyExtract, Filters, etc. 
-local functionTable = require('UdfFunctionTable');
+local functionTable = require('ldt/UdfFunctionTable');
 
 -- When we're ready, we'll move all of our common routines into ldt_common,
 -- which will help code maintenance and management.
@@ -70,14 +70,14 @@ local functionTable = require('UdfFunctionTable');
 -- them by prefixing them with "ldte.XXXX", so for example, an internal error
 -- return looks like this:
 -- error( ldte.ERR_INTERNAL );
-local ldte = require('ldt_errors');
+local ldte = require('ldt/ldt_errors');
 
 -- We have a set of packaged settings for each LDT
-local lmapPackage = require('settings_lmap');
+local lmapPackage = require('ldt/settings_lmap');
 
 -- Get addressability to the Function Table: Used for compress and filter
 -- set up our "outside" links
-local  CRC32 = require('CRC32');
+local  CRC32 = require('ldt/CRC32');
 
 -- ++==================++
 -- || GLOBAL CONSTANTS || -- Local, but global to this module
@@ -100,10 +100,6 @@ local DEFAULT_DISTRIB = 31;
 local DEFAULT_THRESHOLD = 100;
 
 local MAGIC="MAGIC";     -- the magic value for Testing LSO integrity
-
--- Common LDT functions that are used by ALL of the LDTs.
--- local LDTC = require('ldt_common');
-local ldte=require('ldt_errors');
 
 -- StoreMode (SM) values (which storage Mode are we using?)
 local SM_BINARY  ='B'; -- Using a Transform function to compact values
@@ -532,8 +528,7 @@ end -- setReadFunctions()
 -- -----------------------------------------------------------------------
 local function setWriteFunctions( ldtMap )
   local meth = "setWriteFunctions()";
-  GP=E and trace("[ENTER]<%s:%s> Process Filter(%s)",
-    MOD, meth, tostring(filter));
+  GP=E and trace("[ENTER]<%s:%s> ldtMap(%s)", MOD, meth, tostring(ldtMap));
 
   -- Look in the create module first, then the UdfFunctionTable to find
   -- the transform function (if there is one).
@@ -3299,7 +3294,7 @@ localLMapInsert( topRec, ldtBinName, newName, newValue, createSpec )
 
   -- Check that the Set Structure is already there, otherwise, create one. 
   if( topRec[ldtBinName] == nil ) then
-    info("[Notice] <%s:%s> LMAP CONTROL BIN does not Exist:Creating",
+    GP=F and trace("[INFO] <%s:%s> LMAP CONTROL BIN does not Exist:Creating",
          MOD, meth );
 
     -- set up a new LDT bin

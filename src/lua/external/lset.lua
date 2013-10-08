@@ -1,6 +1,6 @@
 -- AS Large Set (LSET) Operations
 -- Track the date and iteration of the last update.
-local MOD="lset_2013_10_03.a"; 
+local MOD="lset_2013_10_07.a"; 
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -36,9 +36,9 @@ local G_LDT_VERSION = 1.1;
 -- the trace() call is NOT executed (regardless of the value of GP)
 -- ======================================================================
 local GP=true; -- Leave this set to true.
-local F=false; -- Set F (flag) to true to turn ON global print
-local E=false; -- Set E (ENTER/EXIT) to true to turn ON Enter/Exit print
-local B=false; -- Set B (Banners) to true to turn ON Banner Print
+local F=true; -- Set F (flag) to true to turn ON global print
+local E=true; -- Set E (ENTER/EXIT) to true to turn ON Enter/Exit print
+local B=true; -- Set B (Banners) to true to turn ON Banner Print
 
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- <<  LSET Main Functions >>
@@ -210,19 +210,19 @@ local B=false; -- Set B (Banners) to true to turn ON Banner Print
 -- ++==================++
 -- set up our "outside" links.
 -- We use this to get our Hash Functions
-local  CRC32 = require('CRC32');
+local  CRC32 = require('ldt/CRC32');
 
 -- We use this to get access to all of the Functions
-local functionTable = require('UdfFunctionTable');
+local functionTable = require('ldt/UdfFunctionTable');
 
 -- We import all of our error codes from "ldt_errors.lua" and we access
 -- them by prefixing them with "ldte.XXXX", so for example, an internal error
 -- return looks like this:
 -- error( ldte.ERR_INTERNAL );
-local ldte = require('ldt_errors');
+local ldte = require('ldt/ldt_errors');
 
 -- We have a set of packaged settings for each LDT.
-local lsetPackage = require('settings_lset');
+local lsetPackage = require('ldt/settings_lset');
 
 -- ++=======================================++
 -- || GLOBAL VALUES -- Local to this module ||
@@ -683,8 +683,7 @@ end -- setReadFunctions()
 -- -----------------------------------------------------------------------
 local function setWriteFunctions( ldtMap )
   local meth = "setWriteFunctions()";
-  GP=E and trace("[ENTER]<%s:%s> Process Filter(%s)",
-    MOD, meth, tostring(filter));
+  GP=E and trace("[ENTER]<%s:%s> ldtMap(%s)", MOD, meth, tostring(ldtMap));
 
   -- Look in the create module first, then the UdfFunctionTable to find
   -- the transform function (if there is one).
@@ -2496,7 +2495,7 @@ local function localLSetInsert( topRec, ldtBinName, newValue, userModule )
 
   -- If the bin is not already set up, then create.
   if( topRec[ldtBinName] == nil ) then
-    info("[Notice]: <%s:%s> LSET BIN (%s) does not Exist:Creating",
+    GP=F and trace("[INFO]: <%s:%s> LSET BIN (%s) does not Exist:Creating",
          MOD, meth, tostring( ldtBinName ));
 
     -- We need a new LDT bin -- set it up.

@@ -1,6 +1,6 @@
 -- Large Ordered List (llist.lua)
 -- Track the date and iteration of the last update:
-local MOD = "llist_2013_10_03.g";
+local MOD = "llist_2013_10_08.a";
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -15,9 +15,9 @@ local G_LDT_VERSION = 1.1;
 -- print debug blocks -- as well as the individual trace/info lines.
 -- ======================================================================
 local GP=true; -- Doesn't matter what this value is.
-local F=false; -- Set F (flag) to true to turn ON global print
-local E=false; -- Set F (flag) to true to turn ON Enter/Exit print
-local B=false; -- Set B (Banners) to true to turn ON Banner Print
+local F=true; -- Set F (flag) to true to turn ON global print
+local E=true; -- Set F (flag) to true to turn ON Enter/Exit print
+local B=true; -- Set B (Banners) to true to turn ON Banner Print
 
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- <<  LLIST Main Functions >>
@@ -119,20 +119,20 @@ local insertParentNode;
 -- Set up our "outside" links.
 -- Get addressability to the Function Table: Used for compress/transform,
 -- keyExtract, Filters, etc. 
-local functionTable = require('UdfFunctionTable');
+local functionTable = require('ldt/UdfFunctionTable');
 
 -- When we're ready, we'll move all of our common routines into ldt_common,
 -- which will help code maintenance and management.
--- local LDTC = require('ldt_common');
+-- local LDTC = require('ldt/ldt_common');
 
 -- We import all of our error codes from "ldt_errors.lua" and we access
 -- them by prefixing them with "ldte.XXXX", so for example, an internal error
 -- return looks like this:
 -- error( ldte.ERR_INTERNAL );
-local ldte = require('ldt_errors');
+local ldte = require('ldt/ldt_errors');
 
 -- We have a set of packaged settings for each LDT
-local llistPackage = require('settings_llist');
+local llistPackage = require('ldt/settings_llist');
 
 -- ======================================================================
 -- The Large Ordered List is a sorted list, organized according to a Key
@@ -797,8 +797,7 @@ end -- setReadFunctions()
 -- -----------------------------------------------------------------------
 local function setWriteFunctions( ldtMap )
   local meth = "setWriteFunctions()";
-  GP=E and trace("[ENTER]<%s:%s> LdtMap(%s)",
-    MOD, meth, tostring( ldtMap ));
+  GP=E and trace("[ENTER]<%s:%s> ldtMap(%s)", MOD, meth, tostring(ldtMap));
 
   -- Look in the create module first, then the UdfFunctionTable to find
   -- the transform function (if there is one).
@@ -4654,7 +4653,7 @@ local function localLListInsert( topRec, ldtBinName, newValue, createSpec )
   -- If the record does not exist, or the BIN does not exist, then we must
   -- create it and initialize the LDT map. Otherwise, use it.
   if( topRec[ldtBinName] == nil ) then
-    GP=F and info("[DEBUG]<%s:%s>LLIST CONTROL BIN does not Exist:Creating",
+    GP=F and trace("[INFO]<%s:%s>LLIST CONTROL BIN does not Exist:Creating",
          MOD, meth );
 
     -- set up our new LDT Bin

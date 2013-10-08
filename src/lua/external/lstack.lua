@@ -1,6 +1,6 @@
 -- Large Stack Object (LSO or LSTACK) Operations
 -- Track the data and iteration of the last update.
-local MOD="lstack_2013_10_04.a";
+local MOD="lstack_2013_10_07.a";
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -14,9 +14,9 @@ local G_LDT_VERSION = 1.1;
 -- in the server).
 -- ======================================================================
 local GP=true; -- Leave this ALWAYS true (but value seems not to matter)
-local F=false; -- Set F (flag) to true to turn ON global print
-local E=false; -- Set E (ENTER/EXIT) to true to turn ON Enter/Exit print
-local B=false; -- Set B (Banners) to true to turn ON Banner Print
+local F=true; -- Set F (flag) to true to turn ON global print
+local E=true; -- Set E (ENTER/EXIT) to true to turn ON Enter/Exit print
+local B=true; -- Set B (Banners) to true to turn ON Banner Print
 
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- <<  LSTACK Main Functions >>
@@ -361,14 +361,14 @@ local B=false; -- Set B (Banners) to true to turn ON Banner Print
 -- || External Modules ||
 -- ++==================++
 -- Get addressability to the Function Table: Used for compress and filter
-local functionTable = require('UdfFunctionTable');
+local functionTable = require('ldt/UdfFunctionTable');
 
 -- Common LDT functions that are used by ALL of the LDTs.
--- local LDTC = require('ldt_common');
-local ldte=require('ldt_errors');
+-- local LDTC = require('ldt/ldt_common');
+local ldte=require('ldt/ldt_errors');
 
 -- We have a set of packaged settings for each LDT
-local lstackPackage = require('settings_lstack');
+local lstackPackage = require('ldt/settings_lstack');
 
 -- ++==================++
 -- || GLOBAL CONSTANTS || -- Local, but global to this module
@@ -869,8 +869,7 @@ end -- setReadFunctions()
 -- -----------------------------------------------------------------------
 local function setWriteFunctions( ldtMap )
   local meth = "setWriteFunctions()";
-  GP=E and trace("[ENTER]<%s:%s> Process Filter(%s)",
-    MOD, meth, tostring(filter));
+  GP=E and trace("[ENTER]<%s:%s> ldtMap(%s)", MOD, meth, tostring(ldtMap));
 
   -- Look in the create module first, then the UdfFunctionTable to find
   -- the transform function (if there is one).
@@ -4335,7 +4334,7 @@ local function localStackPush( topRec, ldtBinName, newValue, createSpec )
 
   -- Check that the Set Structure is already there, otherwise, create one. 
   if( topRec[ldtBinName] == nil ) then
-    info("[Notice] <%s:%s> LSTACK CONTROL BIN does not Exist:Creating",
+    trace("[Notice] <%s:%s> LSTACK CONTROL BIN does not Exist:Creating",
       MOD, meth );
 
     -- set up a new LDT bin

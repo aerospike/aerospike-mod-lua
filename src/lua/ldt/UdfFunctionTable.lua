@@ -64,7 +64,7 @@ local F=true; -- Set F (flag) to true to turn ON global print
 -- ======================
 -- || Imports (errors) ||
 -- ======================
-local ldte=require('ldt_errors');
+local ldte=require('ldt/ldt_errors');
 
 -- ======================================================================
 -- Usage:
