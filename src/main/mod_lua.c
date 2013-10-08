@@ -396,13 +396,43 @@ static int update(as_module * m, as_module_event * e) {
 				dir = NULL;
 			}
 
-			if ( ctx->config.cache_enabled ) cache_scan_dir(ctx, ctx->config.user_path);
+            if ( ctx->config.cache_enabled ) {
+            	// Set up the USER path
+            	cache_scan_dir(ctx, ctx->config.user_path);
+
+            	// Set up the SYSTEM path.  Build a string for the new sub-dir "external".
+            	size_t syslen = strlen(ctx->config.system_path);
+            	if ( ctx->config.system_path[syslen-1] == '/' ) {
+            		ctx->config.system_path[syslen-1] = '\0';
+            		syslen--;
+            	}
+            	char external[265] = {0};
+            	strncpy(external, ctx->config.system_path, 255);
+            	strncpy(external + syslen, "/external", 9);
+
+            	cache_scan_dir(ctx, external);
+            }
 
 			break;
 		}
 		case AS_MODULE_EVENT_FILE_SCAN: {
 			if ( ctx->config.user_path[0] == '\0' ) return 2;
-			if ( ctx->config.cache_enabled ) cache_scan_dir(ctx, ctx->config.user_path);
+            if ( ctx->config.cache_enabled ) {
+            	// Set up the USER path
+            	cache_scan_dir(ctx, ctx->config.user_path);
+
+            	// Set up the SYSTEM path.  Build a string for the new sub-dir "external".
+            	size_t syslen = strlen(ctx->config.system_path);
+            	if ( ctx->config.system_path[syslen-1] == '/' ) {
+            		ctx->config.system_path[syslen-1] = '\0';
+            		syslen--;
+            	}
+            	char external[265] = {0};
+            	strncpy(external, ctx->config.system_path, 255);
+            	strncpy(external + syslen, "/external", 9);
+
+            	cache_scan_dir(ctx, external);
+            }
 			break;
 		}
 		case AS_MODULE_EVENT_FILE_ADD: {
@@ -437,6 +467,11 @@ static void package_path_set(lua_State * l, char * system_path, char * user_path
 	stack += 3;
 	
 	lua_pushstring(l, ";");
+	lua_pushstring(l, system_path);
+	lua_pushstring(l, "/external/?.lua");
+	stack += 3;
+
+	lua_pushstring(l, ";");
 	lua_pushstring(l, user_path);
 	lua_pushstring(l, "/?.lua");
 	stack += 3;
@@ -457,6 +492,11 @@ static void package_cpath_set(lua_State * l, char * system_path, char * user_pat
 	lua_pushstring(l, ";");
 	lua_pushstring(l, system_path);
 	lua_pushstring(l, "/?.so");
+	stack += 3;
+
+	lua_pushstring(l, ";");
+	lua_pushstring(l, system_path);
+	lua_pushstring(l, "/external/?.so");
 	stack += 3;
 	
 	lua_pushstring(l, ";");
