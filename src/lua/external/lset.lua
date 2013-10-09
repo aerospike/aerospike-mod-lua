@@ -36,9 +36,9 @@ local G_LDT_VERSION = 1.1;
 -- the trace() call is NOT executed (regardless of the value of GP)
 -- ======================================================================
 local GP=true; -- Leave this set to true.
-local F=true; -- Set F (flag) to true to turn ON global print
-local E=true; -- Set E (ENTER/EXIT) to true to turn ON Enter/Exit print
-local B=true; -- Set B (Banners) to true to turn ON Banner Print
+local F=false; -- Set F (flag) to true to turn ON global print
+local E=false; -- Set E (ENTER/EXIT) to true to turn ON Enter/Exit print
+local B=false; -- Set B (Banners) to true to turn ON Banner Print
 
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- <<  LSET Main Functions >>
@@ -1005,7 +1005,7 @@ end -- initializeLdtCtrl()
 -- We use the "CRC32" package for hashing the value in order to distribute
 -- the value to the appropriate "sub lists".
 -- ======================================================================
--- local  CRC32 = require('CRC32'); Do this above, in the "global" area
+-- local  CRC32 = require('ldt/CRC32'); Do this above, in the "global" area
 -- ======================================================================
 -- Return the hash of "value", with modulo.
 -- Notice that we can use ZERO, because this is not an array index

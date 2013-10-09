@@ -14,9 +14,9 @@ local G_LDT_VERSION = 1.1;
 -- in the server).
 -- ======================================================================
 local GP=true; -- Leave this ALWAYS true (but value seems not to matter)
-local F=true; -- Set F (flag) to true to turn ON global print
-local E=true; -- Set E (ENTER/EXIT) to true to turn ON Enter/Exit print
-local B=true; -- Set B (Banners) to true to turn ON Banner Print
+local F=false; -- Set F (flag) to true to turn ON global print
+local E=false; -- Set E (ENTER/EXIT) to true to turn ON Enter/Exit print
+local B=false; -- Set B (Banners) to true to turn ON Banner Print
 
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- <<  LSTACK Main Functions >>
