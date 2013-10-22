@@ -1,11 +1,22 @@
 -- Large Map (LMAP) Operations
 -- Track the data and iteration of the last update.
-local MOD="lmap_2013_10_07.a";
+local MOD="lmap_2013_10_21.a";
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
 -- amount of inter-version compatibility.
 local G_LDT_VERSION = 1.1;
+
+-- ======================================================================
+-- || GLOBAL PRINT ||
+-- ======================================================================
+-- Use this flag to enable/disable global printing (the "detail" level
+-- in the server).
+-- ======================================================================
+local GP=true; -- Leave this ALWAYS true (but value seems not to matter)
+local F=false; -- Set F (flag) to true to turn ON global print
+local E=false; -- Set E (ENTER/EXIT) to true to turn ON Enter/Exit print
+local B=false; -- Set B (Banners) to true to turn ON Banner Print
 
 -- Large Map Design/Architecture
 --
@@ -20,18 +31,6 @@ local G_LDT_VERSION = 1.1;
 -- the name, follow the hash(name) modulo HashDirSize to a Hash Directory
 -- Cell, and then search that subrecord for the name.
 -- Each Subrecord contains two data lists, one for names and one for values.
-
--- ======================================================================
--- || GLOBAL PRINT ||
--- ======================================================================
--- Use this flag to enable/disable global printing (the "detail" level
--- in the server).
--- ======================================================================
-local GP=true; -- Leave this ALWAYS true (but value seems not to matter)
-local F=false; -- Set F (flag) to true to turn ON global print
-local E=false; -- Set E (ENTER/EXIT) to true to turn ON Enter/Exit print
-local B=false; -- Set B (Banners) to true to turn ON Banner Print
-
 -- ======================================================================
 -- !! Please refer to lmap_design.lua for architecture and design notes!! 
 -- ======================================================================
@@ -97,7 +96,7 @@ local FV_EMPTY = "__empty__"; -- the value is NO MORE
 -- distribution.   Later we'll switch to a more robust B+ Tree version.
 local DEFAULT_DISTRIB = 31;
 -- Switch from a single list to distributed lists after this amount
-local DEFAULT_THRESHOLD = 100;
+local DEFAULT_THRESHOLD = 50;
 
 local MAGIC="MAGIC";     -- the magic value for Testing LSO integrity
 
@@ -457,7 +456,8 @@ local function setReadFunctions( ldtMap, userModule, filter, filterArgs )
           G_Filter = userModuleRef[filter];
         end
       end
-      -- If we didn't find a good filter, keep looking.  Try the createModule.
+      -- If we didn't find a good filter then keep looking. 
+      -- Try the createModule.
       if( G_Filter == nil and createModule ~= nil ) then
         local createModuleRef = require(createModule);
         if( createModuleRef ~= nil and createModuleRef[filter] ~= nil ) then
@@ -567,10 +567,9 @@ local function setWriteFunctions( ldtMap )
   GP=E and trace("[EXIT]<%s:%s>", MOD, meth );
 end -- setWriteFunctions()
 
--- ======================================================================
+-- =========================================================================
 -- <USER FUNCTIONS> - <USER FUNCTIONS> - <USER FUNCTIONS> - <USER FUNCTIONS>
--- ======================================================================
-
+-- =========================================================================
 
 -- -----------------------------------------------------------------------
 -- ------------------------------------------------------------------------
@@ -2001,13 +2000,16 @@ local function ldrInsertList(ldrChunkRec,ldtCtrl,listIndex,nameList,valueList )
 
   -- These 2 get assigned in subRecCreate() to point to the ctrl-map. 
   local ldrMap = ldrChunkRec[LDR_CTRL_BIN];
-  GP=F and info(" <%s:%s> Chunk ldrMap is [DEBUG] (%s)", MOD, meth, tostring(ldrMap));
+  GP=F and info(" <%s:%s> Chunk ldrMap is [DEBUG] (%s)",
+    MOD, meth, tostring(ldrMap));
   
   local ldrNameList =  ldrChunkRec[LDR_NLIST_BIN];
   local ldrValueList = ldrChunkRec[LDR_VLIST_BIN];
     
-   GP=F and info(" <%s:%s> Chunk ldr Name-List: %s Value-List: (%s)", MOD, meth, tostring(ldrNameList), tostring(ldrValueList));
-   GP=F and info(" <%s:%s> To be inserted Name-List: %s Value-List: (%s)", MOD, meth, tostring(nameList), tostring(valueList));
+   GP=F and info(" <%s:%s> Chunk ldr Name-List: %s Value-List: (%s)",
+     MOD, meth, tostring(ldrNameList), tostring(ldrValueList));
+   GP=F and info(" <%s:%s> To be inserted Name-List: %s Value-List: (%s)",
+     MOD, meth, tostring(nameList), tostring(valueList));
   
   local chunkNameIndexStart = list.size( ldrNameList ) + 1;
   local chunkValueIndexStart = list.size( ldrValueList ) + 1;
@@ -2019,7 +2021,8 @@ local function ldrInsertList(ldrChunkRec,ldtCtrl,listIndex,nameList,valueList )
   -- math for lengths and space off by 1. So, we're often adding or
   -- subtracting 1 to adjust.
   local totalItemsToWrite = list.size( nameList ) + 1 - listIndex;
-  local itemSlotsAvailable = (ldtMap[M_LdrEntryCountMax] - chunkNameIndexStart) + 1;
+  local itemSlotsAvailable =
+      (ldtMap[M_LdrEntryCountMax] - chunkNameIndexStart) + 1;
 
   -- In the unfortunate case where our accounting is bad and we accidently
   -- opened up this page -- and there's no room -- then just return ZERO
@@ -2251,7 +2254,8 @@ local function ldrInsert(ldrChunkRec,ldtCtrl,listSize, nameList, valueList )
 
 end -- ldrInsert()
 
-
+-- ========================================================================
+-- ========================================================================
 local function lmapGetLdrDigestEntry( src, topRec, ldtBinName, entryItem, create_flag)
 
   local meth = "lmapGetLdrDigestEntry()";
@@ -2307,6 +2311,8 @@ local function lmapGetLdrDigestEntry( src, topRec, ldtBinName, entryItem, create
 
 end --lmapGetLdrDigestEntry()
 
+-- ========================================================================
+-- ========================================================================
 local function lmapCheckDuplicate(ldtMap, ldrChunkRec, entryItem)
   
   local flag = false; 
@@ -2510,10 +2516,8 @@ local function lmapLdrSubRecInsert( src, topRec, ldtBinName, newName, newValue)
 -- For FV_INSERT:
 -- Return 0 if found (and not inserted), otherwise 1 if inserted.
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
--- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
-
-local function simpleScanList(topRec, ldtBinName, resultMap, newName, newValue, 
-       flag, userModule, filter, fargs )
+local function
+simpleScanList(topRec, ldtBinName, resultMap, newName, newValue, flag)
 
   local meth = "simpleScanList()";
 
@@ -2642,7 +2646,7 @@ end -- simpleScanList
 -- Return 0 if found (and not inserted), otherwise 1 if inserted.
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 local function complexScanList( topRec, ldtBinName, resultMap, newName,
-    newValue, flag, userModule, filter, fargs )
+    newValue, flag )
 
   local meth = "complexScanList()";
   local ldtCtrl =  topRec[ldtBinName];
@@ -2778,8 +2782,7 @@ end -- complexScanList
 -- Return: nil if not found, Value if found.
 -- (NOTE: Can't return 0 -- because that might be a valid value)
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
-local function scanList( topRec, ldtBinName, resultMap, newName, newValue, 
-       flag, userModule, filter, fargs )
+local function scanList(topRec, ldtBinName, resultMap, newName, newValue, flag)
   local meth = "scanList()";
   local ldtCtrl =  topRec[ldtBinName];
   local propMap = ldtCtrl[1]; 
@@ -2998,7 +3001,7 @@ local function localInsert( topRec, ldtBinName, newName, newValue, stats )
 
     -- Look for the value, and insert if it is not there.
     insertResult =
-      scanList( topRec, ldtBinName, nil, newName, newValue, FV_INSERT, nil, nil );
+      scanList( topRec, ldtBinName, nil, newName, newValue, FV_INSERT );
   end
                 
   -- update stats if appropriate.
@@ -3358,7 +3361,7 @@ localLMapInsert( topRec, ldtBinName, newName, newValue, createSpec )
 end -- function localLMapInsert()
 
 -- ======================================================================
--- ldrDeleteList( topLdrChunk, ldtCtrl, listIndex,  insertList, filter, fargs )
+-- ldrDeleteList()
 -- ======================================================================
 -- Insert (append) the LIST of values pointed to from the digest-list, 
 -- to this chunk's value list.  We start at the position "listIndex"
@@ -3373,8 +3376,8 @@ end -- function localLMapInsert()
 -- Return: Number of items written
 -- ======================================================================
 
-local function ldrDeleteList(topRec, ldtBinName, ldrChunkRec, listIndex,
-  entryList, userModule, filter, fargs)
+local function
+ldrDeleteList(topRec, ldtBinName, ldrChunkRec, listIndex, entryList )
   local meth = "ldrDeleteList()";
 
   GP=E and info("[ENTER]: <%s:%s> Index(%d) Search-List(%s)",
@@ -3421,13 +3424,14 @@ local function ldrDeleteList(topRec, ldtBinName, ldrChunkRec, listIndex,
   -- Basically, crawl thru the list, copy-over all except our item to the new list
   -- re-append back to ldrmap. Easy !
   
-  GP=F and info("!!!![DEBUG]:<%s:%s>:ListMode: Before deletion Value List %s !!!!!!!!!!",
+  GP=F and info("\n[DEBUG]<%s:%s>:ListMode: Before deletion Value List %s",
      MOD, meth, tostring( ldrValueList ) );
  
   local NewldrNameList = list(); 
   local NewldrValueList = list(); 
   local num_deleted = 0; 
-  GP=F and info(" BeforeDelete Name & Value %s %s", tostring(ldrNameList), tostring(ldrValueList));
+  GP=F and info("[DEBUG]<%s> Before Delete Name(%s) Value(%s)", meth,
+    tostring(ldrNameList), tostring(ldrValueList));
   for i = 0, list.size( ldrNameList ), 1 do
     -- If the search-name in vame-value pair matches any-name in the chunk entry 
     -- then pick out the corresponding value-entry and nil them out.
@@ -3527,7 +3531,7 @@ local function localLMapDelete( topRec, ldtBinName, searchValue,
     -- not collapse it.  Later, if we see that there are a LOT of nil entries,
     -- we can RESET the set and remove all of the "gas".
     
-    rc = scanList(topRec, ldtBinName, resultMap, searchValue, nil, FV_DELETE, filter, fargs);
+    rc = scanList(topRec, ldtBinName, resultMap, searchValue, nil, FV_DELETE );
     -- If we found something, then we need to update the bin and the record.
     if rc == 0 and map.size( resultMap ) > 0 then
       -- We found something -- and marked it nil -- so update the record
@@ -3565,23 +3569,23 @@ local function localLMapDelete( topRec, ldtBinName, searchValue,
 	
 	local stringDigest = tostring( digestlist[digest_bin] );
 	local src = createSubrecContext();
-    local IndexLdrChunk = openSubrec( src, topRec, stringDigest );
+    local ldrRec = openSubrec( src, topRec, stringDigest );
    	
-	if IndexLdrChunk == nil then
+	if ldrRec == nil then
  	  -- sanity check 
-      warn("[ERROR]: <%s:%s>: IndexLdrChunk nil or empty", MOD, meth);
+      warn("[ERROR]: <%s:%s>: ldrRec nil or empty", MOD, meth);
       error( ldte.ERR_INTERNAL );
     end
     
-    local ldrMap = IndexLdrChunk[LDR_CTRL_BIN];
-    local ldrValueList = IndexLdrChunk[LDR_VLIST_BIN];
-    local ldrNameList = IndexLdrChunk[LDR_NLIST_BIN];
+    local ldrMap = ldrRec[LDR_CTRL_BIN];
+    local ldrValueList = ldrRec[LDR_VLIST_BIN];
+    local ldrNameList = ldrRec[LDR_NLIST_BIN];
 
     GP=F and info("[DEBUG]: <%s:%s> !!!!!!!!!! NList(%s) VList(%s)",
              MOD, meth, tostring(ldrNameList), tostring( ldrValueList ));
 
     
-    local delChunkDigest = record.digest( IndexLdrChunk );
+    local delChunkDigest = record.digest( ldrRec );
     
     GP=F and info("!!!!!!!!! Find match digest value: %s",
       tostring(delChunkDigest));
@@ -3596,7 +3600,7 @@ local function localLMapDelete( topRec, ldtBinName, searchValue,
   
      -- The magical function that is going to fix our deletion :)
     local num_deleted =
-      ldrDeleteList(topRec, ldtBinName, IndexLdrChunk, 1, entryList );
+      ldrDeleteList(topRec, ldtBinName, ldrRec, 1, entryList );
     
     if( num_deleted == -1 ) then
       warn("[ERROR]: <%s:%s>: Internal Error in Chunk Delete", MOD, meth);
@@ -3610,8 +3614,8 @@ local function localLMapDelete( topRec, ldtBinName, searchValue,
        warn("[ERROR]: <%s:%s>: Some items might not have been deleted from lmap list-size : %d deleted-items : %d", 
             MOD, meth, list.size( entryList ),  itemsLeft);
       end 
-    GP=F and info("[DEBUG]: <%s:%s> Chunk Summary before storage(%s) Digest-List %s ",
-    MOD, meth, ldrChunkSummary( IndexLdrChunk ), tostring(ldtMap[M_DigestList]));
+    GP=F and info("[DEBUG]<%s:%s> LDR Summary before storage(%s) DigList(%s)",
+      MOD, meth, ldrChunkSummary( ldrRec ), tostring(ldtMap[M_DigestList]));
     return 0; 	  
 
   end -- end of regular mode deleteion 
@@ -3620,8 +3624,8 @@ end -- localLMapDelete()
 
 -- ==========================================================================
 -- ==========================================================================
-local function ldrSearchList(topRec, ldtBinName, resultMap, ldrChunkRec,
-                listIndex, entryList )
+local function
+ldrSearchList(topRec, ldtBinName, resultMap, ldrChunkRec, listIndex, entryList )
 
   local meth = "ldrSearchList()";
   GP=E and info("[ENTER]<%s:%s> Index(%d) List(%s)",
@@ -3729,7 +3733,7 @@ end
 -- Return: resultlist 
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
-local function simpleScanListAll(topRec, ldtBinName, resultMap, filter, fargs) 
+local function simpleScanListAll(topRec, ldtBinName, resultMap )
 
   local meth = "simpleScanListAll()";
   GP=E and info("[ENTER]: <%s:%s> Appending all the elements of List ",
@@ -3783,7 +3787,7 @@ end -- simpleScanListAll
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 local function
-simpleDumpListAll(topRec, resultMap, ldtCtrl, ldtBinName, filter, fargs) 
+simpleDumpListAll(topRec, resultMap, ldtCtrl, ldtBinName )
 
   local meth = "simpleDumpListAll()";
   GP=E and info("[ENTER]: <%s:%s> Appending all the elements of List ",
@@ -3913,8 +3917,7 @@ end -- complexScanListAll
 -- Return:
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
-local function
-complexDumpListAll(topRec, resultMap, ldtCtrl, ldtBinName, filter, fargs) 
+local function complexDumpListAll(topRec, resultMap, ldtCtrl, ldtBinName )
   local meth = "complexDumpListAll()";
   GP=E and info("[ENTER]: <%s:%s> Appending all the elements of List ",
                  MOD, meth)
@@ -4027,7 +4030,7 @@ local function localLMapSearchAll(topRec,ldtBinName,userModule,filter,fargs)
         local entryList  = list(); 
         -- The magical function that is going to fix our deletion :)
         rc = ldrSearchList(topRec, ldtBinName, resultMap, IndexLdrChunk,
-          0, entryList, filter, fargs );
+          0, entryList );
         if( rc == nil or rc == 0 ) then
        	  GP=F and info("AllSearch returned SUCCESS %s", tostring(ldrlist));
           break;
@@ -4291,7 +4294,7 @@ end -- localLdtDestroy()
 
 -- ==========================================================================
 -- ==========================================================================
-local function localLMapWalkThru(resultList,topRec,ldtBinName,filter,fargs)
+local function localLMapWalkThru( resultList, topRec, ldtBinName )
   
   local meth = "localLMapWalkThru()";
   rc = 0; -- start out OK.
@@ -4314,9 +4317,9 @@ local function localLMapWalkThru(resultList,topRec,ldtBinName,filter,fargs)
       " =========== LMAP WALK-THRU COMPACT MODE \n ================" );
 	  
     if ldtMap[M_KeyType] == KT_ATOMIC then
-      rc = simpleDumpListAll(topRec, resultList, ldtCtrl, ldtBinName, filter, fargs) 
+      rc = simpleDumpListAll(topRec, resultList, ldtCtrl, ldtBinName );
     else
-      rc = complexDumpListAll(topRec, resultList, ldtCtrl, ldtBinName, filter, fargs)
+      rc = complexDumpListAll(topRec, resultList, ldtCtrl, ldtBinName );
     end
 	
     GP=E and info("[EXIT]: <%s:%s>: Search Returns (%s)",
@@ -4345,7 +4348,7 @@ local function localLMapWalkThru(resultList,topRec,ldtBinName,filter,fargs)
         local ldrlist = list(); 
         local entryList  = list(); 
         -- The magical function that is going to fix our deletion :)
-        rc = ldrSearchList(topRec, ldtBinName, ldrlist, IndexLdrChunk, 0, entryList, filter, fargs );
+        rc = ldrSearchList(topRec,ldtBinName,ldrlist,IndexLdrChunk,0,entryList);
         if( rc == nil or rc == 0 ) then
           GP=F and info("AllSearch returned SUCCESS %s", tostring(ldrlist));
           list.append( resultList, "LIST-ENTRIES:" );

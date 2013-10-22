@@ -1,6 +1,6 @@
 -- Large Ordered List (llist.lua)
 -- Track the date and iteration of the last update:
-local MOD = "llist_2013_10_08.a";
+local MOD = "llist_2013_10_22.c";
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -4202,6 +4202,10 @@ local function getNextLeaf( src, topRec, leafRec  )
   local nextLeaf = nil;
   local nextLeafDigestString;
 
+  -- Close the current leaf before opening the next one.  It should be clean,
+  -- so closing is ok.
+  aerospike:close_subrec( leafRec );
+
   if( nextLeafDigest ~= nil and nextLeafDigest ~= 0 ) then
     nextLeafDigestString = tostring( nextLeafDigest );
     GP=F and trace("[OPEN SUB REC]:<%s:%s> Digest(%s)",
@@ -4725,7 +4729,7 @@ local function localLListInsert( topRec, ldtBinName, newValue, createSpec )
   -- All done, store the record
   -- With recent changes, we know that the record is now already created
   -- so all we need to do is perform the update (no create needed).
-  GP=F and info("[DEBUG]:<%s:%s>:Update Record()", MOD, meth );
+  GP=F and trace("[DEBUG]:<%s:%s>:Update Record()", MOD, meth );
   rc = aerospike:update( topRec );
   
 -- Process Create/Update results.

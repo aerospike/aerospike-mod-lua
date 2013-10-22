@@ -1,6 +1,6 @@
 -- Large Stack Object (LSO or LSTACK) Operations
 -- Track the data and iteration of the last update.
-local MOD="lstack_2013_10_07.a";
+local MOD="lstack_2013_10_21.j";
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -722,9 +722,9 @@ local function setKeyFunction( ldtMap, required )
   local keyFunction = ldtMap[M_KeyFunction];
   G_KeyFunction = nil;
   if( keyFunction ~= nil ) then
-    if( type(keyFunction) ~= "string" or filter == "" ) then
-      warn("[ERROR]<%s:%s> Bad KeyFunction Name: type(%s) filter(%s)",
-        MOD, meth, type(filter), tostring(filter) );
+    if( type(keyFunction) ~= "string" or keyFunction == "" ) then
+      warn("[ERROR]<%s:%s> Bad KeyFunction Name: type(%s) KeyFunction(%s)",
+        MOD, meth, type(filter), tostring(keyFunction) );
       error( ldte.ERR_KEY_FUN_BAD );
     else
       -- Ok -- so far, looks like we have a valid key function name, 
@@ -1802,6 +1802,12 @@ local function readEntryList( resultList, ldtCtrl, entryList, count, all)
     numToRead = count;
   end
 
+  GP=E and trace("\n [DEBUG]<%s> Read(%d) items from List(%s)",
+      meth, numToRead, tostring(entryList) );
+
+  GP=E and trace("\n [DEBUG]<%s> Add to ResultList(%s)",
+      meth, tostring(resultList));
+
   -- Read back to front (LIFO order), up to "numToRead" entries
   local readValue;
   for i = listSize, 1, -1 do
@@ -1827,8 +1833,10 @@ local function readEntryList( resultList, ldtCtrl, entryList, count, all)
       list.append( resultList, readValue );
     end
 
---    GP=F and trace("[DEBUG]:<%s:%s>Appended Val(%s) to ResultList(%s)",
---      MOD, meth, tostring( readValue ), tostring(resultList) );
+    --  This is REALLY HIGH debug output.  Turn this on ONLY if there's
+    --  something suspect about the building of the result list.
+    --  GP=F and trace("[DEBUG]:<%s:%s>Appended Val(%s) to ResultList(%s)",
+    --    MOD, meth, tostring( readValue ), tostring(resultList) );
     
     numRead = numRead + 1;
     if numRead >= numToRead and all == false then
@@ -1860,30 +1868,17 @@ end -- readEntryList()
 --   (*) ldtCtrl
 --   (*) LDR Chunk Page:
 --   (*) count:
---   (*) func:
---   (*) fargs:
 --   (*) all:
 -- Return:
 --   Implicit: entries are added to the result list
 --   Explicit: Number of Elements Read.
 -- ======================================================================
-local function readByteArray( resultList, ldtCtrl, ldrChunk, count,
-                              filter, fargs, all)
+local function readByteArray( resultList, ldtCtrl, ldrChunk, count, all)
   local meth = "readByteArray()";
   GP=E and trace("[ENTER]: <%s:%s> Count(%s) func(%s) fargs(%s) all(%s)",
     MOD,meth,tostring(count), tostring(func), tostring(fargs), tostring(all));
             
   local ldtMap = ldtCtrl[2];
-
-  local doUnTransform = false;
-  if( ldtMap[M_UnTransform] ~= nil ) then
-    doUnTransform = true;
-  end
-
-  local applyFilter = false;
-  if func ~= nil and fargs ~= nil then
-    applyFilter = true;
-  end
 
   -- Note: functionTable is "global" to this module, defined at top of file.
 
@@ -2243,7 +2238,7 @@ local function ldrInsert(ldrChunkRec,ldtMap,listIndex,insertList )
 end -- ldrInsert()
 
 -- ======================================================================
--- ldrChunkRead( ldrChunk, resultList, ldtCtrl, count, filter, fargs, all );
+-- ldrRead()
 -- ======================================================================
 -- Read ALL, or up to 'count' items from this chunk, process the inner UDF 
 -- function (if present) and, for those elements that qualify, add them
@@ -2253,13 +2248,11 @@ end -- ldrInsert()
 -- (*) resultList: What's been accumulated so far -- add to this
 -- (*) ldtCtrl: Main LSO Control info
 -- (*) count: Only used when "all" flag is false.  Return this many items
--- (*) func: Optional Inner UDF function to filter read items
--- (*) fargs: Function Argument list for inner UDF
+-- (*) all: When true, read ALL.
 -- Return: the NUMBER of items read from this chunk.
 -- ======================================================================
-local function ldrChunkRead( ldrChunk, resultList, ldtCtrl, count,
-                             filter, fargs, all )
-  local meth = "ldrChunkRead()";
+local function ldrRead( ldrChunk, resultList, ldtCtrl, count, all )
+  local meth = "ldrRead()";
   GP=E and trace("[ENTER]: <%s:%s> Count(%d) All(%s)",
       MOD, meth, count, tostring(all));
 
@@ -2272,22 +2265,23 @@ local function ldrChunkRead( ldrChunk, resultList, ldtCtrl, count,
   -- LDR_BNRY_BIN, otherwise we're using the "List" Bin LDR_LIST_BIN.
   local numRead = 0;
   if ldtMap[M_StoreMode] == SM_LIST then
-    local chunkList = ldrChunk[LDR_LIST_BIN];
-    numRead = readEntryList(resultList, ldtCtrl, chunkList, count,
-                            filter, fargs, all);
+    local ldrList = ldrChunk[LDR_LIST_BIN];
+
+    GP=E and trace("[DEBUG]<%s> LDR List(%s)", meth, tostring(ldrList));
+
+    numRead = readEntryList(resultList, ldtCtrl, ldrList, count, all);
   else
-    numRead = readByteArray(resultList, ldtCtrl, ldrChunk, count,
-                            filter, fargs, all);
+    numRead = readByteArray(resultList, ldtCtrl, ldrChunk, count, all);
   end
 
   GP=E and trace("[EXIT]: <%s:%s> NumberRead(%d) ResultListSummary(%s) ",
     MOD, meth, numRead, summarizeList( resultList ));
   return numRead;
-end -- ldrChunkRead()
+end -- ldrRead()
 -- ======================================================================
 
 -- ======================================================================
--- digestListRead(topRec, resultList, ldtCtrl, Count, filter, fargs, all)
+-- digestListRead()
 -- ======================================================================
 -- Synopsis:
 -- Parms:
@@ -2296,13 +2290,11 @@ end -- ldrChunkRead()
 -- (*) ldtCtrl: Main LSO Control info
 -- (*) digestList: The List of Digests (Data Record Ptrs) we will Process
 -- (*) count: Only used when "all" flag is 0.  Return this many items
--- (*) func: Optional Inner UDF function to apply to read items
--- (*) fargs: Function Argument list for inner UDF
 -- (*) all: When == true, read all items, regardless of "count".
 -- Return: Return the amount read from the Digest List.
 -- ======================================================================
-local function digestListRead(src, topRec, resultList, ldtCtrl, digestList,
-                              count, filter, fargs, all)
+local function
+digestListRead(src, topRec, resultList, ldtCtrl, digestList, count, all)
   local meth = "digestListRead()";
   GP=E and trace("[ENTER]: <%s:%s> Count(%d) all(%s)",
     MOD, meth, count, tostring(all) );
@@ -2326,7 +2318,7 @@ local function digestListRead(src, topRec, resultList, ldtCtrl, digestList,
   local totalAmountRead = 0;
   local chunkItemsRead = 0;
   local dirCount = list.size( digestList );
-  local ldrChunk;
+  local ldrRec;
   local stringDigest;
   local status = 0;
 
@@ -2341,11 +2333,10 @@ local function digestListRead(src, topRec, resultList, ldtCtrl, digestList,
     stringDigest = tostring(digestList[ dirIndex ]);
     GP=F and trace("[DEBUG]: <%s:%s>: Opening Data Chunk:Index(%d)Digest(%s):",
     MOD, meth, dirIndex, stringDigest );
-    ldrChunk = aerospike:open_subrec( topRec, stringDigest );
+    ldrRec = aerospike:open_subrec( topRec, stringDigest );
     
     -- resultList is passed by reference and we can just add to it.
-    chunkItemsRead =
-    ldrChunkRead( ldrChunk, resultList, ldtCtrl, remaining, filter, fargs, all );
+    chunkItemsRead = ldrRead(ldrRec, resultList, ldtCtrl, remaining, all);
     totalAmountRead = totalAmountRead + chunkItemsRead;
 
     GP=F and
@@ -2357,12 +2348,11 @@ local function digestListRead(src, topRec, resultList, ldtCtrl, digestList,
     then
       GP=E and trace("[Early EXIT]:<%s:%s>totalAmountRead(%d) ResultList(%s) ",
         MOD, meth, totalAmountRead, tostring(resultList));
-      status = aerospike:close_subrec( ldrChunk );
+      status = aerospike:close_subrec( ldrRec );
       return totalAmountRead;
     end
 
-    -- status = aerospike:close_subrec( topRec, ldrChunk );
-    status = aerospike:close_subrec( ldrChunk );
+    status = aerospike:close_subrec( ldrRec );
     GP=F and trace("[DEBUG]: <%s:%s> as:close() status(%s) ",
     MOD, meth, tostring( status ) );
 
@@ -2390,17 +2380,15 @@ end -- digestListRead()
 -- compact binary form).
 
 -- ======================================================================
--- hotListRead( resultList, ldtCtrl, count, filter, fargs );
+-- hotListRead()
 -- ======================================================================
 -- Parms:
 -- (*) resultList: What's been accumulated so far -- add to this
 -- (*) ldtCtrl: Main Lso Control Structure
 -- (*) count: Only used when "all" flag is false.  Return this many items
--- (*) func: Optional Inner UDF function to apply to read items
--- (*) fargs: Function Argument list for inner UDF
 -- (*) all: Boolean: when true, read ALL
 -- Return 'count' items from the Hot List
-local function hotListRead( resultList, ldtCtrl, count, filter, fargs, all)
+local function hotListRead( resultList, ldtCtrl, count, all)
   local meth = "hotListRead()";
   GP=E and trace("[ENTER]:<%s:%s>Count(%d) All(%s)",
       MOD, meth, count, tostring( all ) );
@@ -2408,8 +2396,9 @@ local function hotListRead( resultList, ldtCtrl, count, filter, fargs, all)
   local ldtMap = ldtCtrl[2];
   local hotList = ldtMap[M_HotEntryList];
 
-  local numRead =
-    readEntryList(resultList, ldtCtrl, hotList, count, filter, fargs, all);
+  local numRead = readEntryList(resultList, ldtCtrl, hotList, count, all);
+
+  GP=E and trace("[DEBUG]<%s> HotListResult(%s)", meth, tostring(resultList));
 
   GP=E and trace("[EXIT]:<%s:%s>resultListSummary(%s)",
     MOD, meth, summarizeList(resultList) );
@@ -2679,7 +2668,7 @@ local function warmListHasRoom( ldtMap )
 end -- warmListHasRoom()
 
 -- ======================================================================
--- warmListRead(topRec, resultList, ldtCtrl, Count, filter, fargs, all);
+-- warmListRead()
 -- ======================================================================
 -- Synopsis: Pass the Warm list on to "digestListRead()" and let it do
 -- all of the work.
@@ -2689,19 +2678,16 @@ end -- warmListHasRoom()
 -- (*) resultList: What's been accumulated so far -- add to this
 -- (*) ldtCtrl: The main structure of the LSO Bin.
 -- (*) count: Only used when "all" flag is false.  Return this many items
--- (*) func: Optional Inner UDF function to apply to read items
--- (*) fargs: Function Argument list for inner UDF
 -- (*) all: When == 1, read all items, regardless of "count".
 -- Return: Return the amount read from the Warm Dir List.
 -- ======================================================================
-local function warmListRead(src, topRec, resultList, ldtCtrl, count, filter,
-    fargs, all)
+local function warmListRead(src, topRec, resultList, ldtCtrl, count, all)
 
   local ldtMap  = ldtCtrl[2];
   local digestList = ldtMap[M_WarmDigestList];
 
   return digestListRead(src, topRec, resultList, ldtCtrl,
-                          digestList, count, filter, fargs, all);
+                          digestList, count, all);
 end -- warmListRead()
 
 -- ======================================================================
@@ -3416,7 +3402,7 @@ end -- coldListInsert
 
 
 -- ======================================================================
--- coldListRead(topRec, resultList, ldtCtrl, Count, filter, fargs, all);
+-- coldListRead()
 -- ======================================================================
 -- Synopsis: March down the Cold List Directory Pages (a linked list of
 -- directory pages -- that each point to Lso Data Record "chunks") and
@@ -3428,13 +3414,10 @@ end -- coldListInsert
 -- (*) resultList: What's been accumulated so far -- add to this
 -- (*) ldtCtrl: The main structure of the LSO Bin.
 -- (*) count: Only used when "all" flag is 0.  Return this many items
--- (*) func: Optional Inner UDF function to apply to read items
--- (*) fargs: Function Argument list for inner UDF
 -- (*) all: When == 1, read all items, regardless of "count".
 -- Return: Return the amount read from the Cold Dir List.
 -- ======================================================================
-local function
-coldListRead(src, topRec, resultList, ldtCtrl, count, filter, fargs, all)
+local function coldListRead(src, topRec, resultList, ldtCtrl, count, all)
   local meth = "coldListRead()";
   GP=E and trace("[ENTER]: <%s:%s> Count(%d) All(%s) ldtMap(%s)",
       MOD, meth, count, tostring( all ), tostring( ldtMap ));
@@ -3480,7 +3463,7 @@ coldListRead(src, topRec, resultList, ldtCtrl, count, filter, fargs, all)
       MOD, meth, stringDigest, tostring(coldDirMap),tostring(digestList));
 
     numRead = digestListRead(src, topRec, resultList, ldtCtrl, digestList,
-                            countRemaining, filter, fargs, all)
+                            countRemaining, all)
     if numRead <= 0 then
         warn("[ERROR]:<%s:%s>:Cold List Read Error: Digest(%s)",
           MOD, meth, stringDigest );
@@ -4466,8 +4449,8 @@ end -- end localPushAll()
 -- NOTE: July 2013:tjl: Now using the SubrecContext to track the open
 -- subrecs.
 -- ======================================================================
-local function localStackPeek( topRec, ldtBinName, peekCount, userModule,
-    filter, fargs )
+local function
+localStackPeek( topRec, ldtBinName, peekCount, userModule, filter, fargs )
   local meth = "localStackPeek()";
 
   GP=F and trace("\n\n >>>>>>>>> API[ LSTACK PEEK ] <<<<<<<<<< \n");
