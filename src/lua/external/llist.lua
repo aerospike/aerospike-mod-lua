@@ -1,6 +1,6 @@
 -- Large Ordered List (llist.lua)
 -- Track the date and iteration of the last update:
-local MOD = "llist_2013_10_22.c";
+local MOD = "llist_2013_10_23.a";
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -27,6 +27,8 @@ local B=false; -- Set B (Banners) to true to turn ON Banner Print
 -- (*) Status = add( topRec, ldtBinName, newValue, userModule )
 -- (*) Status = add_all( topRec, ldtBinName, valueList, userModule )
 -- (*) List   = find( topRec, ldtBinName, searchValue ) 
+-- (*) List   = find_then_filter( topRec, ldtBinName, searchValue, userModule,
+--                                filter, fargs )) 
 -- (*) List   = scan( topRec, ldtBinName )
 -- (*) List   = filter( topRec, ldtBinName, userModule, filter, fargs )
 -- (*) Status = remove( topRec, ldtBinName, searchValue ) 

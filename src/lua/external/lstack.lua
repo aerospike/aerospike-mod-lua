@@ -14,9 +14,9 @@ local G_LDT_VERSION = 1.1;
 -- in the server).
 -- ======================================================================
 local GP=true; -- Leave this ALWAYS true (but value seems not to matter)
-local F=false; -- Set F (flag) to true to turn ON global print
-local E=false; -- Set E (ENTER/EXIT) to true to turn ON Enter/Exit print
-local B=false; -- Set B (Banners) to true to turn ON Banner Print
+local F=true; -- Set F (flag) to true to turn ON global print
+local E=true; -- Set E (ENTER/EXIT) to true to turn ON Enter/Exit print
+local B=true; -- Set B (Banners) to true to turn ON Banner Print
 
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- <<  LSTACK Main Functions >>
@@ -4241,7 +4241,7 @@ end -- setupLdtBin()
 local function localCreate( topRec, ldtBinName, createSpec )
   local meth = "localCreate()";
 
-  GP=F and trace("\n\n >>>>>>>>> API[ LSTACK CREATE ] <<<<<<<<<< \n");
+  GP=B and trace("\n\n >>>>>>>>> API[ LSTACK CREATE ] <<<<<<<<<< \n");
 
   -- First, check the validity of the Bin Name.
   -- This will throw and error and jump out of Lua if ldtBinName is bad.
@@ -4304,7 +4304,7 @@ end -- function localCreate()
 local function localStackPush( topRec, ldtBinName, newValue, createSpec )
   local meth = "localStackPush()";
 
-  GP=F and trace("\n\n >>>>>>>>> API[ LSTACK PUSH ] <<<<<<<<<< \n");
+  GP=B and trace("\n\n >>>>>>>>> API[ LSTACK PUSH ] <<<<<<<<<< \n");
 
   GP=E and trace("[ENTER1]:<%s:%s>LSO BIN(%s) NewVal(%s) createSpec(%s)",
       MOD, meth, tostring(ldtBinName), tostring( newValue ),
@@ -4361,7 +4361,7 @@ local function localStackPush( topRec, ldtBinName, newValue, createSpec )
   hotListInsert( ldtCtrl, newStoreValue );
   -- Must always assign the object BACK into the record bin.
   -- Check to see if we really need to reassign the MAP into the list as well.
-  ldtCtrl[2] = ldtMap;
+  -- ldtCtrl[2] = ldtMap; (should NOT be needed)
   topRec[ldtBinName] = ldtCtrl;
   record.set_flags(topRec, ldtBinName, BF_LDT_BIN );--Must set every time
 
@@ -4389,26 +4389,96 @@ end -- function localStackPush()
 -- =======================================================================
 local function localPushAll( topRec, ldtBinName, valueList, createSpec )
   local meth = "localPushAll()";
+
+  GP=B and trace("\n\n >>>>>>>>> API[ LSTACK PUSH ALL ] <<<<<<<<<< \n");
+
   GP=E and trace("[ENTER]:<%s:%s>LSO BIN(%s) valueList(%s) createSpec(%s)",
     MOD, meth, tostring(ldtBinName), tostring(valueList), tostring(createSpec));
 
+  -- Validate the topRec, the bin and the map.  If anything is weird, then
+  -- this will kick out with a long jump error() call.
+  -- Some simple protection of faulty records or bad bin names
+  validateRecBinAndMap( topRec, ldtBinName, false );
+
+  -- Check that the Set Structure is already there, otherwise, create one. 
+  if( topRec[ldtBinName] == nil ) then
+    trace("[Notice] <%s:%s> LSTACK CONTROL BIN does not Exist:Creating",
+      MOD, meth );
+
+    -- set up a new LDT bin
+    setupLdtBin( topRec, ldtBinName, createSpec );
+  end
+
+  local ldtCtrl = topRec[ldtBinName]; -- The main lmap
+  local propMap = ldtCtrl[1];
+  local ldtMap = ldtCtrl[2];
+
+  -- Set up the Write Functions (Transform).  But, just in case we're
+  -- in special TIMESTACK mode, set up the KeyFunction and ReadFunction
+  -- Note that KeyFunction would be used only for special TIMESTACK function.
+  setKeyFunction( ldtMap, false );
+  setReadFunctions( ldtMap, nil, nil, nil );
+  setWriteFunctions( ldtMap );
+
+  -- Set up our sub-rec pool
+  local src = createSubrecContext();
+
+  -- Loop thru the value list.  So, for each element ...
+  -- If we have room, do the simple list insert.  If we don't have
+  -- room, then make room -- transfer half the list out to the warm list.
+  -- That may, in turn, have to make room by moving some items to the
+  -- cold list.  (Ok to use ldtMap and not ldtCtrl here).
+  -- First -- set up our sub-rec context to track open sub-recs.
+
   local rc = 0;
+  local newStoreValue;
   if( valueList ~= nil and list.size(valueList) > 0 ) then
     local listSize = list.size( valueList );
     for i = 1, listSize, 1 do
-      rc = localStackPush( topRec, ldtBinName, valueList[i], createSpec );
-      if( rc < 0 ) then
-        warn("[ERROR]<%s:%s> Problem Inserting Item #(%d) [%s]", MOD, meth, i,
-          tostring( valueList[i] ));
-        error(ldte.ERR_INSERT);
+
+      -- Now, it looks like we're ready to insert.  If there is a transform
+      -- function present, then apply it now.
+      -- Note: G_Transform is "global" to this module, defined at top of file.
+      if( G_Transform ~= nil ) then
+        GP=F and trace("[DEBUG]: <%s:%s> Applying Transform (%s)",
+          MOD, meth, tostring(G_Transform));
+        newStoreValue = G_Transform( valueList[i] );
+      else
+        newStoreValue = valueList[i];
       end
-    end
+
+      if hotListHasRoom( ldtMap, newStoreValue ) == false then
+        GP=F and trace("[DEBUG]:<%s:%s>: CALLING TRANSFER HOT LIST!!",MOD, meth );
+        hotListTransfer( src, topRec, ldtCtrl );
+      end
+      hotListInsert( ldtCtrl, newStoreValue );
+    end -- For each item in the valueList
   else
     warn("[ERROR]<%s:%s> Invalid Input Value List(%s)",
       MOD, meth, tostring(valueList));
     error(ldte.ERR_INPUT_PARM);
   end
 
+  -- All Done -- now get ready to finish up.
+  -- Must always assign the object BACK into the record bin.
+  topRec[ldtBinName] = ldtCtrl;
+  record.set_flags(topRec, ldtBinName, BF_LDT_BIN );--Must set every time
+
+  -- Now, store the topRec.  Note that this is the ONLY place where
+  -- we should be updating the TOP RECORD.  If something fails before here,
+  -- we would prefer that the top record remains unchanged.
+  GP=F and trace("[DEBUG]:<%s:%s>:Update Record", MOD, meth );
+
+  -- Update the Top Record.  Not sure if this returns nil or ZERO for ok,
+  -- so just turn any NILs into zeros.
+  local rc = aerospike:update( topRec );
+  if( rc == nil or rc == 0 ) then
+    GP=E and trace("[Normal EXIT]:<%s:%s> Return(0)", MOD, meth );
+    return 0;
+  else
+    GP=E and trace("[ERROR EXIT]:<%s:%s> Return(%s)", MOD, meth,tostring(rc));
+    error( ldte.ERR_INTERNAL );
+  end
   return rc;
 end -- end localPushAll()
 
@@ -4453,7 +4523,7 @@ local function
 localStackPeek( topRec, ldtBinName, peekCount, userModule, filter, fargs )
   local meth = "localStackPeek()";
 
-  GP=F and trace("\n\n >>>>>>>>> API[ LSTACK PEEK ] <<<<<<<<<< \n");
+  GP=B and trace("\n\n >>>>>>>>> API[ LSTACK PEEK ] <<<<<<<<<< \n");
 
   GP=E and trace("[ENTER]: <%s:%s> LSO BIN(%s) Count(%s) func(%s) fargs(%s)",
     MOD, meth, tostring(ldtBinName), tostring(peekCount),
@@ -4819,7 +4889,7 @@ end -- lstack_subrec_list()
 local function localLdtDestroy( topRec, binName )
   local meth = "localLdtDestroy()";
 
-  GP=F and trace("\n\n >>>>>>>>> API[ LSTACK REMOVE ] <<<<<<<<<< \n");
+  GP=B and trace("\n\n >>>>>>>>> API[ LSTACK REMOVE ] <<<<<<<<<< \n");
 
   GP=E and trace("[ENTER]<%s:%s> binName(%s)", MOD, meth, tostring(binName));
   local rc = 0; -- start off optimistic
