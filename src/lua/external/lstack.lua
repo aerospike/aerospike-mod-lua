@@ -1,6 +1,6 @@
 -- Large Stack Object (LSO or LSTACK) Operations
 -- Track the data and iteration of the last update.
-local MOD="lstack_2013_10_21.j";
+local MOD="lstack_2013_11_02.c";
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -14,9 +14,9 @@ local G_LDT_VERSION = 1.1;
 -- in the server).
 -- ======================================================================
 local GP=true; -- Leave this ALWAYS true (but value seems not to matter)
-local F=true; -- Set F (flag) to true to turn ON global print
-local E=true; -- Set E (ENTER/EXIT) to true to turn ON Enter/Exit print
-local B=true; -- Set B (Banners) to true to turn ON Banner Print
+local F=false; -- Set F (flag) to true to turn ON global print
+local E=false; -- Set E (ENTER/EXIT) to true to turn ON Enter/Exit print
+local B=false; -- Set B (Banners) to true to turn ON Banner Print
 
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- <<  LSTACK Main Functions >>
@@ -5403,8 +5403,34 @@ function set_storage_limit( topRec, ldtBinName, newLimit )
 end
 
 -- ========================================================================
+-- one()          -- Just return 1.  This is used for perf measurement.
+-- same()         -- Return Val parm.  Used for perf measurement.
+-- ========================================================================
+-- Do the minimal amount of work -- just return a number so that we
+-- can measure the overhead of the LDT/UDF infrastructure.
+-- Parms:
+-- (1) topRec: the user-level record holding the LSO Bin
+-- (2) Val:  Random number val (or nothing)
+-- Result:
+--   res = 1 or val
+-- ========================================================================
+function one( topRec, ldtBinName )
+  return 1;
+end
+
+function same( topRec, ldtBinName, val )
+  if( val == nil or type(val) ~= "number") then
+    return 1;
+  else
+    return val;
+  end
+end
+
+-- ========================================================================
 -- lstack_debug() -- Turn the debug setting on (1) or off (0)
 -- debug()        -- Turn the debug setting on (1) or off (0)
+-- one()          -- Just return 1.  This is used for perf measurement.
+-- same()         -- Return Val parm.  Used for perf measurement.
 -- ========================================================================
 -- Turning the debug setting "ON" pushes LOTS of output to the console.
 -- It would be nice if we could figure out how to make this setting change
