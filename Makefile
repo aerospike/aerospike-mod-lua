@@ -36,7 +36,7 @@ CFLAGS = -O$(O)
 # LDFLAGS = 
 
 # Include Paths
-INC_PATH += $(COMMON)/$(TARGET_INCL)
+INC_PATH += $(COMMON)/$(TARGET_INCL) $(CF)/include
 
 # Library Paths
 # LIB_PATH +=

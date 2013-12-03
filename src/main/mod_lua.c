@@ -37,7 +37,8 @@
 
 #include <citrusleaf/cf_queue.h>
 #include <citrusleaf/cf_rchash.h>
-#include <citrusleaf/cf_alloc.h>
+
+#include <citrusleaf/alloc.h>
 
 #include <aerospike/as_aerospike.h>
 #include <aerospike/as_types.h>
