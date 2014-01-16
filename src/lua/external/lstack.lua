@@ -1,6 +1,6 @@
 -- Large Stack Object (LSO or LSTACK) Operations
 -- Track the data and iteration of the last update.
-local MOD="lstack_2013_11_02.c";
+local MOD="lstack_2014_01_15.e";
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -377,7 +377,7 @@ local MAGIC="MAGIC";     -- the magic value for Testing LSTACK integrity
 
 -- Default storage limit for a stack -- can be overridden by setting
 -- one of the packages.
-local G_STORE_LIMIT = 20000  -- Store no more than this.  User can override.
+local G_STORE_LIMIT = 100000  -- Store no more than this.  User can override.
 
 -- StoreMode (SM) values (which storage Mode are we using?)
 local SM_BINARY ='B'; -- Using a Transform function to compact values
@@ -4559,10 +4559,15 @@ localStackPeek( topRec, ldtBinName, peekCount, userModule, filter, fargs )
   -- New addition -- with the STORE LIMIT addition (July 2013) we now
   -- also limit our peeks to the storage limit -- which also discards
   -- storage for LDRs holding items beyond the limit.
+  -- A storeLimit of ZERO (or negative) means "no limit".
   local all = false;
   local count = 0;
   local itemCount = propMap[PM_ItemCount];
   local storeLimit = ldtMap[M_StoreLimit];
+  -- Check for a special value.
+  if( storeLimit <= 0 ) then
+      storeLimit = itemCount;
+  end
 
   if( peekCount <= 0 ) then
     if( itemCount < storeLimit ) then
@@ -4717,6 +4722,10 @@ local function localGetSize( topRec, ldtBinName )
   local ldtMap = ldtCtrl[2];
   local itemCount = propMap[PM_ItemCount];
   local storeLimit = ldtMap[M_StoreLimit];
+  -- Check for a special value.
+  if( storeLimit <= 0 ) then
+      storeLimit = itemCount;
+  end
 
   -- Note that itemCount should never appear larger than the storeLimit,
   -- but until our internal accounting is fixed, we fudge it like this.
@@ -4975,6 +4984,8 @@ end -- localLdtDestroy()
 local function localSetCapacity( topRec, ldtBinName, newLimit )
   local meth = "localSetCapacity()";
 
+  GP=B and trace("\n\n >>>>>>>>> API[ LSTACK SET CAPACITY ] <<<<<<<<<< \n");
+
   GP=E and trace("[ENTER]: <%s:%s> ldtBinName(%s) newLimit(%s)",
     MOD, meth, tostring(ldtBinName), tostring(newLimit));
 
@@ -5000,9 +5011,6 @@ local function localSetCapacity( topRec, ldtBinName, newLimit )
 
   info("[PARAMETER UPDATE]<%s:%s> StoreLimit: Old(%d) New(%d) ItemCount(%d)",
     MOD, meth, ldtMap[M_StoreLimit], newLimit, propMap[PM_ItemCount] );
-
-  -- Update the LSO Control map with the new storage limit
-  ldtMap[M_StoreLimit] = newLimit;
 
   -- Use the new "Limit" to compute how this affects the storage parameters.
   -- Basically, we want to determine how many Cold List directories this
@@ -5061,28 +5069,47 @@ local function localSetCapacity( topRec, ldtBinName, newLimit )
   -- Under 10,000:  1 Cold Dir
   -- Under 20,000:  2 Cold Dir
   -- Under 50,000:  5 Cold Dir
-  
-  local hotListMin = ldtMap[M_HotListMax] - ldtMap[M_HotListTransfer];
-  local ldrSize = ldtMap[M_LdrEntryCountMax];
-  local warmListMin =
-    (ldtMap[M_WarmListMax] - ldtMap[M_WarmListTransfer]) * ldrSize;
-  local coldListSize = ldtMap[M_ColdListMax];
-  local coldGranuleSize = ldrSize * coldListSize;
-  local coldRecsNeeded = 0;
-  if( newLimit < (hotListMin + warmListMin) ) then
-    coldRecsNeeded = 0;
-  elseif( newLimit < coldGranuleSize ) then
-    coldRecsNeeded = 1;
+  --
+  -- First -- if the new "capacity" is zero -- there's no work to be done,
+  -- other than to save the value.  Zero capacity means "no limit".
+  if( newLimit <= 0 ) then
+    if( ldtMap[M_StoreLimit] <= 0 ) then
+      -- Nothing to do here.  Leave early.  Already set.
+      GP=E and trace("[Early EXIT]:<%s:%s> Already Set. Return(0)", MOD, meth );
+      return 0;
+    end
+    -- Update the LSO Control map with the new storage limit
+    ldtMap[M_StoreLimit] = newLimit;
+
   else
-    coldRecsNeeded = math.ceil( newLimit / coldGranuleSize );
-  end
+  
+    -- Ok -- some real work needs to be done.  Update our CONTROL structure
+    -- with the appropriate Max values.
+    local hotListMin = ldtMap[M_HotListMax] - ldtMap[M_HotListTransfer];
+    local ldrSize = ldtMap[M_LdrEntryCountMax];
+    local warmListMin =
+      (ldtMap[M_WarmListMax] - ldtMap[M_WarmListTransfer]) * ldrSize;
+    local coldListSize = ldtMap[M_ColdListMax];
+    local coldGranuleSize = ldrSize * coldListSize;
+    local coldRecsNeeded = 0;
+    if( newLimit < (hotListMin + warmListMin) ) then
+      coldRecsNeeded = 0;
+    elseif( newLimit < coldGranuleSize ) then
+      coldRecsNeeded = 1;
+    else
+      coldRecsNeeded = math.ceil( newLimit / coldGranuleSize );
+    end
 
-  GP=F and trace("[STATUS]<%s:%s> Cold Granule(%d) HLM(%d) WLM(%d)",
-    MOD, meth, coldGranuleSize, hotListMin, warmListMin );
-  GP=F and trace("[UPDATE]:<%s:%s> New Cold Rec Limit(%d)", MOD, meth, 
-    coldRecsNeeded );
+    GP=F and trace("[STATUS]<%s:%s> Cold Granule(%d) HLM(%d) WLM(%d)",
+      MOD, meth, coldGranuleSize, hotListMin, warmListMin );
+    GP=F and trace("[UPDATE]:<%s:%s> New Cold Rec Limit(%d)", MOD, meth, 
+      coldRecsNeeded );
 
-  ldtMap[M_ColdDirRecMax] = coldRecsNeeded;
+    ldtMap[M_ColdDirRecMax] = coldRecsNeeded;
+    ldtMap[M_StoreLimit] = newLimit;
+
+  end -- end else update LDT CTRL
+
   topRec[ldtBinName] = ldtCtrl; -- ldtMap is implicitly included.
   record.set_flags(topRec, ldtBinName, BF_LDT_BIN );--Must set every time
 

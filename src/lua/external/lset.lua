@@ -1,6 +1,6 @@
 -- AS Large Set (LSET) Operations
 -- Track the date and iteration of the last update.
-local MOD="lset_2013_10_21.f"; 
+local MOD="lset_2014_01_14.a"; 
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -2888,6 +2888,86 @@ local function localLSetScan(topRec, ldtBinName, userModule, filter, fargs)
 
   return resultList; 
 end -- function localLSetScan()
+
+-- ======================================================================
+-- ======================================================================
+-- old code
+  -- We can't simply NULL out the entry -- because that breaks the bin
+  -- when we try to store.  So -- we'll instead replace this current entry
+  -- with the END entry -- and then we'll COPY (take) the list ... until
+  -- we have the ability to truncate a list in place.
+  -- local listSize = list.size( binList );
+  -- if( position < listSize ) then
+    -- binList[position] = binList[listSize];
+  -- end
+  -- local newBinList = list.take( binList, listSize - 1 );
+-- ======================================================================
+-- listDelete()
+-- ======================================================================
+-- General List Delete function that can be used to delete items, employees
+-- or pesky Indian Developers (usually named "Raj").
+-- RETURN:
+-- A NEW LIST that no longer includes the deleted item.
+-- ======================================================================
+local function listDelete( objectList, position )
+  local meth = "listDelete()";
+  local resultList;
+  local listSize = list.size( objectList );
+
+  GP=E and trace("[ENTER]<%s:%s>List(%s) size(%d) Position(%d)", MOD,
+  meth, tostring(objectList), listSize, position );
+  
+  if( position < 1 or position > listSize ) then
+    warn("[DELETE ERROR]<%s:%s> Bad position(%d) for delete.",
+      MOD, meth, position );
+    error( ldte.ERR_DELETE );
+  end
+
+  -- Move elements in the list to "cover" the item at Position.
+  --  +---+---+---+---+
+  --  |111|222|333|444|   Delete item (333) at position 3.
+  --  +---+---+---+---+
+  --  Moving forward, Iterate:  list[pos] = list[pos+1]
+  --  This is what you would THINK would work:
+  -- for i = position, (listSize - 1), 1 do
+  --   objectList[i] = objectList[i+1];
+  -- end -- for()
+  -- objectList[i+1] = nil;  (or, call trim() )
+  -- However, because we cannot assign "nil" to a list, nor can we just
+  -- trim a list, we have to build a NEW list from the old list, that
+  -- contains JUST the pieces we want.
+  -- So, basically, we're going to build a new list out of the LEFT and
+  -- RIGHT pieces of the original list.
+  --
+  -- Our List operators :
+  -- (*) list.take (take the first N elements) 
+  -- (*) list.drop (drop the first N elements, and keep the rest) 
+  -- The special cases are:
+  -- (*) A list of size 1:  Just return a new (empty) list.
+  -- (*) We're deleting the FIRST element, so just use RIGHT LIST.
+  -- (*) We're deleting the LAST element, so just use LEFT LIST
+  if( listSize == 1 ) then
+    resultList = list();
+  elseif( position == 1 ) then
+    resultList = list.drop( objectList, 1 );
+  elseif( position == listSize ) then
+    resultList = list.take( objectList, position - 1 );
+  else
+    resultList = list.take( objectList, position - 1);
+    local addList = list.drop( objectList, position );
+    local addLength = list.size( addList );
+    for i = 1, addLength, 1 do
+      list.append( resultList, addList[i] );
+    end
+  end
+
+  GP=F and trace("[EXIT]<%s:%s>List(%s)", MOD, meth, tostring(resultList));
+  return resultList;
+end -- listDelete()
+--
+-- ======================================================================
+-- ======================================================================
+
 
 -- ======================================================================
 -- topRecDelete()
