@@ -773,9 +773,15 @@ static int apply(lua_State * l, int err, int argc, as_result * res) {
 	as_logger_trace(mod_lua.logger, "pop return value from the stack");
 	lua_pop(l, -1);
 
-	return 0;
+	if ( res == NULL ) {
+		return rc;
+	} else {
+		return 0;
+	}
 }
 
+// Returning negative number as positive number collide with lua return codes
+// Used in udf_rw.c function to print the error message 
 static int verify_environment(context * ctx, as_aerospike * as) {
 	int rc = 0;
 
@@ -801,6 +807,26 @@ static int verify_environment(context * ctx, as_aerospike * as) {
 
 	return rc;
 } 
+
+char * as_module_err_string(int err_no) {
+	char *rs;
+	switch(err_no) {
+		case -1: 
+			rs = strdup("UDF: Mod-Lua system path not found");
+			break;
+		case -2:
+			rs = strdup("UDF: Mod-Lua user path not found");
+			break;
+		case -3: 
+			rs = strdup("UDF: Mod-Lua system and user path not found");
+			break;
+		default:
+			rs = malloc(sizeof(char) * 128);
+			sprintf(rs, "UDF: Excution Error - Check Logs %d", err_no);
+			break;
+	}
+	return rs;
+}
 
 static void populate_error(lua_State * l, const char * filename, int rc, as_module_error * err) {
 
@@ -1040,7 +1066,7 @@ static int apply_record(as_module * m, as_aerospike * as, const char * filename,
 	
 	// apply the function
 	as_logger_trace(mod_lua.logger, "apply_record: apply the function");
-	apply(l, err, argc, res);
+	rc = apply(l, err, argc, res);
 
 	// return the state
 	pthread_rwlock_rdlock(ctx->lock);
@@ -1143,7 +1169,7 @@ static int apply_stream(as_module * m, as_aerospike * as, const char * filename,
 	
 	// call apply_stream(f, s, ...)
 	as_logger_trace(mod_lua.logger, "apply_stream: apply the function");
-	apply(l, err, argc, NULL);
+	rc = apply(l, err, argc, NULL);
 
 	// release the context
 	pthread_rwlock_rdlock(ctx->lock);
