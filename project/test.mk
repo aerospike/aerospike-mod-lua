@@ -6,25 +6,23 @@ TEST_VALGRIND = --tool=memcheck --leak-check=yes --show-reachable=yes --num-call
 
 TEST_CFLAGS =  -DMEM_COUNT=1
 TEST_CFLAGS += -I$(TARGET_INCL)
-TEST_CFLAGS += -Imodules/common/$(TARGET_INCL)
+TEST_CFLAGS += -I$(COMMON)/$(TARGET_INCL)
 
 TEST_LDFLAGS = -lssl -lcrypto -llua -lpthread -lm -lrt 
 
 TEST_DEPS =
 TEST_DEPS += $(COMMON)/$(TARGET_LIB)/libaerospike-common.a 
 TEST_DEPS += $(MSGPACK)/src/.libs/libmsgpackc.a
+TEST_DEPS += $(CLIENTREPO)/citrusleaf-base/$(TARGET_LIB)/libaerospike-base.a
 
 ###############################################################################
 ##  TEST OBJECTS                                                       		 ##
 ###############################################################################
 
-TEST_STREAM = 
-TEST_STREAM += stream/stream_basics
-TEST_STREAM += stream/stream_udf
-
-TEST_RECORD = 
-TEST_RECORD += record/record_basics
-TEST_RECORD += record/record_udf
+TEST_PLANS = 
+TEST_PLANS += stream/stream_udf
+TEST_PLANS += record/record_udf
+TEST_PLANS += validation/validation_basics
 
 TEST_UTIL = 
 TEST_UTIL += util/consumer_stream
@@ -36,9 +34,7 @@ TEST_UTIL += util/test_logger
 
 TEST_MOD_LUA = mod_lua_test
 TEST_MOD_LUA += $(TEST_UTIL) 
-TEST_MOD_LUA += $(TEST_TYPES) 
-TEST_MOD_LUA += $(TEST_STREAM)
-TEST_MOD_LUA += $(TEST_RECORD) 
+TEST_MOD_LUA += $(TEST_PLANS)
 
 ###############################################################################
 ##  TEST TARGETS                                                      		 ##

@@ -42,10 +42,10 @@
 -- 4. Modification: 
 --    The LMAP control-bin which was a simple map earlier has now been changed
 --    into a list. 
---    The first entry of the list contains the ldt-bin specific 
+--    a. The first entry of the list contains the ldt-bin specific 
 --    property map referred in item 2. 
---    The second entry of the list contains the original lsomap which has been
---    a map of many lmap attributes and their values 
+--    b. The second entry of the list contains the original lsomap which has been
+--    a map of standard lmap attributes and their values 
 -- 5. Modification: 
 --    Abbreviated names for the lmap record attributes to save storage space
 --
@@ -77,32 +77,31 @@
 -- 
 --
 --(Standard Mode)
--- +-----+-----+-----+-----+----------------------------------------+
+-- +-----+-----+-----+-----+----------------------------------+
 -- |User |User |. .  |LMAP |LMAP |. . .|LMAP |                |
 -- |Bin 1|Bin 2|     |Bin  |Bin  |     |Bin  |                |
--- |     |     |. .  |Name |Name |. . .|Name |
--- +-----+-----+-----+-----+----------------------------------------+
---                      |     |-------------------------------------------->+---------+                      
---                      V                     								| LMAP    |    
---                    +---------+             								| control |
---   		          | LMAP    |            							    | bin     |
---                    | control |			  								| bin     |
---                    | bin     |		      								+---------+ 						 LDR 1	
---   		          +---------+                          LDR 1			|Digest 1 |	+---------------------->+--------+							
---         	          |Digest 1 |+----------------------->+--------+	    |---------|              LDR 2      |Entry 1 |
---                    |---------|              LDR 2      |Entry 1 |		|Digest 2 |+------------>+--------+ |Entry 2 |
---                    |Digest 2 |+------------>+--------+ |Entry 2 |	    +---------+              |Entry 1 | |   o    |
---                    +---------+              |Entry 1 | |   o    |	    | o o o   |              |Entry 2 | |   o    |
---                    | o o o   |              |Entry 2 | |   o    |		|---------|				 |   o    |	|Entry n |
---                    |---------|    LDR N     |   o    | |   o    |		|Digest N |				 |Entry n |	+--------+
---                    |Digest N |+->+--------+ |   o    | |Entry n |		+---------+				 +--------+
---                    +---------+   |Entry 1 | |   o    | +--------+
---                                  |Entry 2 | |Entry n |
---                                  |   o    | +--------+
---                                  |   o    |
---                                  |   o    |
---                                  |Entry n |
---                                  +--------+
+-- |     |     |. .  |Name |Name |. . .|Name |                |
+-- +-----+-----+-----+-----+----------------------------------+
+--                      |     +------------------------------------>+---------+                      
+--                      V                                           | LMAP    |    
+--               +---------+                                        | control |
+--   		     | LMAP    |                                        | bin     |
+--               | control |		                                | bin     |
+--               | bin     |		                                +---------+ 						 LDR 1	
+--   		     +---------+                          LDR 1			|Digest 1 |	+---------------------->+--------+							--         	    |Digest 1 |+----------------------->+--------+	   |---------|              LDR 2      |Entry 1 |
+--               |---------|              LDR 2      |Entry 1 |		|Digest 2 |+------------>+--------+ |Entry 2 |
+--               |Digest 2 |+------------>+--------+ |Entry 2 |	    +---------+              |Entry 1 | |   o    |
+--               +---------+              |Entry 1 | |   o    |	    | o o o   |              |Entry 2 | |   o    |
+--               | o o o   |              |Entry 2 | |   o    |		|---------|				 |   o    |	|Entry n |
+--               |---------|    LDR N     |   o    | |   o    |		|Digest N |				 |Entry n |	+--------+
+--               |Digest N |+->+--------+ |   o    | |Entry n |		+---------+				 +--------+
+--               +---------+   |Entry 1 | |   o    | +--------+
+--                             |Entry 2 | |Entry n |
+--                             |   o    | +--------+
+--                             |   o    |
+--                             |   o    |
+--                             |Entry n |
+--                             +--------+
 --
 --  
 --
@@ -118,45 +117,147 @@
 --                    | LMAP    |
 --                    | control |
 --                    | info    |
---   		          +---------+                          LDR 1
---         	          |Digest 1 |+----------------------->+--------+
---                    |---------|              LDR 2      |Entry 1 |
---                    |Digest 2 |+------------>+--------+ |Entry 2 |
---                    +---------+              |Entry 1 | |   o    |
---                    | o o o   |              |Entry 2 | |   o    |
---                    |---------|    LDR N     |   o    | |   o    |
---                    |Digest N |+->+--------+ |   o    | |Entry n |
---                    +---------+   |Entry 1 | |   o    | +--------+
---                                  |Entry 2 | |Entry n |
---                                  |   o    | +--------+
---                                  |   o    |
---                                  |   o    |
---                                  |Entry n |
---                                  +--------+
+--   		          +---------+                         
+--                    | Entry 1 |
+--                    | Entry 2 |
+--					  | ..  o ..|
+--					  | ..  o ..|
+--					  | ..  o ..|
+--					  | ..  o ..|
+--                    | Entry n |
+--                    +---------+  
+--
 --
 --=============================================================================
--- How does LMAP work ?
+-- How does LMAP insertion work ?
 --
 -- The Large Map data structure has a control-bin (with a user-defined name) 
 -- which points to a list of digests. 
 -- 
 -- a. In the compact mode, there is only one LMAP bin pointing to a list of N
---    digest items. We compute the digest for the record, hash the digest over
---    the list of N bins, hash(digest) Modulo N, insert the digest in the 
---    appropriate list-index of the first and only lmap bin with a pointer 
---    to the actual LDR. 
---
--- b. In the standard mode, there are multiple LMAP bins in a record. When 
+--    LDR entries, directly placed as a list like a LSET structure. In this 
+--    mode, we simply append the record to the end of the singular list. 
+-- 
+-- b. When we reach lmapCtrlInfo[M_ThreshHold] or more items in the compact
+--    mode, we switch to the regular or standard mode. 
+-- 
+-- c. As a part of this switch, we first create a list of M_Modulo entries 
+--    which are all zeroed out initially. Later-on, they will become a list of
+--    digests each of which point to one LDR entry. 
+-- 
+-- d. Also as a part of the switch, we create a new LDR chunk, initialize the 
+--    property-map attributes for this LDR. We also create and initialize one 
+--    and only one Exists-Sub-Record per LMAP-bin. Then we fill-in this LDR 
+--    with the list we copied over from the first-bin. 
+-- 
+-- e. After we are done bulding the LDR entirely, it is now time to insert the 
+--    appropriate digest-list entry in LMAP with the digest-value of this LDR
+--    
+--    Digest_List[Index] = Digest of LDR x --------> LDR x
+--    
+-- f. So how does this step happen ? Every LDT-bin has a key-type field which 
+--    specifies if its key-type is atomic or complex. If the key-type field is
+--    atomic, it would be a simple integer or string hash. If the key-type is 
+--    complex, the user would also have to give us a function-table to compute
+--    this number. This hash is used to determine the index in the digest-list
+--    for the digest pointer entry. 
+-- 
+-- g. After the switch, normal lmap_inserts also go through the same hashing
+--    described above to perform insertions of elements. 
+-- 
+-- h. In the standard mode, there are multiple LMAP bins in a record. When 
 --    an LDR needss to be inserted, we first pick the matching lmap bin-name
---    and then proceed to hashing the digest and finding its place in the list. 
+--    and then proceed to hashing the object and finding its place in the list. 
+-- 
+-- i. What are some bounds on the lmap_insert ?
+-- *  For starters, when in compact mode, we can only insert upto M_Threshold
+--	  after which we can only continue in regular-mode 
+-- *  If we are in regular-mode, how many entries will each LDR list (pointed 
+--    to by a single digest have a max of ? That is determined by the M_Topfull
+--    variable that is actually a ldt-bin level attribute but it gets set and 
+--    reset for every LDR entry-list overflow. 
 --
--- c. Unlike lstack which grows as a list but is read in reverse as a stack, 
---    lmap digest entries are meant to behave as a simple linear list. So a 
--- 	  lmap search is very much similar to the lset-search of hash-matching, 
+-- h.1 Note the distinction between StoreState vs StoreMode: StoreMode, as a
+--     SM_LIST or SM_BINARY is present for both LSET and LSTACK. But StoreState
+--     which determines whether the LDT is operating in compact or standard 
+--     mode is present only for LSET and NOT in LSTACK. In the case of LSTACK
+-- 	   the transfer-count and overflow counters acts as rehashing techniques. 
+--     Since LMAP is a hybrid LSET + Warm-list LDT, it has both the defines. 
+--     LMAP however does not have any Transfer metric, because there is no 
+--     notion of a transfer or overflow in LMAP. As in the case of LSET, the
+--     attribute that determines this switch will be LMAP threashold. Also 
+--     this will be a property of the LDT-bin specific control-information. 
+-- 
+-- i. Unlike lstack which grows as a list but is read in reverse as a stack, 
+--    lmap digest entries are meant to behave as a simple, oops hashed linear
+--    list. So a lmap search is very much similar to the lset-search of hash-matching, 
 -- 	  except that in the case of lset, we would hash to find the correct bin, 
 --    but in the case of lmap, we look-up by bin-name, but hash to find the 
---    digest entry amongst the list-indices. 
+--    digest entry amongst the list-indices (in the case of standard mode) or
+--    hash to find the actual entry index itself (in the case of compact mode. 
 --  
+-- j. Note another subtle-difference between LMAP and LSTACK in terms of 
+--    insertion of entries (also applicable in reverse for search). 
+--    In the case of LSTACK, we simply add the new digest to the list of 
+--    warm-digests. In the case of LMAP, we take the digest of the top-most
+--    entry in our ldr-list-bin, obtain the list-entry corresponding to it,
+--    hash this list-entry over M_Modulo digest-bins and then insert the 
+--    digest into that index pointing to the top of LDR list of entries.
+-- 	  LSTACK appends digests to a list, LMAP hashes over M_Modulo to obtain
+--    this result. 
+-- 
+-- k. There is also no notion of a TOP in LMAP unlike LMAP. In stack, the top
+--    is determined to be top-most or most-recent index in the digest-list
+--    entry. This is the index at which the next LDR entry would be inserted. 
+--    In the case of LMAP, we first pick the digest-list index using the hash
+--    method described above. If that entry in the digest-list is nil, we go
+--    ahead and call a lmapLdrListChunkCreate() and also insert the bin. If 
+--    it is non-empty, we go ahead and directly call listInsert().     
+-- 
+--    How does LMAP deletion work ?
+-- 
+-- a. In compact mode, deletion is similar to LSET functionality, we simply 
+--    pick-up the user-defined bin and delete the entry from the list of
+--    entries. We also update stats. DO NOT DELETE THE SUBREC FOR LMAP_DELETE. 
+
+-- b. In regular mode, the when an entry needs to be deleted, we first 
+--    determine whether the lmapbinname exists. If it does, we first hash
+--    the entry to point to a digest-list index. 
+-- 
+-- c. This digest-list can either be the digest pointing to the LDR entry
+--    or it can point to the list of entries, one of which contains the entry
+--    we want to delete. We wont be able to differentiate between the two. So
+--    we go thorugh the LDR list pointed-to by the digest, look for the item 
+--    and delete the item.  
+-- 
+-- c.1 How should the digest-list be updated for this delete. If there was only
+--     one entry in the LDR list and that item was removed, we remove the 
+--     digest-list entry. If the deleted entry was one among many, nothing 
+--     needs to be done with respect to the digest-list. 
+-- 
+-- d. Should we reset M_TopFull to false here ? Probably. If its set 
+--    to true, no harm in resetting it back to false. 
+-- 
+-- e. For all cases, we copy over the list, delete the entry and re-attach 
+--    the new list back to the digest-entry. Again, we must remember that 
+--    lmap deletion is DELINKING. DO NOT DELETE THE SUBREC FOR LMAP_DELETE.
+-- 
+-- 	  How does LMAP search work ?
+-- 
+-- a. In compact mode, LMAP search is similar to LSET. We simply scan through
+-- 	  the first and only lmap-bin-name and return 0 if the element is found or
+--    return an error if the element is not found in the set or if the lmap bin
+--    name does not at all exist on the system. When the search-value is not 
+--    specified, we return all the elemnets of the first and only bin. 
+-- 
+-- b. In regular mode search, we first check for the existence of the bin. If 
+--    it does, we first hash the search-entry to a matching digest-list index. 
+--    Then we look through the digest-list, find the ldr-list pointed to by the
+--    digest-entry. If the entry is found, we return 0, if not we return error. 
+--    When the search value is not specified, we return all the list-elemnts 
+--    pointed-to by all the digest-list entries in their ldr-list for the given
+--    lmapBinName. 
+-- 
 ---- ======================================================================
 -- 
 -- Aerospike Large Map (LMAP) Operations :

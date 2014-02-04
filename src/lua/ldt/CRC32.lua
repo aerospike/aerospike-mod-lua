@@ -156,8 +156,8 @@ end
 --
 -- CRC32.lua
 --
--- A pure Lua implementation of a CRC32 hashing algorithm. Slower than using a C implemtation,
--- but useful having no other dependancies.
+-- A pure Lua implementation of a CRC32 hashing algorithm. Slower than using
+-- a C implemtation, but useful having no other dependancies.
 --
 --
 -- Synopsis
@@ -169,5 +169,6 @@ end
 -- Methods:
 --
 -- hashval = CRC32.Hash(val)
---    Calculates and returns (as an integer) the CRC32 hash of the parameter 'val'. 
+--    Calculates and returns (as an integer) the CRC32 hash of the
+--    parameter 'val'. 
 
