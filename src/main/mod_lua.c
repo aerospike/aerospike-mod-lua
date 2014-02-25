@@ -763,10 +763,11 @@ static int apply(lua_State * l, int err, int argc, as_result * res) {
 
 // Returning negative number as positive number collide with lua return codes
 // Used in udf_rw.c function to print the error message 
+// NB: No protection in this function callers should have a multi threaded
+//     protection
 static int verify_environment(context * ctx, as_aerospike * as) {
 	int rc = 0;
 
-	pthread_rwlock_rdlock(ctx->lock);
 	if ( ctx->config.system_path[0] == '\0' ) {
 		char * p = ctx->config.system_path;
 		char msg[256] = {'\0'};
@@ -784,7 +785,6 @@ static int verify_environment(context * ctx, as_aerospike * as) {
 		as_aerospike_log(as, __FILE__, __LINE__, 1, msg);
 		rc += 2;
 	}
-	pthread_rwlock_unlock(ctx->lock);
 
 	return rc;
 } 
