@@ -20,6 +20,9 @@
  * IN THE SOFTWARE.
  *****************************************************************************/
 
+#include <aerospike/as_iterator.h>
+#include <aerospike/as_map.h>
+#include <aerospike/as_map_iterator.h>
 #include <aerospike/as_val.h>
 
 #include <aerospike/mod_lua_val.h>
@@ -192,7 +195,7 @@ static int mod_lua_map_pairs(lua_State * l) {
     as_map *        map     = (as_map *) mod_lua_box_value(box);
     if ( map ) {
         lua_pushcfunction(l, mod_lua_map_pairs_next);
-        as_iterator * itr = mod_lua_pushiterator(l);
+        as_map_iterator * itr = (as_map_iterator *) mod_lua_pushiterator(l, sizeof(as_map_iterator));
         as_map_iterator_init(itr,map);
         return 2;
     }
@@ -225,7 +228,7 @@ static int mod_lua_map_keys(lua_State * l) {
     as_map *        map     = (as_map *) mod_lua_box_value(box);
     if ( map ) {
         lua_pushcfunction(l, mod_lua_map_keys_next);
-        as_iterator * iter = mod_lua_pushiterator(l);
+        as_map_iterator * iter = (as_map_iterator *) mod_lua_pushiterator(l, sizeof(as_map_iterator));
         as_map_iterator_init(iter, map);
         return 2;
     }
@@ -258,7 +261,7 @@ static int mod_lua_map_values(lua_State * l) {
     as_map *        map     = (as_map *) mod_lua_box_value(box);
     if ( map ) {
         lua_pushcfunction(l, mod_lua_map_values_next);
-        as_iterator * itr = mod_lua_pushiterator(l);
+        as_map_iterator * itr = (as_map_iterator *) mod_lua_pushiterator(l, sizeof(as_map_iterator));
         as_map_iterator_init(itr, map);
         return 2;
     }

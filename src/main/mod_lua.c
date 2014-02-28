@@ -115,11 +115,7 @@ static pthread_rwlock_t lock;
 
 static cf_rchash * centry_hash = NULL;
 
-// static uint32_t cache_size = 0;
-
 static const as_module_hooks hooks;
-
-static jmp_buf panic_jmp;
 
 /**
  * Lua Module Specific Data
@@ -148,9 +144,6 @@ static lua_State * create_state(context *, const char *filename);
 static int poll_state(context *, cache_item *);
 static int offer_state(context *, cache_item *);
 
-static void panic_setjmp(void);
-// static int handle_error(lua_State *);
-static int handle_panic(lua_State *);
 
 
 /******************************************************************************
@@ -724,18 +717,6 @@ static int pushargs(lua_State * l, as_list * args) {
 	return data.count;
 }
 
-
-static void panic_setjmp(void) {
-	setjmp(panic_jmp);
-}
-
-static int handle_panic(lua_State * l) {
-	const char * msg = luaL_optstring(l, 1, 0);
-	as_logger_error(mod_lua.logger, "Lua Runtime Fault: %s", msg);
-	longjmp(panic_jmp, 1);
-	return 0;
-}
-
 static int handle_error(lua_State * l) {
 	const char * msg = luaL_optstring(l, 1, 0);
 	as_logger_error(mod_lua.logger, "Lua Runtime Error: %s", msg);
@@ -783,10 +764,11 @@ static int apply(lua_State * l, int err, int argc, as_result * res) {
 
 // Returning negative number as positive number collide with lua return codes
 // Used in udf_rw.c function to print the error message 
+// NB: No protection in this function callers should have a multi threaded
+//     protection
 static int verify_environment(context * ctx, as_aerospike * as) {
 	int rc = 0;
 
-	pthread_rwlock_rdlock(ctx->lock);
 	if ( ctx->config.system_path[0] == '\0' ) {
 		char * p = ctx->config.system_path;
 		char msg[256] = {'\0'};
@@ -804,7 +786,6 @@ static int verify_environment(context * ctx, as_aerospike * as) {
 		as_aerospike_log(as, __FILE__, __LINE__, 1, msg);
 		rc += 2;
 	}
-	pthread_rwlock_unlock(ctx->lock);
 
 	return rc;
 } 

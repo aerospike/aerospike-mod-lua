@@ -95,7 +95,7 @@ MSGPACK-clean:
 	fi
 
 $(MSGPACK)/configure: $(MSGPACK)/configure.in
-	cd $(MSGPACK) && autoreconf -v
+	cd $(MSGPACK) && autoreconf -iv
 
 $(MSGPACK)/Makefile: $(MSGPACK)/configure
 	cd $(MSGPACK) && ./configure CFLAGS="-fPIC"
