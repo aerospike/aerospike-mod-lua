@@ -35,6 +35,11 @@ CFLAGS = -O$(O)
 # Make-tree Linker Flags
 # LDFLAGS = 
 
+# If CF is not passed in, use the default allocator in Common.
+ifeq ($(CF), )
+  CF = $(COMMON)/src/default
+endif
+
 # Include Paths
 INC_PATH += $(COMMON)/$(TARGET_INCL) $(CF)/include
 
