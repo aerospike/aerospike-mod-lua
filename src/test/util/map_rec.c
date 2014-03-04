@@ -6,6 +6,7 @@
 #include <aerospike/as_string.h>
 #include <aerospike/as_rec.h>
 #include <aerospike/as_map.h>
+#include <aerospike/as_hashmap.h>
 #include "map_rec.h"
 
 /*****************************************************************************
@@ -18,7 +19,7 @@ static int          map_rec_set(const as_rec *, const char *, const as_val *);
 static int          map_rec_remove(const as_rec *, const char *);
 static uint32_t     map_rec_ttl(const as_rec *);
 static uint16_t     map_rec_gen(const as_rec *);
-static uint32_t     map_rec_hash(as_rec *);
+static uint32_t     map_rec_hash(const as_rec *);
 
 /*****************************************************************************
  * CONSTANTS
@@ -81,6 +82,6 @@ static uint16_t map_rec_gen(const as_rec * r) {
     return 0;
 }
 
-static uint32_t map_rec_hash(as_rec * r) {
+static uint32_t map_rec_hash(const as_rec * r) {
     return 0;
 }

@@ -3,7 +3,6 @@
 #include <stdlib.h>
 
 #include <aerospike/as_arraylist.h>
-#include <aerospike/as_linkedlist.h>
 #include <aerospike/as_list.h>
 #include <aerospike/as_integer.h>
 #include <aerospike/as_stream.h>

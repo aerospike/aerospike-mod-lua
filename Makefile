@@ -5,8 +5,7 @@ include project/settings.mk
 
 # Modules
 COMMON 	:= 
-MSGPACK := 
-MODULES := COMMON MSGPACK
+MODULES := COMMON 
 
 # Overrride optimizations via: make O=n
 O = 3
@@ -17,7 +16,11 @@ CC_FLAGS += -fno-common -fno-strict-aliasing -finline-functions
 CC_FLAGS += -march=nocona -DMARCH_$(ARCH) -DMEM_COUNT
 
 # Make-local Linker Flags
+ifeq ($(OS),Darwin)
+LD_FLAGS = -Wall -Winline -undefined dynamic_lookup
+else
 LD_FLAGS = -Wall -Winline -rdynamic
+endif
 
 # DEBUG Settings
 ifdef DEBUG

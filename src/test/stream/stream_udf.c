@@ -26,26 +26,30 @@ static as_aerospike as;
  * TEST CASES
  *****************************************************************************/
 
+static uint32_t limit = 10;
+static uint32_t produced = 0;
+static uint32_t consumed = 0;
+
+static as_val * produce1() {
+	if ( produced >= limit ) return AS_STREAM_END;
+	produced++;
+	return (as_val *) as_integer_new(produced);
+}
+
+static as_stream_status consume1(as_val * v) {
+	if ( v != AS_STREAM_END ) consumed++;
+	as_val_destroy(v);
+	return AS_STREAM_OK;
+}
+
 TEST( stream_udf_1, "filter even numbers from range (1-10)" ) {
  
-    uint32_t limit = 10;
-    uint32_t produced = 0;
-    uint32_t consumed = 0;
+	limit = 10;
+	produced = 0;
+	consumed = 0;
     
-    as_val * produce() {
-        if ( produced >= limit ) return AS_STREAM_END;
-        produced++;
-        return (as_val *) as_integer_new(produced);
-    }
-
-    as_stream_status consume(as_val * v) {
-        if ( v != AS_STREAM_END ) consumed++;
-        as_val_destroy(v);
-        return AS_STREAM_OK;
-    }
-
-    as_stream * istream = producer_stream_new(produce);
-    as_stream * ostream = consumer_stream_new(consume);
+    as_stream * istream = producer_stream_new(produce1);
+    as_stream * ostream = consumer_stream_new(consume1);
     as_list *   arglist = NULL;
 
     int rc = as_module_apply_stream(&mod_lua, &as, "aggr", "even", istream, arglist, ostream);
@@ -60,24 +64,12 @@ TEST( stream_udf_1, "filter even numbers from range (1-10)" ) {
 
 TEST( stream_udf_2, "increment range (1-10)" ) {
 
-    uint32_t limit = 10;
-    uint32_t produced = 0;
-    uint32_t consumed = 0;
+	limit = 10;
+	produced = 0;
+	consumed = 0;
     
-    as_val * produce() {
-        if ( produced >= limit ) return AS_STREAM_END;
-        produced++;
-        return (as_val *) as_integer_new(produced);
-    }
-
-    as_stream_status consume(as_val * v) {
-        if ( v != AS_STREAM_END ) consumed++;
-        as_val_destroy(v);
-        return AS_STREAM_OK;
-    }
-
-    as_stream * istream = producer_stream_new(produce);
-    as_stream * ostream = consumer_stream_new(consume);
+    as_stream * istream = producer_stream_new(produce1);
+    as_stream * ostream = consumer_stream_new(consume1);
     as_list *   arglist = NULL;
 
     int rc = as_module_apply_stream(&mod_lua, &as, "aggr", "increment", istream, arglist, ostream);
@@ -90,28 +82,30 @@ TEST( stream_udf_2, "increment range (1-10)" ) {
     as_stream_destroy(ostream);
 }
 
+static as_integer * result3 = NULL;
+
+static as_val * produce3() {
+	if ( produced >= limit ) return AS_STREAM_END;
+	produced++;
+	return (as_val *) as_integer_new(produced);
+}
+
+static as_stream_status consume3(as_val * v) {
+	if ( v != AS_STREAM_END ) consumed++;
+	result3 = (as_integer *) v;
+	return AS_STREAM_OK;
+}
+
 TEST( stream_udf_3, "sum range (1-1,000,000)" ) {
 
-    uint32_t limit = 1000*1000;
-    uint32_t produced = 0;
-    uint32_t consumed = 0;
+	limit = 1000*1000;
+	produced = 0;
+	consumed = 0;
 
-    as_integer * result = NULL;
+	result3 = NULL;
     
-    as_val * produce() {
-        if ( produced >= limit ) return AS_STREAM_END;
-        produced++;
-        return (as_val *) as_integer_new(produced);
-    }
-
-    as_stream_status consume(as_val * v) {
-        if ( v != AS_STREAM_END ) consumed++;
-        result = (as_integer *) v;
-        return AS_STREAM_OK;
-    }
-
-    as_stream * istream = producer_stream_new(produce);
-    as_stream * ostream = consumer_stream_new(consume);
+    as_stream * istream = producer_stream_new(produce3);
+    as_stream * ostream = consumer_stream_new(consume3);
     as_list *   arglist = NULL;
 
     int rc = as_module_apply_stream(&mod_lua, &as, "aggr", "sum", istream, arglist, ostream);
@@ -119,35 +113,23 @@ TEST( stream_udf_3, "sum range (1-1,000,000)" ) {
     assert_int_eq( rc, 0);
     assert_int_eq( produced, limit);
     assert_int_eq( consumed, 1);
-    assert_int_eq( as_integer_toint(result), 500000500000);
+    assert_int_eq( as_integer_toint(result3), 500000500000);
 
-    as_integer_destroy(result);
+    as_integer_destroy(result3);
     as_stream_destroy(istream);
     as_stream_destroy(ostream);
 }
 
 TEST( stream_udf_4, "product range (1-10)" ) {
  
-    uint32_t limit = 10;
-    uint32_t produced = 0;
-    uint32_t consumed = 0;
+	limit = 10;
+	produced = 0;
+	consumed = 0;
 
-    as_integer * result = NULL;
+    result3 = NULL;
     
-    as_val * produce() {
-        if ( produced >= limit ) return AS_STREAM_END;
-        produced++;
-        return (as_val *) as_integer_new(produced);
-    }
-
-    as_stream_status consume(as_val * v) {
-        if ( v != AS_STREAM_END ) consumed++;
-        result = (as_integer *) v;
-        return AS_STREAM_OK;
-    }
-
-    as_stream * istream = producer_stream_new(produce);
-    as_stream * ostream = consumer_stream_new(consume);
+    as_stream * istream = producer_stream_new(produce3);
+    as_stream * ostream = consumer_stream_new(consume3);
     as_list *   arglist = NULL;
 
     int rc = as_module_apply_stream(&mod_lua, &as, "aggr", "product", istream, arglist, ostream);
@@ -155,41 +137,43 @@ TEST( stream_udf_4, "product range (1-10)" ) {
     assert_int_eq( rc, 0);
     assert_int_eq( produced, limit);
     assert_int_eq( consumed, 1);
-    assert_int_eq( as_integer_toint(result), 3628800);
+    assert_int_eq( as_integer_toint(result3), 3628800);
 
-    as_integer_destroy(result);
+    as_integer_destroy(result3);
     as_stream_destroy(istream);
     as_stream_destroy(ostream);
 }
 
+static as_map * result5 = NULL;
+
+static as_val * produce5() {
+	if ( produced >= limit ) return AS_STREAM_END;
+	produced++;
+	
+	as_rec * rec = map_rec_new();
+	as_rec_set(rec, "id", (as_val *) as_integer_new(produced));
+	as_rec_set(rec, "campaign", (as_val *) as_integer_new(produced % 10));
+	as_rec_set(rec, "views", (as_val *) as_integer_new(produced * 2919 % 1000));
+	
+	return (as_val *) rec;
+}
+
+static as_stream_status consume5(as_val * v) {
+	if ( v != AS_STREAM_END ) consumed++;
+	result5 = (as_map *) v;
+	return AS_STREAM_OK;
+}
+
 TEST( stream_udf_5, "campaign rollup w/ map & reduce" ) {
 
-    uint32_t limit = 100;
-    uint32_t produced = 0;
-    uint32_t consumed = 0;
+	limit = 100;
+	produced = 0;
+	consumed = 0;
 
-    as_map * result = NULL;
+	result5 = NULL;
     
-    as_val * produce() {
-        if ( produced >= limit ) return AS_STREAM_END;
-        produced++;
-
-        as_rec * rec = map_rec_new();
-        as_rec_set(rec, "id", (as_val *) as_integer_new(produced));
-        as_rec_set(rec, "campaign", (as_val *) as_integer_new(produced % 10));
-        as_rec_set(rec, "views", (as_val *) as_integer_new(produced * 2919 % 1000));
-
-        return (as_val *) rec;
-    }
-
-    as_stream_status consume(as_val * v) {
-        if ( v != AS_STREAM_END ) consumed++;
-        result = (as_map *) v;
-        return AS_STREAM_OK;
-    }
-
-    as_stream * istream = producer_stream_new(produce);
-    as_stream * ostream = consumer_stream_new(consume);
+    as_stream * istream = producer_stream_new(produce5);
+    as_stream * ostream = consumer_stream_new(consume5);
     as_list *   arglist = (as_list *) as_arraylist_new(0,0);
 
     int rc = as_module_apply_stream(&mod_lua, &as, "aggr", "rollup", istream, arglist, ostream);
@@ -200,19 +184,19 @@ TEST( stream_udf_5, "campaign rollup w/ map & reduce" ) {
 
     as_integer i;
 
-    assert_int_eq(as_integer_toint((as_integer *) as_map_get(result, (as_val *) as_integer_init(&i, 0))), 5450);
-    assert_int_eq(as_integer_toint((as_integer *) as_map_get(result, (as_val *) as_integer_init(&i, 1))), 4740);
-    assert_int_eq(as_integer_toint((as_integer *) as_map_get(result, (as_val *) as_integer_init(&i, 2))), 4930);
-    assert_int_eq(as_integer_toint((as_integer *) as_map_get(result, (as_val *) as_integer_init(&i, 3))), 5120);
-    assert_int_eq(as_integer_toint((as_integer *) as_map_get(result, (as_val *) as_integer_init(&i, 4))), 4310);
-    assert_int_eq(as_integer_toint((as_integer *) as_map_get(result, (as_val *) as_integer_init(&i, 5))), 5500);
-    assert_int_eq(as_integer_toint((as_integer *) as_map_get(result, (as_val *) as_integer_init(&i, 6))), 4690);
-    assert_int_eq(as_integer_toint((as_integer *) as_map_get(result, (as_val *) as_integer_init(&i, 7))), 4880);
-    assert_int_eq(as_integer_toint((as_integer *) as_map_get(result, (as_val *) as_integer_init(&i, 8))), 5070);
-    assert_int_eq(as_integer_toint((as_integer *) as_map_get(result, (as_val *) as_integer_init(&i, 9))), 5260);
+    assert_int_eq(as_integer_toint((as_integer *) as_map_get(result5, (as_val *) as_integer_init(&i, 0))), 5450);
+    assert_int_eq(as_integer_toint((as_integer *) as_map_get(result5, (as_val *) as_integer_init(&i, 1))), 4740);
+    assert_int_eq(as_integer_toint((as_integer *) as_map_get(result5, (as_val *) as_integer_init(&i, 2))), 4930);
+    assert_int_eq(as_integer_toint((as_integer *) as_map_get(result5, (as_val *) as_integer_init(&i, 3))), 5120);
+    assert_int_eq(as_integer_toint((as_integer *) as_map_get(result5, (as_val *) as_integer_init(&i, 4))), 4310);
+    assert_int_eq(as_integer_toint((as_integer *) as_map_get(result5, (as_val *) as_integer_init(&i, 5))), 5500);
+    assert_int_eq(as_integer_toint((as_integer *) as_map_get(result5, (as_val *) as_integer_init(&i, 6))), 4690);
+    assert_int_eq(as_integer_toint((as_integer *) as_map_get(result5, (as_val *) as_integer_init(&i, 7))), 4880);
+    assert_int_eq(as_integer_toint((as_integer *) as_map_get(result5, (as_val *) as_integer_init(&i, 8))), 5070);
+    assert_int_eq(as_integer_toint((as_integer *) as_map_get(result5, (as_val *) as_integer_init(&i, 9))), 5260);
 
 
-    as_map_destroy(result);
+    as_map_destroy(result5);
     as_stream_destroy(istream);
     as_stream_destroy(ostream);
 }
@@ -224,28 +208,10 @@ TEST( stream_udf_6, "campaign rollup w/ aggregate" ) {
     uint32_t produced = 0;
     uint32_t consumed = 0;
 
-    as_map * result = NULL;
-    
-    as_val * produce() {
-        if ( produced >= limit ) return AS_STREAM_END;
-        produced++;
-        
-        as_rec * rec = map_rec_new();
-        as_rec_set(rec, "id", (as_val *) as_integer_new(produced));
-        as_rec_set(rec, "campaign", (as_val *) as_integer_new(produced % 10));
-        as_rec_set(rec, "views", (as_val *) as_integer_new(produced * 2919 % 1000));
+    result5 = NULL;
 
-        return (as_val *) rec;
-    }
-
-    as_stream_status consume(as_val * v) {
-        if ( v != AS_STREAM_END ) consumed++;
-        result = (as_map *) v;
-        return AS_STREAM_OK;
-    }
-
-    as_stream * istream = producer_stream_new(produce);
-    as_stream * ostream = consumer_stream_new(consume);
+    as_stream * istream = producer_stream_new(produce5);
+    as_stream * ostream = consumer_stream_new(consume5);
     as_list *   arglist = (as_list *) as_arraylist_new(0,0);
 
     int rc = as_module_apply_stream(&mod_lua, &as, "aggr", "rollup2", istream, arglist, ostream);
@@ -256,18 +222,18 @@ TEST( stream_udf_6, "campaign rollup w/ aggregate" ) {
 
     as_integer i;
 
-    assert_int_eq(as_integer_toint((as_integer *) as_map_get(result, (as_val *) as_integer_init(&i, 0))), 5450);
-    assert_int_eq(as_integer_toint((as_integer *) as_map_get(result, (as_val *) as_integer_init(&i, 1))), 4740);
-    assert_int_eq(as_integer_toint((as_integer *) as_map_get(result, (as_val *) as_integer_init(&i, 2))), 4930);
-    assert_int_eq(as_integer_toint((as_integer *) as_map_get(result, (as_val *) as_integer_init(&i, 3))), 5120);
-    assert_int_eq(as_integer_toint((as_integer *) as_map_get(result, (as_val *) as_integer_init(&i, 4))), 4310);
-    assert_int_eq(as_integer_toint((as_integer *) as_map_get(result, (as_val *) as_integer_init(&i, 5))), 5500);
-    assert_int_eq(as_integer_toint((as_integer *) as_map_get(result, (as_val *) as_integer_init(&i, 6))), 4690);
-    assert_int_eq(as_integer_toint((as_integer *) as_map_get(result, (as_val *) as_integer_init(&i, 7))), 4880);
-    assert_int_eq(as_integer_toint((as_integer *) as_map_get(result, (as_val *) as_integer_init(&i, 8))), 5070);
-    assert_int_eq(as_integer_toint((as_integer *) as_map_get(result, (as_val *) as_integer_init(&i, 9))), 5260);
+    assert_int_eq(as_integer_toint((as_integer *) as_map_get(result5, (as_val *) as_integer_init(&i, 0))), 5450);
+    assert_int_eq(as_integer_toint((as_integer *) as_map_get(result5, (as_val *) as_integer_init(&i, 1))), 4740);
+    assert_int_eq(as_integer_toint((as_integer *) as_map_get(result5, (as_val *) as_integer_init(&i, 2))), 4930);
+    assert_int_eq(as_integer_toint((as_integer *) as_map_get(result5, (as_val *) as_integer_init(&i, 3))), 5120);
+    assert_int_eq(as_integer_toint((as_integer *) as_map_get(result5, (as_val *) as_integer_init(&i, 4))), 4310);
+    assert_int_eq(as_integer_toint((as_integer *) as_map_get(result5, (as_val *) as_integer_init(&i, 5))), 5500);
+    assert_int_eq(as_integer_toint((as_integer *) as_map_get(result5, (as_val *) as_integer_init(&i, 6))), 4690);
+    assert_int_eq(as_integer_toint((as_integer *) as_map_get(result5, (as_val *) as_integer_init(&i, 7))), 4880);
+    assert_int_eq(as_integer_toint((as_integer *) as_map_get(result5, (as_val *) as_integer_init(&i, 8))), 5070);
+    assert_int_eq(as_integer_toint((as_integer *) as_map_get(result5, (as_val *) as_integer_init(&i, 9))), 5260);
 
-    as_map_destroy(result);
+    as_map_destroy(result5);
     as_stream_destroy(istream);
     as_stream_destroy(ostream);
 }
