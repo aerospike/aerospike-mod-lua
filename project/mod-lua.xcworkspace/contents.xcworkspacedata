@@ -4,4 +4,7 @@
    <FileRef
       location = "group:aerospike-mod-lua/aerospike-mod-lua.xcodeproj">
    </FileRef>
+   <FileRef
+      location = "group:aerospike-mod-lua/../../src">
+   </FileRef>
 </Workspace>

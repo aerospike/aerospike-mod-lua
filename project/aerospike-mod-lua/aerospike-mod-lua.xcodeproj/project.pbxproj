@@ -22,7 +22,6 @@
 
 /* Begin PBXFileReference section */
 		BFBB7F5118C0105A0080851E /* libaerospike-mod-lua.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libaerospike-mod-lua.a"; sourceTree = BUILT_PRODUCTS_DIR; };
-		BFBB7F5818C010AD0080851E /* src */ = {isa = PBXFileReference; lastKnownFileType = folder; name = src; path = ../../src; sourceTree = "<group>"; };
 		BFBB7F5918C011A00080851E /* mod_lua_aerospike.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = mod_lua_aerospike.c; path = ../../src/main/mod_lua_aerospike.c; sourceTree = "<group>"; };
 		BFBB7F5A18C011A00080851E /* mod_lua_bytes.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = mod_lua_bytes.c; path = ../../src/main/mod_lua_bytes.c; sourceTree = "<group>"; };
 		BFBB7F5B18C011A10080851E /* mod_lua_iterator.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = mod_lua_iterator.c; path = ../../src/main/mod_lua_iterator.c; sourceTree = "<group>"; };
@@ -61,7 +60,6 @@
 				BFBB7F6018C011A10080851E /* mod_lua_stream.c */,
 				BFBB7F6118C011A10080851E /* mod_lua_val.c */,
 				BFBB7F6218C011A10080851E /* mod_lua.c */,
-				BFBB7F5818C010AD0080851E /* src */,
 				BFBB7F5218C0105A0080851E /* Products */,
 			);
 			sourceTree = "<group>";
@@ -230,6 +228,7 @@
 					../../src/include,
 					/usr/local/include,
 					../../../common/src/include,
+					../../../common/src/default/include,
 				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
@@ -245,6 +244,7 @@
 					../../src/include,
 					/usr/local/include,
 					../../../common/src/include,
+					../../../common/src/default/include,
 				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
@@ -269,6 +269,7 @@
 				BFBB7F5718C0105A0080851E /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 	};
