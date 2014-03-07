@@ -96,8 +96,6 @@ TEST( stream_udf_2, "increment range (1-10)" )
 
 static as_integer * result3 = NULL;
 
-static uint64_t result3i = 0;
-
 static as_val * produce3()
 {
 	if ( produced >= limit ) {
