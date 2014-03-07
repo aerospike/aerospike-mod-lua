@@ -4,7 +4,7 @@ include project/settings.mk
 ###############################################################################
 
 # Modules
-COMMON 	:= 
+COMMON 	:= $(COMMON)
 MODULES := COMMON 
 
 # Overrride optimizations via: make O=n
@@ -13,7 +13,11 @@ O = 3
 # Make-local Compiler Flags
 CC_FLAGS = -g -std=gnu99 -Wall -Winline -fPIC 
 CC_FLAGS += -fno-common -fno-strict-aliasing -finline-functions 
-CC_FLAGS += -march=nocona -DMARCH_$(ARCH) -DMEM_COUNT
+CC_FLAGS += -march=nocona -DMARCH_$(ARCH)
+ifneq ($(CF), )
+  CF_CFLAGS = -I$(CF)/include
+endif
+CC_FLAGS += -D_REENTRANT -D_GNU_SOURCE $(EXT_CFLAGS) $(CF_CFLAGS)
 
 # Make-local Linker Flags
 ifeq ($(OS),Darwin)
@@ -38,13 +42,8 @@ CFLAGS = -O$(O)
 # Make-tree Linker Flags
 # LDFLAGS = 
 
-# If CF is not passed in, use the default allocator in Common.
-ifeq ($(CF), )
-  CF = $(COMMON)/src/default
-endif
-
 # Include Paths
-INC_PATH += $(COMMON)/$(TARGET_INCL) $(CF)/include
+INC_PATH += $(COMMON)/$(TARGET_INCL)
 
 # Library Paths
 # LIB_PATH +=
@@ -94,7 +93,7 @@ libmod_lua.so: $(TARGET_LIB)/libmod_lua.so
 $(TARGET_OBJ)/%.o: COMMON-prepare $(SOURCE_MAIN)/%.c | modules-prepare
 	$(object)
 
-$(TARGET_LIB)/libmod_lua.a $(TARGET_LIB)/libmod_lua.so: $(MOD_LUA:%=$(TARGET_OBJ)/%) | $(COMMON)/$(TARGET_INCL)/aerospike/*.h
+$(TARGET_LIB)/libmod_lua.a $(TARGET_LIB)/libmod_lua.so: $(MOD_LUA:%=$(TARGET_OBJ)/%) | $(COMMON)/$(TARGET_INCL)/aerospike
 
 $(TARGET_INCL)/aerospike: | $(TARGET_INCL)
 	mkdir $@

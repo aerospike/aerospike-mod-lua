@@ -4,7 +4,7 @@
 
 TEST_VALGRIND = --tool=memcheck --leak-check=yes --show-reachable=yes --num-callers=20 --track-fds=yes -v
 
-TEST_CFLAGS =  -DMEM_COUNT=1
+TEST_CFLAGS =
 TEST_CFLAGS += -I$(TARGET_INCL)
 TEST_CFLAGS += -I$(COMMON)/$(TARGET_INCL)
 
@@ -16,6 +16,7 @@ endif
 
 TEST_DEPS =
 TEST_DEPS += $(COMMON)/$(TARGET_LIB)/libaerospike-common.a 
+TEST_DEPS += $(CLIENTREPO)/modules/base/$(TARGET_LIB)/libaerospike-base.a
 
 ###############################################################################
 ##  TEST OBJECTS                                                       		 ##
