@@ -39,24 +39,28 @@ const as_rec_hooks map_rec_hooks = {
  * FUNCTIONS
  *****************************************************************************/
 
-as_rec * map_rec_new() {
+as_rec * map_rec_new()
+{
     as_map * m = (as_map *) as_hashmap_new(32);
     return as_rec_new(m, &map_rec_hooks);
 }
 
-as_rec * map_rec_init(as_rec * r) {
+as_rec * map_rec_init(as_rec * r)
+{
     as_map * m = (as_map *) as_hashmap_new(32);
     return as_rec_init(r, m, &map_rec_hooks);
 }
 
-static bool map_rec_destroy(as_rec * r) {
+static bool map_rec_destroy(as_rec * r)
+{
     as_map * m = (as_map *) r->data;
     as_map_destroy(m);
     r->data = NULL;
     return true;
 }
 
-static as_val * map_rec_get(const as_rec * r, const char * name) {
+static as_val * map_rec_get(const as_rec * r, const char * name)
+{
     as_map * m = (as_map *) r->data;
     as_string s;
     as_string_init(&s, (char *) name, false);
@@ -65,23 +69,28 @@ static as_val * map_rec_get(const as_rec * r, const char * name) {
     return v;
 }
 
-static int map_rec_set(const as_rec * r, const char * name, const as_val * value) {
+static int map_rec_set(const as_rec * r, const char * name, const as_val * value)
+{
     as_map * m = (as_map *) r->data;
     return as_map_set(m, (as_val *) as_string_new(strdup(name),true), (as_val *) value);
 }
 
-static int map_rec_remove(const as_rec * r, const char * name) {
+static int map_rec_remove(const as_rec * r, const char * name)
+{
     return 0;
 }
 
-static uint32_t map_rec_ttl(const as_rec * r) {
+static uint32_t map_rec_ttl(const as_rec * r)
+{
     return 0;
 }
 
-static uint16_t map_rec_gen(const as_rec * r) {
+static uint16_t map_rec_gen(const as_rec * r)
+{
     return 0;
 }
 
-static uint32_t map_rec_hash(const as_rec * r) {
+static uint32_t map_rec_hash(const as_rec * r)
+{
     return 0;
 }

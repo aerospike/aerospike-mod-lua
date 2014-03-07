@@ -23,7 +23,8 @@ static as_aerospike as;
  * TEST CASES
  *****************************************************************************/
 
-TEST( record_udf_1, "echo bin a of {a = 123, b = 456 }" ) {
+TEST( record_udf_1, "echo bin a of {a = 123, b = 456 }" )
+{
 
     as_rec * rec = map_rec_new();
     as_rec_set(rec, "a", (as_val *) as_integer_new(123));
@@ -45,7 +46,8 @@ TEST( record_udf_1, "echo bin a of {a = 123, b = 456 }" ) {
     as_result_destroy(res);
 }
 
-TEST( record_udf_2, "concat bins a and b of {a = 'abc', b = 'def' }" ) {
+TEST( record_udf_2, "concat bins a and b of {a = 'abc', b = 'def' }" )
+{
 
     as_rec * rec = map_rec_new();
     as_rec_set(rec, "a", (as_val *) as_string_new("abc",false));
@@ -73,7 +75,8 @@ TEST( record_udf_2, "concat bins a and b of {a = 'abc', b = 'def' }" ) {
  * TEST SUITE
  *****************************************************************************/
 
-static bool before(atf_suite * suite) {
+static bool before(atf_suite * suite)
+{
 
     test_aerospike_init(&as);
 
@@ -98,11 +101,13 @@ static bool before(atf_suite * suite) {
     return true;
 }
 
-static bool after(atf_suite * suite) {
+static bool after(atf_suite * suite)
+{
     return true;
 }
 
-SUITE( record_udf, "stream udf tests" ) {
+SUITE( record_udf, "stream udf tests" )
+{
     suite_before( before );
     suite_after( after );
     
