@@ -16,7 +16,6 @@ endif
 
 TEST_DEPS =
 TEST_DEPS += $(COMMON)/$(TARGET_LIB)/libaerospike-common.a 
-TEST_DEPS += $(CLIENTREPO)/modules/base/$(TARGET_LIB)/libaerospike-base.a
 
 ###############################################################################
 ##  TEST OBJECTS                                                       		 ##

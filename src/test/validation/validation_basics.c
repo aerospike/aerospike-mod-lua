@@ -57,11 +57,11 @@ static int readfile(const char * filename, char ** content, uint32_t * size) {
 	int size_b = 0; 
 
 	uint8_t * buff = content_v; 
-	int read = fread(buff, 1, 512, file); 
+	int read = (int)fread(buff, 1, 512, file);
 	while ( read ) { 
 		size_b += read; 
 		buff += read; 
-		read = fread(buff, 1, 512, file); 
+		read = (int)fread(buff, 1, 512, file);
 		if ( size_b >= size_v-1 ) {
 			break;
 		}
