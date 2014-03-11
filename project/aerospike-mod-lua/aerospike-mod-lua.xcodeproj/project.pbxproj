@@ -230,6 +230,7 @@
 					../../../common/src/include,
 					../../../common/src/default/include,
 				);
+				OTHER_CFLAGS = "-D_DARWIN_UNLIMITED_SELECT";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Debug;
@@ -246,6 +247,7 @@
 					../../../common/src/include,
 					../../../common/src/default/include,
 				);
+				OTHER_CFLAGS = "-D_DARWIN_UNLIMITED_SELECT";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Release;
