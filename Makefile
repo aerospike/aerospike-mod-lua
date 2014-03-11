@@ -3,27 +3,36 @@ include project/settings.mk
 ##  SETTINGS                                                                 ##
 ###############################################################################
 
+OS := $(shell uname)
+
 # Modules
 COMMON 	:= $(COMMON)
-MODULES := COMMON 
+MODULES := COMMON
 
-# Overrride optimizations via: make O=n
+# Override optimizations via: make O=n
 O = 3
 
 # Make-local Compiler Flags
-CC_FLAGS = -g -std=gnu99 -Wall -Winline -fPIC 
-CC_FLAGS += -fno-common -fno-strict-aliasing -finline-functions 
+CC_FLAGS = -std=gnu99 -g -Wall -fPIC
+CC_FLAGS += -fno-common -fno-strict-aliasing -finline-functions
 CC_FLAGS += -march=nocona -DMARCH_$(ARCH)
-ifneq ($(CF), )
-  CF_CFLAGS = -I$(CF)/include
-endif
-CC_FLAGS += -D_REENTRANT -D_GNU_SOURCE $(EXT_CFLAGS) $(CF_CFLAGS)
+CC_FLAGS += -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_GNU_SOURCE $(EXT_CFLAGS)
 
-# Make-local Linker Flags
 ifeq ($(OS),Darwin)
-LD_FLAGS = -Wall -Winline -undefined dynamic_lookup
+CC_FLAGS += -D_DARWIN_UNLIMITED_SELECT
 else
-LD_FLAGS = -Wall -Winline -rdynamic
+CC_FLAGS += -rdynamic
+endif
+
+ifneq ($(CF), )
+CC_FLAGS += -I$(CF)/include
+endif
+
+# Linker flags
+LD_FLAGS = $(LDFLAGS) -lm -fPIC 
+
+ifeq ($(OS),Darwin)
+LD_FLAGS += -undefined dynamic_lookup
 endif
 
 # DEBUG Settings
