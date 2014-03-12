@@ -301,9 +301,11 @@ static const luaL_reg object_metatable[] = {
  * CLASS TABLE
  *****************************************************************************/
 
+/*
 static const luaL_reg class_table[] = {
     {0, 0}
 };
+*/
 
 static const luaL_reg class_metatable[] = {
     {"__index",         mod_lua_list_index},

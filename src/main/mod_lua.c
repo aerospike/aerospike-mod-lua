@@ -114,7 +114,7 @@ static pthread_rwlock_t lock;
 
 static cf_rchash * centry_hash = NULL;
 
-static const as_module_hooks hooks;
+// static const as_module_hooks hooks;
 
 /**
  * Lua Module Specific Data

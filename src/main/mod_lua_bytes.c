@@ -1212,10 +1212,12 @@ static const luaL_reg bytes_object_metatable[] = {
  * CLASS TABLE
  *****************************************************************************/
 
+/*
 static const luaL_reg bytes_class_table[] = {
 	{"putX",            mod_lua_bytes_tostring},
 	{0, 0}
 };
+*/
 
 static const luaL_reg bytes_class_metatable[] = {
 	{"__index",         mod_lua_bytes_get_byte},
