@@ -32,12 +32,12 @@
 #include <lua.h>
 #include <lauxlib.h>
 #include <lualib.h>
-
 #include <pthread.h>
 
 #include <citrusleaf/cf_queue.h>
 #include <citrusleaf/cf_rchash.h>
-#include <citrusleaf/cf_alloc.h>
+
+#include <citrusleaf/alloc.h>
 
 #include <aerospike/as_aerospike.h>
 #include <aerospike/as_types.h>
@@ -114,7 +114,7 @@ static pthread_rwlock_t lock;
 
 static cf_rchash * centry_hash = NULL;
 
-static const as_module_hooks hooks;
+// static const as_module_hooks hooks;
 
 /**
  * Lua Module Specific Data
@@ -195,11 +195,11 @@ int cache_rm(context * ctx, const char *key) {
 	if ( !key || ( strlen(key) == 0 )) return 0;
 	cache_entry     * centry = NULL;
 	WRLOCK;
-	if (CF_RCHASH_OK != cf_rchash_get(centry_hash, (void *)key, strlen(key), (void *)&centry)) {
+	if (CF_RCHASH_OK != cf_rchash_get(centry_hash, (void *)key, (uint32_t)strlen(key), (void *)&centry)) {
 		UNLOCK;
 		return 0;
 	}
-	cf_rchash_delete(centry_hash, (void *)key, strlen(key));
+	cf_rchash_delete(centry_hash, (void *)key, (uint32_t)strlen(key));
 	UNLOCK;
 	cache_entry_cleanup(centry);
 	cf_queue_destroy(centry->lua_state_q);
@@ -212,14 +212,14 @@ int cache_init(context * ctx, const char *key, const char * gen) {
 	if (strlen(key) == 0) return 0;
 	cache_entry     * centry = NULL;
 	WRLOCK;
-	if (CF_RCHASH_OK != cf_rchash_get(centry_hash, (void *)key, strlen(key), (void *)&centry)) {
+	if (CF_RCHASH_OK != cf_rchash_get(centry_hash, (void *)key, (uint32_t)strlen(key), (void *)&centry)) {
 		centry = cf_rc_alloc(sizeof(cache_entry)); 
 		cf_atomic32_set(&centry->total, 0);
 		cf_atomic32_set(&centry->cache_miss, 0);
 		centry->max_cache_size = CACHE_ENTRY_STATE_MAX;
 		centry->lua_state_q = cf_queue_create(sizeof(lua_State *), true);
 		cache_entry_init(ctx, centry, key, gen);
-		int retval = cf_rchash_put(centry_hash, (void *)key, strlen(key), (void *)centry);
+		int retval = cf_rchash_put(centry_hash, (void *)key, (uint32_t)strlen(key), (void *)centry);
 		UNLOCK;
 		if (retval != CF_RCHASH_OK) {
 			// weird should not happen
@@ -345,6 +345,7 @@ static int update(as_module * m, as_module_event * e) {
 
 			if ( ctx->lock == NULL ) {
 				ctx->lock = &lock;
+#ifdef __linux__
 				pthread_rwlockattr_t rwattr;
 				if (0 != pthread_rwlockattr_init(&rwattr)) {
 					return 3;
@@ -355,6 +356,16 @@ static int update(as_module * m, as_module_event * e) {
 				if (0 != pthread_rwlock_init(ctx->lock, &rwattr)) {
 					return 3;
 				}
+#else
+				pthread_rwlockattr_t rwattr;
+				if (0 != pthread_rwlockattr_init(&rwattr)) {
+					return 3;
+				}
+
+				if (0 != pthread_rwlock_init(ctx->lock, &rwattr)) {
+					return 3;
+				}
+#endif
 			}
 			
 			// Attempt to open the directory.
@@ -589,7 +600,7 @@ static int poll_state(context * ctx, cache_item * citem) {
 	if ( ctx->config.cache_enabled == true ) {
 		cache_entry     * centry = NULL;
 		RDLOCK;
-		int retval = cf_rchash_get(centry_hash, (void *)citem->key, strlen(citem->key), (void *)&centry);
+		int retval = cf_rchash_get(centry_hash, (void *)citem->key, (uint32_t)strlen(citem->key), (void *)&centry);
 		UNLOCK;
 		if (CF_RCHASH_OK == retval ) {
 			if (cf_queue_pop(centry->lua_state_q, &citem->state, CF_QUEUE_NOWAIT) != CF_QUEUE_EMPTY) {
@@ -650,7 +661,7 @@ static int offer_state(context * ctx, cache_item * citem) {
 		lua_gc(citem->state, LUA_GCSTEP, 2);
 		cache_entry *centry = NULL;
 		RDLOCK;
-		if (CF_RCHASH_OK == cf_rchash_get(centry_hash, (void *)citem->key, strlen(citem->key), (void *)&centry) ) {
+		if (CF_RCHASH_OK == cf_rchash_get(centry_hash, (void *)citem->key, (uint32_t)strlen(citem->key), (void *)&centry) ) {
 			UNLOCK;
 			as_logger_trace(mod_lua.logger, "[CACHE] found entry: %s (%d)", citem->key, centry->max_cache_size);
 			if (( CF_Q_SZ(centry->lua_state_q) < centry->max_cache_size ) 

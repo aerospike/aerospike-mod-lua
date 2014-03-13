@@ -20,14 +20,12 @@
  * IN THE SOFTWARE.
  *****************************************************************************/
 
-#include <arpa/inet.h> // byteswap
-#include <endian.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
 
+#include <citrusleaf/cf_byte_order.h>
 #include <aerospike/as_val.h>
-
 #include <aerospike/mod_lua_val.h>
 #include <aerospike/mod_lua_bytes.h>
 #include <aerospike/mod_lua_iterator.h>
@@ -141,6 +139,7 @@ static int mod_lua_bytes_ensure(lua_State *l)
 	return 1;
 }
 
+/*
 static int mod_lua_bytes_truncate(lua_State *l)
 {
 	// we expect 2 args
@@ -165,6 +164,7 @@ static int mod_lua_bytes_truncate(lua_State *l)
 	lua_pushboolean(l, res);
 	return 1;
 }
+*/
 
 static int mod_lua_bytes_new(lua_State * l)
 {
@@ -268,7 +268,7 @@ static int mod_lua_bytes_set_type(lua_State * l)
 		return 0;
 	}
 
-	as_bytes_set_type(b, t);
+	as_bytes_set_type(b, (as_bytes_type)t);
 	return 0;
 }
 
@@ -316,8 +316,7 @@ static int mod_lua_bytes_append_byte(lua_State * l)
 	// ensure we have capacity, if not, then resize
 	if ( as_bytes_ensure(b, pos + size, true) == true ) {
 		// write the bytes
-		uint8_t	val	= htons((uint8_t) v);
-		res	= as_bytes_append_byte(b, val);
+		res	= as_bytes_append_byte(b, v);
 	}
 
 	lua_pushboolean(l, res);
@@ -363,7 +362,7 @@ static int mod_lua_bytes_append_int16(lua_State * l)
 	// ensure we have capacity, if not, then resize
 	if ( as_bytes_ensure(b, pos + size, true) == true ) {
 		// write the bytes
-		int16_t	val	= htons((int16_t) v);
+		int16_t	val	= cf_swap_to_be16((int16_t) v);
 		res	= as_bytes_append_int16(b, val);
 	}
 
@@ -410,7 +409,7 @@ static int mod_lua_bytes_append_int32(lua_State * l)
 	// ensure we have capacity, if not, then resize
 	if ( as_bytes_ensure(b, pos + size, true) == true ) {
 		// write the bytes
-		int32_t	val	= htonl((int32_t) v);
+		int32_t	val	= cf_swap_to_be32((int32_t) v);
 		res	= as_bytes_append_int32(b, val);
 	}
 
@@ -457,7 +456,7 @@ static int mod_lua_bytes_append_int64(lua_State * l)
 	// ensure we have capacity, if not, then resize
 	if ( as_bytes_ensure(b, pos + size, true) == true ) {
 		// write the bytes
-		int64_t	val	= be64toh((int64_t) v);
+		int64_t	val	= cf_swap_to_be64((int64_t) v);
 		res = as_bytes_append_int64(b, val);
 	}
 
@@ -500,12 +499,12 @@ static int mod_lua_bytes_append_string(lua_State * l)
 
 	bool 		res = false;
 	uint32_t	pos = b->size;
-	uint32_t 	size = n;
+	uint32_t 	size = (uint32_t)n;
 
 	// ensure we have capacity, if not, then resize
 	if ( as_bytes_ensure(b, pos + size, true) == true ) {
 		// write the bytes
-		res = as_bytes_append(b, (uint8_t *) v, n);
+		res = as_bytes_append(b, (uint8_t *) v, size);
 	}
 
 	lua_pushboolean(l, res);
@@ -550,7 +549,7 @@ static int mod_lua_bytes_append_bytes(lua_State * l)
 
 	bool 		res = false;
 	uint32_t	pos = b->size;
-	uint32_t 	size = n > v->size ? v->size : n;
+	uint32_t 	size = n > v->size ? v->size : (uint32_t)n;
 
 	// ensure we have capacity, if not, then resize
 	if ( as_bytes_ensure(b, pos + size, true) == true ) {
@@ -603,14 +602,13 @@ static int mod_lua_bytes_set_byte(lua_State * l)
 	}
 
 	bool 		res = false;
-	uint32_t	pos = i - 1;
+	uint32_t	pos = (uint32_t)(i - 1);
 	uint32_t	size = 1;
 
 	// ensure we have capacity, if not, then resize
 	if ( as_bytes_ensure(b, pos + size, true) == true ) {
 		// write the bytes
-		uint8_t	val	= htons((uint8_t) v);
-		res	= as_bytes_set_byte(b, pos, val);
+		res	= as_bytes_set_byte(b, pos, v);
 	}
 
 	lua_pushboolean(l, res);
@@ -654,13 +652,13 @@ static int mod_lua_bytes_set_int16(lua_State * l)
 	}
 
 	bool 		res = false;
-	uint32_t	pos = i - 1;
+	uint32_t	pos = (uint32_t)(i - 1);
 	uint32_t	size = 2;
 
 	// ensure we have capacity, if not, then resize
 	if ( as_bytes_ensure(b, pos + size, true) == true ) {
 		// write the bytes
-		int16_t	val	= htons((int16_t) v);
+		int16_t	val	= cf_swap_to_be16((int16_t) v);
 		res	= as_bytes_set_int16(b, pos, val);
 	}
 
@@ -705,13 +703,13 @@ static int mod_lua_bytes_set_int32(lua_State * l)
 	}
 
 	bool 		res = false;
-	uint32_t	pos = i - 1;
+	uint32_t	pos = (uint32_t)(i - 1);
 	uint32_t	size = 4;
 
 	// ensure we have capacity, if not, then resize
 	if ( as_bytes_ensure(b, pos + size, true) == true ) {
 		// write the bytes
-		int32_t	val	= htonl((int32_t) v);
+		int32_t	val	= cf_swap_to_be32((int32_t) v);
 		res	= as_bytes_set_int32(b, pos, val);
 	}
 
@@ -756,13 +754,13 @@ static int mod_lua_bytes_set_int64(lua_State * l)
 	}
 
 	bool 		res = false;
-	uint32_t	pos = i - 1;
+	uint32_t	pos = (uint32_t)(i - 1);
 	uint32_t	size = 8;
 
 	// ensure we have capacity, if not, then resize
 	if ( as_bytes_ensure(b, pos + size, true) == true ) {
 		// write the bytes
-		int64_t	val	= be64toh((int64_t) v);
+		int64_t	val	= cf_swap_to_be64((int64_t) v);
 		res = as_bytes_set_int64(b, pos, val);
 	}
 
@@ -808,13 +806,13 @@ static int mod_lua_bytes_set_string(lua_State * l)
 	}
 
 	bool		res = false;
-	uint32_t	pos = i - 1;
-	uint32_t	size = n;
+	uint32_t	pos = (uint32_t)(i - 1);
+	uint32_t	size = (uint32_t)n;
 
 	// ensure we have capacity, if not, then resize
 	if ( as_bytes_ensure(b, pos + size, true) == true ) {
 		// write the bytes
-		res = as_bytes_set(b, pos, (uint8_t *) v, (uint32_t) n);
+		res = as_bytes_set(b, pos, (uint8_t *) v, size);
 	}
 
 	lua_pushboolean(l, res);
@@ -862,8 +860,8 @@ static int mod_lua_bytes_set_bytes(lua_State * l)
 	}
 
 	bool		res = false;
-	uint32_t	pos = i - 1;
-	uint32_t 	size = n > v->size ? v->size : n;
+	uint32_t	pos = (uint32_t)(i - 1);
+	uint32_t 	size = n > v->size ? v->size : (uint32_t)n;
 
 	// ensure we have capacity, if not, then resize
 	if ( as_bytes_ensure(b, pos + size, true) == true ) {
@@ -909,7 +907,7 @@ static int mod_lua_bytes_get_byte(lua_State * l)
 		return 0;
 	}
 
-	uint32_t pos = i - 1;
+	uint32_t pos = (uint32_t)(i - 1);
 	uint8_t  val = 0;
 
 	// get returns 0 on failure
@@ -917,8 +915,7 @@ static int mod_lua_bytes_get_byte(lua_State * l)
 		return 0;
 	}
 
-	uint8_t res = ntohs(val);
-	lua_pushinteger(l, res);
+	lua_pushinteger(l, val);
 	return 1;
 }
 
@@ -952,7 +949,7 @@ static int mod_lua_bytes_get_int16(lua_State * l)
 		return 0;
 	}
 
-	uint32_t pos = i - 1;
+	uint32_t pos = (uint32_t)(i - 1);
 	int16_t  val = 0;
 
 	// get returns 0 on failure
@@ -960,7 +957,7 @@ static int mod_lua_bytes_get_int16(lua_State * l)
 		return 0;
 	}
 
-	int16_t res = ntohs(val);
+	int16_t res = cf_swap_from_be16(val);
 	lua_pushinteger(l, res);
 	return 1;
 }
@@ -995,7 +992,7 @@ static int mod_lua_bytes_get_int32(lua_State * l)
 		return 0;
 	}
 
-	uint32_t pos = i - 1;
+	uint32_t pos = (uint32_t)(i - 1);
 	int32_t  val = 0;
 
 	// get returns 0 on failure
@@ -1003,7 +1000,7 @@ static int mod_lua_bytes_get_int32(lua_State * l)
 		return 0;
 	}
 
-	int32_t res = ntohl(val);
+	int32_t res = cf_swap_from_be32(val);
 	lua_pushinteger(l, res);
 	return 1;
 }
@@ -1038,7 +1035,7 @@ static int mod_lua_bytes_get_int64(lua_State * l)
 		return 0;
 	}
 
-	uint32_t pos = i - 1;
+	uint32_t pos = (uint32_t)(i - 1);
 	int64_t  val = 0;
 
 	// get returns 0 on failure
@@ -1046,7 +1043,7 @@ static int mod_lua_bytes_get_int64(lua_State * l)
 		return 0;
 	}
 
-	int64_t res = be64toh(val);
+	int64_t res = cf_swap_from_be64(val);
 	lua_pushinteger(l, res);
 	return 1;
 }
@@ -1064,6 +1061,7 @@ static int mod_lua_bytes_get_int64(lua_State * l)
  *	
  *	@return On success, the value. Otherwise nil on failure.
  */
+/*
 static int mod_lua_bytes_get_string(lua_State * l)
 {
 	// we expect atleast 3 args
@@ -1085,7 +1083,7 @@ static int mod_lua_bytes_get_string(lua_State * l)
 		return 0;
 	}
 
-	uint32_t pos = i - 1;
+	uint32_t pos = (uint32_t)(i - 1);
 	uint32_t len = (uint32_t) n;
 	char *   val = (char *) calloc(len + 1, sizeof(char));
 
@@ -1100,6 +1098,7 @@ static int mod_lua_bytes_get_string(lua_State * l)
 	lua_pushlstring(l, val, len);
 	return 1;
 }
+*/
 
 /**
  *	Get an bytes value from the specified index.
@@ -1135,7 +1134,7 @@ static int mod_lua_bytes_get_bytes(lua_State * l)
 		return 0;
 	}
 
-	uint32_t pos = i - 1;
+	uint32_t pos = (uint32_t)(i - 1);
 	uint32_t len = (uint32_t) n;
 	uint8_t * raw = (uint8_t *) calloc(len, sizeof(uint8_t));
 
@@ -1213,10 +1212,12 @@ static const luaL_reg bytes_object_metatable[] = {
  * CLASS TABLE
  *****************************************************************************/
 
+/*
 static const luaL_reg bytes_class_table[] = {
 	{"putX",            mod_lua_bytes_tostring},
 	{0, 0}
 };
+*/
 
 static const luaL_reg bytes_class_metatable[] = {
 	{"__index",         mod_lua_bytes_get_byte},

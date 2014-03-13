@@ -4,20 +4,34 @@ include project/settings.mk
 ###############################################################################
 
 # Modules
-COMMON 	:= 
-MSGPACK := 
-MODULES := COMMON MSGPACK
+COMMON 	:= $(COMMON)
+MODULES := COMMON
 
-# Overrride optimizations via: make O=n
+# Override optimizations via: make O=n
 O = 3
 
 # Make-local Compiler Flags
-CC_FLAGS = -g -std=gnu99 -Wall -Winline -fPIC 
-CC_FLAGS += -fno-common -fno-strict-aliasing -finline-functions 
-CC_FLAGS += -march=nocona -DMARCH_$(ARCH) -DMEM_COUNT
+CC_FLAGS = -std=gnu99 -g -Wall -fPIC
+CC_FLAGS += -fno-common -fno-strict-aliasing -finline-functions
+CC_FLAGS += -march=nocona -DMARCH_$(ARCH)
+CC_FLAGS += -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_GNU_SOURCE $(EXT_CFLAGS)
 
-# Make-local Linker Flags
-LD_FLAGS = -Wall -Winline -rdynamic
+ifeq ($(OS),Darwin)
+CC_FLAGS += -D_DARWIN_UNLIMITED_SELECT
+else
+CC_FLAGS += -rdynamic
+endif
+
+ifneq ($(CF), )
+CC_FLAGS += -I$(CF)/include
+endif
+
+# Linker flags
+LD_FLAGS = $(LDFLAGS) -lm -fPIC 
+
+ifeq ($(OS),Darwin)
+LD_FLAGS += -undefined dynamic_lookup
+endif
 
 # DEBUG Settings
 ifdef DEBUG
@@ -86,7 +100,7 @@ libmod_lua.so: $(TARGET_LIB)/libmod_lua.so
 $(TARGET_OBJ)/%.o: COMMON-prepare $(SOURCE_MAIN)/%.c | modules-prepare
 	$(object)
 
-$(TARGET_LIB)/libmod_lua.a $(TARGET_LIB)/libmod_lua.so: $(MOD_LUA:%=$(TARGET_OBJ)/%) | $(COMMON)/$(TARGET_INCL)/aerospike/*.h
+$(TARGET_LIB)/libmod_lua.a $(TARGET_LIB)/libmod_lua.so: $(MOD_LUA:%=$(TARGET_OBJ)/%) | $(COMMON)/$(TARGET_INCL)/aerospike
 
 $(TARGET_INCL)/aerospike: | $(TARGET_INCL)
 	mkdir $@

@@ -47,7 +47,7 @@ SOURCE_TEST = $(SOURCE_PATH)/test
 VPATH = $(SOURCE_MAIN) $(SOURCE_INCL)
 
 LIB_PATH = 
-INC_PATH = $(SOURCE_INCL)
+INC_PATH = $(SOURCE_INCL) /usr/local/include
 
 ###############################################################################
 ##  TARGET PATHS                                                             ##

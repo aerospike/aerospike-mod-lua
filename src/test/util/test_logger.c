@@ -40,23 +40,28 @@ static const char * log_level_string[5] = {
  * STATIC FUNCTIONS
  *****************************************************************************/
 
-as_logger * test_logger_new() {
+as_logger * test_logger_new()
+{
     return as_logger_new(&test_logger, &test_logger_hooks);
 }
 
-as_logger * test_logger_init(as_logger * l) {
+as_logger * test_logger_init(as_logger * l)
+{
     return as_logger_init(l, &test_logger, &test_logger_hooks);
 }
 
-static int test_logger_is_enabled(const as_logger * logger, const as_logger_level level) {
+static int test_logger_is_enabled(const as_logger * logger, const as_logger_level level)
+{
     return test_logger.level <= level;
 }
 
-static as_logger_level test_logger_get_level(const as_logger * logger) {
+static as_logger_level test_logger_get_level(const as_logger * logger)
+{
     return test_logger.level;
 }
 
-static int test_logger_log(const as_logger * logger, const as_logger_level level, const char * file, const int line, const char * format, va_list args) {
+static int test_logger_log(const as_logger * logger, const as_logger_level level, const char * file, const int line, const char * format, va_list args)
+{
     if ( test_logger.level > level ) return 0;
     
     char message[1024] = { '\0' };
