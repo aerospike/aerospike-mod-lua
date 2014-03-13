@@ -1,5 +1,4 @@
 -- Large Stack Object (LSTACK) Operations.
--- Track the data and iteration of the last update.
 
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- <<  LSTACK Main Functions >>
@@ -17,13 +16,13 @@
 -- (*) Map    = get_config( topRec, ldtBinName )
 -- (*) Status = set_capacity( topRec, ldtBinName, new_capacity)
 -- (*) Status = get_capacity( topRec, ldtBinName )
---
+-- ======================================================================
 -- Reference the LSTACK LDT Library Module
 local lstack = require('ldt/lib_lstack');
 
 -- ======================================================================
--- || create        ||
--- || lstack_create ||
+-- || create        || (deprecated)
+-- || lstack_create || (deprecated)
 -- ======================================================================
 -- Create/Initialize a Stack structure in a bin, using a single LSO
 -- bin, using User's name, but Aerospike TYPE (AS_LSO)
@@ -264,6 +263,11 @@ function set_storage_limit( topRec, ldtBinName, newLimit )
 end
 
 -- ========================================================================
+-- MEASUREMENT FUNCTIONS:
+-- See how fast we can call a MINIMAL function.
+-- (*) one(): just call and return:
+-- (*) same(): Return what's passed in to verify the call.
+-- ========================================================================
 -- one()          -- Just return 1.  This is used for perf measurement.
 -- same()         -- Return Val parm.  Used for perf measurement.
 -- ========================================================================
@@ -314,9 +318,6 @@ function lstack_debug( topRec, setting )
 end
 
 -- ========================================================================
--- ========================================================================
-
--- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> --
 --   _      _____ _____ ___  _____  _   __
 --  | |    /  ___|_   _/ _ \/  __ \| | / /
 --  | |    \ `--.  | |/ /_\ \ /  \/| |/ / 
@@ -324,5 +325,5 @@ end
 --  | |____/\__/ / | || | | | \__/\| |\  \
 --  \_____/\____/  \_/\_| |_/\____/\_| \_/   (EXTERNAL)
 --                                        
+-- ========================================================================
 -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> --
---

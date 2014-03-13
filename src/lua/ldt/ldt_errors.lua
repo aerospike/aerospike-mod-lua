@@ -3,7 +3,7 @@
 -- ===================
 
 -- Note date and iteration of the last update:
-local MOD="2013_09_17.b";
+local MOD="2014_03_09.a";
 
 -- These errors align with the errors found in:
 -- client/aerospike/src/include/aerospike/as_status.h
@@ -16,6 +16,7 @@ local exports = {
   ERR_INSERT               ="1403:LDT-Insert Error",
   ERR_SEARCH               ="1404:LDT-Search Error",
   ERR_DELETE               ="1405:LDT-Delete Error",
+  ERR_VERSION              ="1406:LDT-Version Mismatch Error",
 
   ERR_CAPACITY_EXCEEDED    ="1408:LDT-Capacity Exceeded",
   ERR_INPUT_PARM           ="1409:LDT-Input Parameter Error",
@@ -52,6 +53,7 @@ local exports = {
 
 } -- end exports section
 
+-- Make this table visible to those importing the file.
 return exports;
 
 -- ldt_errors.lua

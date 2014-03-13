@@ -18,7 +18,7 @@
 --OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS 
 --IN THE SOFTWARE.
 
-module('CRC32', package.seeall)
+-- module('CRC32', package.seeall)
 
 local max = 2^32 -1
 
@@ -89,10 +89,13 @@ local CRC32 = {
     3094707162,3040238851,2985771188,
 }
 
+-- ============================================================
 local function xor(a, b)
-    local calc = 0    
+  -- info("[ENTER]<xor()> a(%s) b(%s)", tostring(a), tostring(b));
 
-    for i = 32, 0, -1 do
+  local calc = 0    
+
+  for i = 32, 0, -1 do
 	local val = 2 ^ i
 	local aa = false
 	local bb = false
@@ -118,24 +121,32 @@ local function xor(a, b)
 	end
 
 	if not (aa and bb) and (aa or bb) then
-	    calc = calc + val
+      calc = calc + val
 	end
-    end
+  end -- end for each bit value in the integer.
 
-    return calc
+  return calc
 end
 
+-- ============================================================
 local function lshift(num, left)
     local res = num * (2 ^ left)
     return res % (2 ^ 32)
 end
 
+-- ============================================================
 local function rshift(num, right)
     local res = num / (2 ^ right)
     return math.floor(res)
 end
 
-function Hash(str)
+-- =============================================================
+-- Export a map containing this one function.
+-- =============================================================
+local CRC32_Package = {};
+-- =============================================================
+
+function CRC32_Package.Hash(str)
     local count = string.len(tostring(str))
     local crc = max
     
@@ -152,6 +163,7 @@ function Hash(str)
     return crc
 end
 
+return CRC32_Package;
 
 --
 -- CRC32.lua

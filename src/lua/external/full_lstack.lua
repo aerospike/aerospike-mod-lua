@@ -1,6 +1,6 @@
--- Large Stack Object (LSTACK) Operations Library
+-- Large Stack Object (LSO or LSTACK) Operations
 -- Track the data and iteration of the last update.
-local MOD="lib_lstack_2014_03_10.c";
+local MOD="lstack_2014_01_15.e";
 
 -- This variable holds the version of the code (Major.Minor).
 -- We'll check this for Major design changes -- and try to maintain some
@@ -8,24 +8,15 @@ local MOD="lib_lstack_2014_03_10.c";
 local G_LDT_VERSION = 1.1;
 
 -- ======================================================================
--- || GLOBAL PRINT and GLOBAL DEBUG ||
+-- || GLOBAL PRINT ||
 -- ======================================================================
--- Use these flags to enable/disable global printing (the "detail" level
+-- Use this flag to enable/disable global printing (the "detail" level
 -- in the server).
--- Usage: GP=F and trace()
--- When "F" is true, the trace() call is executed.  When it is false,
--- the trace() call is NOT executed (regardless of the value of GP)
--- (*) "F" is used for general debug prints
--- (*) "E" is used for ENTER/EXIT prints
--- (*) "B" is used for BANNER prints
--- (*) DEBUG is used for larger structure content dumps.
 -- ======================================================================
-local GP;      -- Global Print Instrument
-local F=true; -- Set F (flag) to true to turn ON global print
-local E=true; -- Set E (ENTER/EXIT) to true to turn ON Enter/Exit print
-local B=true; -- Set B (Banners) to true to turn ON Banner Print
-local GD;     -- Global Debug instrument.
-local DEBUG=true; -- turn on for more elaborate state dumps.
+local GP=true; -- Leave this ALWAYS true (but value seems not to matter)
+local F=false; -- Set F (flag) to true to turn ON global print
+local E=false; -- Set E (ENTER/EXIT) to true to turn ON Enter/Exit print
+local B=false; -- Set B (Banners) to true to turn ON Banner Print
 
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- <<  LSTACK Main Functions >>
@@ -45,9 +36,297 @@ local DEBUG=true; -- turn on for more elaborate state dumps.
 -- (*) Status = get_capacity( topRec, ldtBinName )
 
 -- ======================================================================
--- >> Please refer to ldt/doc_lstack.md for architecture and design notes.
+-- LSTACK TODO LIST:
+-- Future: Short, Medium and Long Term
+-- Priority: High, Medium and Low
+-- Difficulty: High, Medium and Low
 -- ======================================================================
-
+-- ACTIVITIES LIST:
+-- (*) DONE: (Started: July 23, 2012)
+--   + Release Cold Storage:  Release an entire Cold Dir Page (with the list
+--     of subrec digests) on addition of a new Cold-Head, when the Cold Dir
+--     Count > Max.
+--   + Also, change the Cold Dir Pages to be doubly linked rather than singly
+--     linked.
+--   + Add a Cold Dir TAIL pointer in addition to the HEAD pointer -- so that
+--     releasing the oldest Dir Rec Page (and its children) is quicker/easier.
+--
+-- (*) DONE: (Started: July 23, 2012)
+--   + Implement the subrecContext (subrec management) here in LSTACK that
+--     we have in LLIST.  Name them all ldt_subrecXXXX() because they
+--     will become ldt common methods.
+--
+-- (*) HOLD: (Started: July 23, 2012)
+--   + Switch to ldt_common.lua for the newly common functions.
+--   + Put on hold until next release work.
+--
+-- (*) IN-DONE: (Started: July 23, 2012)
+--   + Added new method: lstack_set_storage_limit(), which limits peek sizes
+--     and also sets/resets the storage parameter values so that item counts
+--     over the size limits (Hot, Warm or Cold list) will discard old data.
+--
+-- (*) IN-PROGRESS: (Started: July 25, 2012)
+--   + Add new "crec_release" method that takes a LIST of digests and
+--     releases the storage.  Raj will fill in the C code on the server
+--     side does the delete.
+--
+-- TODO:
+-- (+) HOLD:  Trim is less important than "set_storage_limit()", and is
+--     more expensive.
+--     Implement Trim (release LDR pages from Warm/Cold List)
+--     stack_trim(): Must release storage before record delete.
+--     Notice that this is lower priority now that we're going to look to
+--     the Cold List Storage Release to deal with storage reclaimation
+--     from lstack eviction.
+--     F:S, P:M, D:M
+-- (+) Add a LIMIT value to the control map -- and when we are a page over
+--     then release the page (ideally -- do not slow down transaction to
+--     do this.  Can we add a task to a cleanup thread for this?)
+--     Answers:
+--     (1) We set a new MAP value (M_StoreLimit) so that we never read
+--     past the end.
+--     (2) We check the storage state on ColdList Insert to see if we're
+--     past the end -- and if so -- we release any LDRs (and thus Cold Dirs)
+--     that are holding "Frozen data" that is beyond the end. Note that
+--     we could eventually save "Frozen Data" in a file for permanent
+--     archive, if we so desired.  That could also be done for a background
+--     task.
+--     (3) Define the SearchPath object for LSTACK to find a position,
+--     then let other functions do things relative to that position, such
+--     as release storage.
+-- (+) NOTICE: Position Calc is LIST MODE ONLY::
+--     : Must be extended for BINARY MODE.
+--   These must be kept current:  M_WarmTopEntryCount, M_WarmTopByteCount      
+--   They will replace WarmTopFul with an actual count.
+--
+-- ======================================================================
+-- DONE:
+-- (*) Implement LDT Remove -- remove the ESR and the Bin Contents, and
+--     then let the NSUP/Defrag mechanism clean up the subrecs.
+-- (*) ldtInitPropMap() method
+-- (*) Init the record Prop Bin on first LDT Create
+-- (*) Add Bin Flags, and Record Types (record.set_flags(), set_type())
+-- (*) Add ESR:  Create the ESR on first SubRec Create
+-- (*) Add a Record-level Hidden Bin (holds Record Version Info, LDT Count)
+-- (*) Switch to ldtCtrl (PropMap, ldtMap):: Common Property Map
+-- (*) LStack Peek with filters.
+-- (*) LStack Peek with Transform/Untransform
+-- (*) LStack Packages to define sets of parameters
+-- (*) Main LStack Functions (push, peek:: Simple, Complex)
+--
+-- ======================================================================
+-- Additional lstack documentation may be found in: lstack_design.lua.
+-- ======================================================================
+-- LSTACK Design and Type Comments (aka Large Stack Object, or LSO).
+-- The lstack type is a member of the new Aerospike Large Type family,
+-- Large Data Types (LDTs).  LDTs exist only on the server, and thus must
+-- undergo some form of translation when passing between client and server.
+--
+-- LSTACK is a server side type that can be manipulated ONLY by this file,
+-- lstack.lua.  We prevent any other direct manipulation -- any other program
+-- or process must use the lstack api provided by this program in order to
+--
+-- An LSTACK value -- stored in a record bin -- is represented by a Lua MAP
+-- object that comprises control information, a directory of records
+-- (for "warm data") and a "Cold List Head" ptr to a linked list of directory
+-- structures that each point to the records that hold the actual data values.
+--
+-- LSTACK Functions Supported (Note switch to lower case)
+-- (*) create: Create the LSTACK structure in the chosen topRec bin
+-- (*) push: Push a user value (AS_VAL) onto the stack
+-- (*) create_and_push: Push a user value (AS_VAL) onto the stack
+-- (*) peek: Read N values from the stack, in LIFO order
+-- (*) peek_then_filter: Read N values from the stack, in LIFO order
+-- (*) trim: Release all but the top N values.
+-- (*) remove: Release all storage related to this lstack object
+-- (*) config: retrieve all current config settings in map format
+-- (*) size: Report the NUMBER OF ITEMS in the stack.
+-- (*) subrec_list: Return the list of subrec digests
+--
+-- |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- Visual Depiction
+-- |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- In a user record, the bin holding the Large Stack Object (LSTACK) is
+-- referred to as an "LSTACK" bin. The overhead of the LSTACK value is 
+-- (*) LSTACK Control Info (~70 bytes)
+-- (*) LSTACK Hot Cache: List of data entries (on the order of 100)
+-- (*) LSTACK Warm Directory: List of Aerospike Record digests:
+--     100 digests(250 bytes)
+-- (*) LSTACK Cold Directory Head (digest of Head plus count) (30 bytes)
+-- (*) Total LSTACK Record overhead is on the order of 350 bytes
+-- NOTES:
+-- (*) In the Hot Cache, the data items are stored directly in the
+--     cache list (regardless of whether they are bytes or other as_val types)
+-- (*) In the Warm Dir List, the list contains aerospike digests of the
+--     LSTACK Data Records (LDRs) that hold the Warm Data.  The LDRs are
+--     opened (using the digest), then read/written, then closed/updated.
+-- (*) The Cold Dir Head holds the Aerospike Record digest of a record that
+--     holds a linked list of cold directories.  Each cold directory holds
+--     a list of digests that are the cold LSTACK Data Records.
+-- (*) The Warm and Cold LSTACK Data Records use the same format -- so they
+--     simply transfer from the warm list to the cold list by moving the
+--     corresponding digest from the warm list to the cold list.
+-- (*) Record types used in this design:
+-- (1) There is the main record that contains the LSTACK bin (LSTACK Head)
+-- (2) There are LSTACK Data "Chunk" Records (both Warm and Cold)
+--     ==> Warm and Cold LSTACK Data Records have the same format:
+--         They both hold User Stack Data.
+-- (3) There are Chunk Directory Records (used in the cold list)
+--
+-- (*) How it all connects together....
+-- (+) The main record points to:
+--     - Warm Data Chunk Records (these records hold stack data)
+--     - Cold Data Directory Records (these records hold ptrs to Cold Chunks)
+--
+-- (*) We may have to add some auxilliary information that will help
+--     pick up the pieces in the event of a network/replica problem, where
+--     some things have fallen on the floor.  There might be some "shadow
+--     values" in there that show old/new values -- like when we install
+--     a new cold dir head, and other things.  TBD
+--
+-- +-----+-----+-----+-----+----------------------------------------+
+-- |User |User |o o o|LSO  |                                        |
+-- |Bin 1|Bin 2|o o o|Bin 1|                                        |
+-- +-----+-----+-----+-----+----------------------------------------+
+--                  /       \                                       
+--   ================================================================
+--     LSTACK Map                                              
+--     +-------------------+                                 
+--     | LSO Control Info  | About 20 different values kept in Ctrl Info
+--     |...................|
+--     |...................|< Oldest ................... Newest>            
+--     +-------------------+========+========+=======+=========+
+--     |<Hot Entry Cache>  | Entry 1| Entry 2| o o o | Entry n |
+--     +-------------------+========+========+=======+=========+
+--     |...................|HotCache entries are stored directly in the record
+--     |...................| 
+--     |...................|WarmCache Digests are stored directly in the record
+--     |...................|< Oldest ................... Newest>            
+--     +-------------------+========+========+=======+=========+
+--     |<Warm Digest List> |Digest 1|Digest 2| o o o | Digest n|
+--     +-------------------+===v====+===v====+=======+====v====+
+--  +-<@>Cold Dir List Head|   |        |                 |    
+--  |  +-------------------+   |        |                 |    
+--  |                    +-----+    +---+      +----------+   
+--  |                    |          |          |     Warm Data(WD)
+--  |                    |          |          |      WD Rec N
+--  |                    |          |          +---=>+--------+
+--  |                    |          |     WD Rec 2   |Entry 1 |
+--  |                    |          +---=>+--------+ |Entry 2 |
+--  |                    |      WD Rec 1  |Entry 1 | |   o    |
+--  |                    +---=>+--------+ |Entry 2 | |   o    |
+--  |                          |Entry 1 | |   o    | |   o    |
+--  |                          |Entry 2 | |   o    | |Entry n |
+--  |                          |   o    | |   o    | +--------+
+--  |                          |   o    | |Entry n |
+--  |                          |   o    | +--------+
+--  |                          |Entry n | "LDR" (LSTACK Data Record) Pages
+--  |                          +--------+ [Warm Data (LDR) Chunks]
+--  |                                            
+--  |                                            
+--  |                           <Newest Dir............Oldest Dir>
+--  +-------------------------->+-----+->+-----+->+-----+-->+-----+-+
+--   (DirRec Pages DoubleLink)<-+Rec  |<-+Rec  |<-+Rec  | <-+Rec  | V
+--    The cold dir is a linked  |Chunk|  |Chunk|  |Chunk| o |Chunk|
+--    list of dir pages that    |Dir  |  |Dir  |  |Rec  | o |Dir  |
+--    point to LSO Data Records +-----+  +-----+  +-----+   +-----+
+--    that hold the actual cold [][]:[]  [][]:[]  [][]:[]   [][]:[]
+--    data (cold chunks).       +-----+  +-----+  +-----+   +-----+
+--                               | |  |   | |  |   | |  |    | |  |
+--    LDRS (per dir) have age:   | |  V   | |  V   | |  V    | |  V
+--    <Oldest LDR .. Newest LDR> | |::+--+| |::+--+| |::+--+ | |::+--+
+--    As "Warm Data" ages out    | |::|Cn|| |::|Cn|| |::|Cn| | |::|Cn|
+--    of the Warm Dir List, the  | V::+--+| V::+--+| V::+--+ | V::+--+
+--    LDRs transfer out of the   | +--+   | +--+   | +--+    | +--+
+--    Warm Directory and into    | |C2|   | |C2|   | |C2|    | |C2|
+--    the cold directory.        V +--+   V +--+   V +--+    V +--+
+--                               +--+     +--+     +--+      +--+
+--    The Warm and Cold LDRs     |C1|     |C1|     |C1|      |C1|
+--    have identical structure.  +--+     +--+     +--+      +--+
+--                                A        A        A         A    
+--                                |        |        |         |
+--     [Cold Data (LDR) Chunks]---+--------+--------+---------+
+--
+--
+-- The "Hot Entry Cache" is the true "Top of Stack", holding roughly the
+-- top 50 to 100 values.  The next level of storage is found in the first
+-- Warm dir list (the last Chunk in the list).  Since we process stack
+-- operations in LIFO order, but manage them physically as a list
+-- (append to the end), we basically read the pieces in top down order,
+-- but we read the CONTENTS of those pieces backwards.  It is too expensive
+-- to "prepend" to a list -- and we are smart enough to figure out how to
+-- read an individual page list bottom up (in reverse append order).
+--
+-- We don't "age" the individual entries out one at a time as the Hot Cache
+-- overflows -- we instead take a group at a time (specified by the
+-- HotCacheTransferAmount), which opens up a block of empty spots. Notice that
+-- the transfer amount is a tuneable parameter -- for heavy reads, we would
+-- want MORE data in the cache, and for heavy writes we would want less.
+--
+-- If we generally pick half (e.g. 100 entries total, and then transfer 50 at
+-- a time when the cache fills up), then half the time the inserts will affect
+-- ONLY the Top (LSTACK) record -- so we'll have only one Read, One Write 
+-- operation for a stack push.  1 out of 50 will have the double read,
+-- double write, and 1 out of 10,000 (or so) will have additional
+-- IO's depending on the state of the Warm/Cold lists.
+-- Notice ALSO that when we use a coupled Namespace for LDTs (main memory
+-- for the top records and SSD for the subrecords), then 49 out of 50
+-- writes and small reads will have ZERO I/O cost -- since it will be
+-- contained in the main memory record.
+--
+-- NOTES:
+-- Design, V3.x.  For really cold data -- things out beyond 50,000
+-- elements, it might make sense to just push those out to a real disk
+-- based file (to which we could just append -- and read in reverse order).
+-- If we ever need to read the whole stack, we can afford
+-- the time and effort to read the file (it is an unlikely event).  The
+-- issue here is that we probably have to teach Aerospike how to transfer
+-- (and replicate) files as well as records.
+--
+-- Design, V3.x. We will need to limit the amount of data that is held
+-- in a stack. We've added "StoreLimit" to the ldtMap, as a way to limit
+-- the number of items.  Note that this can be used to limit both the
+-- storage and the read amounts.
+-- One way this could be used is to REUSE a cold LDR page when an LDR
+-- page is about to fall off the end of the cold list.  However, that
+-- must be considered carefully -- as the time and I/O spent messing
+-- with the cold directory and the cold LDR could be a performance hit.
+-- We'll have to consider how we might age these pages out gracefully
+-- if we can't cleverly reuse them (patent opportunity here).
+-- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- REMEMBER THAT ALL INSERTS ARE INTO HOT LIST -- and transforms are done
+-- there.  All UNTRANSFORMS are done reading from the List (Hot List or
+-- warm/cold Data Page List).  Notice that even though the values may be
+-- transformed (compacted into) bytes, they are still just inserted into
+-- the hot list, we don't try to pack them into an array;
+-- that is done only in the warm/cold pages (where the benefit is greater).
+-- 
+-- Read Filters are applied AFTER the UnTransform (bytes and list).
+--
+-- NOTE: New changes with V4.3 to Push and Peek.
+-- (*) Stack Push has an IMPLICIT transform function -- which is defined
+--     in the create spec.  So, the two flavors of Stack Push are now
+--     + lstack_push(): with implicit transform when defined
+--     + lstack_create_and_push(): with the ability to create as
+--       needed -- and with the supplied create_spec parameter.
+-- (*) Stack Peek has an IMPLICIT UnTransform function -- which is defined
+--     in the create spec.  So, the two flavors of Stack Peek are now
+--     + lstack_peek(): with implicit untransform, when defined in create.
+--     + lstack_peek_then_filter(): with implicit untransform and a filter
+--       to act as an additional query mechanism.
+--
+-- On Create, a Large Stack Object can be configured with a Transform function,
+-- to be used on storage (push) and an UnTransform function, to be used on
+-- retrieval (peek).
+-- (*) stack_push(): Push a user value (AS_VAL) onto the stack, 
+--     calling the Transform on the value FIRST to transform it before
+--     storing it on the stack.
+-- (*) stack_peek_then_filter: Retrieve N values from the stack, and for each
+--     value, apply the transformation/filter UDF to the value before
+--     adding it to the result list.  If the value doesn't pass the
+--     filter, the filter returns nil, and thus it would not be added
+--     to the result list.
 -- ======================================================================
 -- Aerospike Server Functions:
 -- ======================================================================
@@ -67,8 +346,16 @@ local DEBUG=true; -- turn on for more elaborate state dumps.
 -- Record Functions:
 -- digest = record.digest( childRec )
 -- status = record.set_type( topRec, recType )
--- status = record.set_flags( topRec, ldtBinName, binFlags )
+-- status = record.set_flags( topRec, binName, binFlags )
 -- ======================================================================
+-- For additional Documentation, please see lstack_design.lua, which should
+-- be co-located in the main Development tree with lstack.lua
+-- ======================================================================
+-- |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- || FUNCTION TABLE ||
+-- |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- Table of Functions: Used for Transformation and Filter Functions.
+-- This is held in UdfFunctionTable.lua.  Look there for details.
 
 -- ++==================++
 -- || External Modules ||
@@ -87,15 +374,6 @@ local lstackPackage = require('ldt/settings_lstack');
 -- || GLOBAL CONSTANTS || -- Local, but global to this module
 -- ++==================++
 local MAGIC="MAGIC";     -- the magic value for Testing LSTACK integrity
-
--- AS_BOOLEAN TYPE:
--- There are apparently either storage or conversion problems with booleans
--- and Lua and Aerospike, so rather than STORE a Lua Boolean value in the
--- LDT Control map, we're instead going to store an AS_BOOLEAN value, which
--- is a character (defined here).  We're using Characters rather than
--- numbers (0, 1) because a character takes ONE byte and a number takes EIGHT
-local AS_TRUE='T';    
-local AS_FALSE='F';
 
 -- Default storage limit for a stack -- can be overridden by setting
 -- one of the packages.
@@ -127,6 +405,11 @@ local BF_LDT_CONTROL = 4; -- Main LDT Control Bin (one per record)
 
 -- LDT TYPES (only lstack is defined here)
 local LDT_TYPE_LSTACK = "LSTACK";
+
+-- Errors used in LDT Land
+local ERR_OK            =  0; -- HEY HEY!!  Success
+local ERR_GENERAL       = -1; -- General Error
+local ERR_NOT_FOUND     = -2; -- Search Error
 
 -- We maintain a pool, or "context", of subrecords that are open.  That allows
 -- us to look up subrecs and get the open reference, rather than bothering
@@ -204,13 +487,13 @@ local COLD_DIR_CTRL_BIN = "ColdDirCtrlBin";
 --     space when the entire map is msg-packed into a record bin).
 --   + All Record Field access is done using brackets, with either a
 --     variable or a constant (in single quotes).
---     (e.g. topRec[ldtBinName] or ldrRec[LDR_CTRL_BIN]);
+--     (e.g. topRec[binName] or ldrRec[LDR_CTRL_BIN]);
 --
 -- <+> Recent Change in LdtMap Use: (6/21/2013 tjl)
 --   + In order to maintain a common access mechanism to all LDTs, AND to
 --     limit the amount of data that must be "un-msg-packed" when accessed,
 --     we will use a common property map and a type-specific property map.
---     That means that the "ldtMap" that was the primary value in the LdtBin
+--     That means that the "ldtMap" that was the primary value in the LsoBin
 --     is now a list, where ldtCtrl[1] will always be the propMap and
 --     ldtCtrl[2] will always be the ldtMap.  In the server code, using "C",
 --     we will sometimes read the ldtCtrl[1] (the property map) in order to
@@ -263,18 +546,18 @@ local PM_Magic                 = 'Z'; -- (All): Special Sauce
 local PM_CreateTime            = 'C'; -- (All): Creation time of this rec
 local PM_EsrDigest             = 'E'; -- (All): Digest of ESR
 local PM_RecType               = 'R'; -- (All): Type of Rec:Top,Ldr,Esr,CDir
--- local PM_LogInfo               = 'L'; -- (All): Log Info (currently unused)
+local PM_LogInfo               = 'L'; -- (All): Log Info (currently unused)
 local PM_ParentDigest          = 'P'; -- (Subrec): Digest of TopRec
 local PM_SelfDigest            = 'D'; -- (Subrec): Digest of THIS Record
 -- Note: The TopRec keeps this in the single LDT Bin (RPM).
 -- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 -- Lso Data Record (LDR) Control Map Fields (Recall that each Map ALSO has
 -- the PM (general property map) fields.
--- local LDR_StoreMode            = 'M'; !! Use Top LDT Entry
--- local LDR_ListEntryMax         = 'L'; !! Use top LDT entry
--- local LDR_ByteEntrySize        = 'e'; !! Use Top LDT Entry
+-- local LDR_StoreMode            = 'M'; !! Use Top LSO Entry
+-- local LDR_ListEntryMax         = 'L'; !! Use top LSO entry
+-- local LDR_ByteEntrySize        = 'e'; !! Use Top LSO Entry
 local LDR_ByteEntryCount       = 'C'; -- Current Count of bytes used
--- local LDR_ByteCountMax         = 'X'; !! Use Top LDT Entry
+-- local LDR_ByteCountMax         = 'X'; !! Use Top LSO Entry
 -- local LDR_LogInfo              = 'I'; !! Not currently used
 -- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 -- Cold Directory Control Map::In addition to the General Property Map
@@ -303,14 +586,14 @@ local M_WarmListTransfer       = 'x'; -- Amount to Transfer from the Warm List
 -- Note that WarmTopXXXXCount will eventually replace the need to show if
 -- the Warm Top is FULL -- because we'll always know the count (and "full"
 -- will be self-evident).
-local M_WarmTopFull            = 'F'; -- AS_Boolean: Shows if Warm Top is full
+local M_WarmTopFull            = 'F'; -- Boolean: Shows if Warm Top is full
 local M_WarmTopEntryCount      = 'A'; -- # of Objects in the Warm Top (LDR)
 local M_WarmTopByteCount       = 'a'; -- # Bytes in the Warm Top (LDR)
 
 -- Note that ColdTopListCount will eventually replace the need to know if
 -- the Cold Top is FULL -- because we'll always know the count of the Cold
 -- Directory Top -- and so "full" will be self-evident.
-local M_ColdTopFull            = 'f'; -- AS_Boolean: Shows if Cold Top is full
+local M_ColdTopFull            = 'f'; -- Boolean: Shows if Cold Top is full
 local M_ColdTopListCount       = 'T'; -- Shows List Count for Cold Top
 
 local M_ColdDirListHead        = 'Z'; -- Digest of the Head of the Cold List
@@ -632,7 +915,7 @@ end -- setWriteFunctions()
 
 -- ======================================================================
 -- ======================================================================
--- local function ldtSummary( ldtCtrl ) (DEBUG/Trace Function)
+-- local function lsoSummary( ldtCtrl ) (DEBUG/Trace Function)
 -- ======================================================================
 -- For easier debugging and tracing, we will summarize the ldtMap
 -- contents -- without printing out the entire thing -- and return it
@@ -640,7 +923,7 @@ end -- setWriteFunctions()
 -- Note that for THIS purpose -- the summary map has the full long field
 -- names in it -- so that we can more easily read the values.
 -- ======================================================================
-local function ldtSummary( ldtCtrl )
+local function lsoSummary( ldtCtrl )
   if ( ldtCtrl == nil ) then
     warn("[ERROR]: <%s:%s>: EMPTY LDT BIN VALUE", MOD, meth);
     return "EMPTY LDT BIN VALUE";
@@ -665,14 +948,14 @@ local function ldtSummary( ldtCtrl )
   resultMap.PropEsrDigest        = propMap[PM_EsrDigest];
   resultMap.PropCreateTime       = propMap[PM_CreateTime];
   
-  -- General LDT Parms:
+  -- General LSO Parms:
   resultMap.StoreMode            = ldtMap[M_StoreMode];
   resultMap.StoreLimit           = ldtMap[M_StoreLimit];
   resultMap.UserModule           = ldtMap[M_UserModule];
   resultMap.Transform            = ldtMap[M_Transform];
   resultMap.UnTransform          = ldtMap[M_UnTransform];
 
-  -- LDT Data Record Chunk Settings:
+  -- LSO Data Record Chunk Settings:
   resultMap.LdrEntryCountMax     = ldtMap[M_LdrEntryCountMax];
   resultMap.LdrByteEntrySize     = ldtMap[M_LdrByteEntrySize];
   resultMap.LdrByteCountMax      = ldtMap[M_LdrByteCountMax];
@@ -682,7 +965,7 @@ local function ldtSummary( ldtCtrl )
   resultMap.HotListTransfer       = ldtMap[M_HotListTransfer];
   resultMap.HotEntryListItemCount = ldtMap[M_HotEntryListItemCount];
 
-  -- Warm Digest List Settings: List of Digests of LDT Data Records
+  -- Warm Digest List Settings: List of Digests of LSO Data Records
   resultMap.WarmListMax           = ldtMap[M_WarmListMax];
   resultMap.WarmListTransfer      = ldtMap[M_WarmListTransfer];
   resultMap.WarmListDigestCount   = ldtMap[M_WarmListDigestCount];
@@ -697,19 +980,19 @@ local function ldtSummary( ldtCtrl )
   resultMap.ColdTopListCount      = ldtMap[M_ColdTopListCount];
 
   return resultMap;
-end -- ldtSummary()
+end -- lsoSummary()
 
 -- ======================================================================
--- Make it easier to use ldtSummary(): Have a String version.
+-- Make it easier to use lsoSummary(): Have a String version.
 -- ======================================================================
-local function ldtSummaryString( ldtCtrl )
-  return tostring( ldtSummary( ldtCtrl ) );
+local function lsoSummaryString( ldtCtrl )
+  return tostring( lsoSummary( ldtCtrl ) );
 end
 -- ======================================================================
 -- Switch to this name:  ldtSummaryString().  It's the new standard
 -- ======================================================================
 local function ldtSummaryString( ldtCtrl )
-  return tostring( ldtSummary( ldtCtrl ) );
+  return tostring( lsoSummary( ldtCtrl ) );
 end
 
 -- =============================
@@ -1034,7 +1317,7 @@ end -- setLdtRecordType()
 -- <><><><> <Initialize Control Maps> <Initialize Control Maps> <><><><>
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- Notes on Configuration:
--- (*) In order to make the LDT code as efficient as possible, we want
+-- (*) In order to make the LSO code as efficient as possible, we want
 --     to pick the best combination of configuration values for the Hot,
 --     Warm and Cold Lists -- so that data transfers from one list to
 --     the next with minimal storage upset and runtime management.
@@ -1052,13 +1335,13 @@ end -- setLdtRecordType()
 -- ======================================================================
 -- initializeLdtCtrl:
 -- ======================================================================
--- Set up the LDT Map with the standard (default) values.
+-- Set up the LSO Map with the standard (default) values.
 -- These values may later be overridden by the user.
--- The structure held in the Record's "LDT BIN" is this map.  This single
+-- The structure held in the Record's "LSO BIN" is this map.  This single
 -- structure contains ALL of the settings/parameters that drive the LSO
--- behavior.  Thus this function represents the "type" LDT MAP -- all
--- LDT control fields are defined here.
--- The LdtMap is obtained using the user's LDT Bin Name:
+-- behavior.  Thus this function represents the "type" LSO MAP -- all
+-- LSO control fields are defined here.
+-- The LsoMap is obtained using the user's LSO Bin Name:
 -- ldtMap = 
 -- local RT_REG = 0; -- 0x0: Regular Record (Here only for completeneness)
 -- local RT_LDT = 1; -- 0x1: Top Record (contains an LDT)
@@ -1067,7 +1350,7 @@ end -- setLdtRecordType()
 -- ======================================================================
 local function initializeLdtCtrl( topRec, ldtBinName )
   local meth = "initializeLdtCtrl()";
-  GP=E and trace("[ENTER]: <%s:%s>:: LdtBinName(%s)",
+  GP=E and trace("[ENTER]: <%s:%s>:: LsoBinName(%s)",
     MOD, meth, tostring(ldtBinName));
 
   -- Create the two maps and fill them in.  There's the General Property Map
@@ -1082,7 +1365,7 @@ local function initializeLdtCtrl( topRec, ldtBinName )
   propMap[PM_Version]    = G_LDT_VERSION ; -- Current version of the code
   propMap[PM_LdtType]    = LDT_TYPE_LSTACK; -- Validate the ldt type
   propMap[PM_Magic]      = MAGIC; -- Special Validation
-  propMap[PM_BinName]    = ldtBinName; -- Defines the LDT Bin
+  propMap[PM_BinName]    = ldtBinName; -- Defines the LSO Bin
   propMap[PM_RecType]    = RT_LDT; -- Record Type LDT Top Rec
   propMap[PM_EsrDigest]    = 0; -- not set yet.
   propMap[PM_CreateTime] = aerospike:get_current_time();
@@ -1090,11 +1373,11 @@ local function initializeLdtCtrl( topRec, ldtBinName )
   -- propMap[PM_CreateTime] = 0;
   propMap[PM_SelfDigest] = record.digest( topRec );
 
-  -- Specific LDT Parms: Held in LdtMap
+  -- Specific LSO Parms: Held in LsoMap
   ldtMap[M_StoreMode]   = SM_LIST; -- SM_LIST or SM_BINARY:
   ldtMap[M_StoreLimit]  = G_STORE_LIMIT;  -- Store no more than this.
 
-  -- LDT Data Record Chunk Settings: Passed into "Chunk Create"
+  -- LSO Data Record Chunk Settings: Passed into "Chunk Create"
   ldtMap[M_LdrEntryCountMax]= 100;  -- Max # of Data Chunk items (List Mode)
   ldtMap[M_LdrByteEntrySize]=  0;  -- Byte size of a fixed size Byte Entry
   ldtMap[M_LdrByteCountMax] =   0; -- Max # of Data Chunk Bytes (binary mode)
@@ -1102,22 +1385,12 @@ local function initializeLdtCtrl( topRec, ldtBinName )
   -- Hot Entry List Settings: List of User Entries
   ldtMap[M_HotEntryList]         = list(); -- the list of data entries
   ldtMap[M_HotEntryListItemCount]=   0; -- Number of elements in the Top List
-
--- info("[WARNING]: Hot list numbers set LOW (10, 5) for testing!!!");
-
---  ldtMap[M_HotListMax]           = 10; -- Max Number for the List(then xfer)
---  ldtMap[M_HotListTransfer]      =  5; -- How much to Transfer at a time.
   ldtMap[M_HotListMax]           = 100; -- Max Number for the List(then xfer)
   ldtMap[M_HotListTransfer]      =  50; -- How much to Transfer at a time.
 
-if( ldtMap[M_HotListMax] < 100 or ldtMap[M_HotListTransfer] < 50 ) then
-    warn("[ATTENTION]<%s:%s> Hot List Numbers are LOW: ListMax(%d) xfer(%d)",
-      MOD, meth, ldtMap[M_HotListMax], ldtMap[M_HotListTransfer] );
-end
-
-  -- Warm Digest List Settings: List of Digests of LDT Data Records
+  -- Warm Digest List Settings: List of Digests of LSO Data Records
   ldtMap[M_WarmDigestList]       = list(); -- the list of digests for LDRs
-  ldtMap[M_WarmTopFull] = AS_FALSE; --true when top chunk is full(for next write)
+  ldtMap[M_WarmTopFull] = false; --true when top chunk is full(for next write)
   ldtMap[M_WarmListDigestCount]  = 0; -- Number of Warm Data Record Chunks
   ldtMap[M_WarmListMax]          = 100; -- Number of Warm Data Record Chunks
   ldtMap[M_WarmListTransfer]     = 2; -- Number of Warm Data Record Chunks
@@ -1126,7 +1399,7 @@ end
 
   -- Cold Directory List Settings: List of Directory Pages
   ldtMap[M_ColdDirListHead]= 0; -- Head (Rec Digest) of the Cold List Dir Chain
-  ldtMap[M_ColdTopFull]    = AS_FALSE; -- true when cold head is full (next write)
+  ldtMap[M_ColdTopFull]    = false; -- true when cold head is full (next write)
   ldtMap[M_ColdDataRecCount]= 0; -- # of Cold DATA Records (data chunks)
   ldtMap[M_ColdDirRecCount] = 0; -- # of Cold DIRECTORY Records
   ldtMap[M_ColdDirRecMax]   = 5; -- Max# of Cold DIRECTORY Records
@@ -1138,7 +1411,7 @@ end
   topRec[ldtBinName]            = ldtCtrl;
 
   GP=F and trace("[DEBUG]: <%s:%s> : Lso Summary after Init(%s)",
-      MOD, meth , ldtSummaryString(ldtCtrl));
+      MOD, meth , lsoSummaryString(ldtCtrl));
 
   -- If the topRec already has an LDT CONTROL BIN (with a valid map in it),
   -- then we know that the main LDT record type has already been set.
@@ -1258,7 +1531,7 @@ end -- createAndInitESR()
 -- ======================================================================
 -- initializeLdrMap()
 -- ======================================================================
--- Set the values in a LDT Data Record (LDR) Control Bin map. LDR Records
+-- Set the values in a LSO Data Record (LDR) Control Bin map. LDR Records
 -- hold the actual data for both the WarmList and ColdList.
 -- This function represents the "type" LDR MAP -- all fields are
 -- defined here.
@@ -1286,7 +1559,7 @@ local function initializeLdrMap(src,topRec,ldrRec,ldrPropMap,ldrMap,ldtCtrl)
   --  Not doing Log stuff yet
   --  ldrPropMap[PM_LogInfo]      = lsoPropMap[M_LogInfo];
 
-  --  Use Top level LDT entry for mode and max values
+  --  Use Top level LSO entry for mode and max values
   ldrMap[LDR_ByteEntrySize]   = ldtMap[M_LdrByteEntrySize];
   ldrMap[LDR_ByteEntryCount]  = 0;  -- A count of Byte Entries
 
@@ -1352,7 +1625,7 @@ end -- initializeColdDirMap()
 
 -- ======================================================================
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
--- LDT Utility Functions
+-- LSO Utility Functions
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- ======================================================================
 -- ======================================================================
@@ -1364,10 +1637,10 @@ end -- initializeColdDirMap()
 -- adjustLdtMap:
 -- ======================================================================
 -- Using the settings supplied by the caller in the stackCreate call,
--- we adjust the values in the LdtMap:
+-- we adjust the values in the LsoMap:
 -- Parms:
--- (*) ldtCtrl: the main LDT Bin value (propMap, ldtMap)
--- (*) argListMap: Map of LDT Settings 
+-- (*) ldtCtrl: the main LSO Bin value (propMap, ldtMap)
+-- (*) argListMap: Map of LSO Settings 
 -- Return: The updated LsoList
 -- ======================================================================
 local function adjustLdtMap( ldtCtrl, argListMap )
@@ -1582,7 +1855,7 @@ end -- readEntryList()
 -- readByteArray()
 -- ======================================================================
 -- This method reads the entry list from Warm and Cold List Pages.
--- In each LDT Data Record (LDR), there are three Bins:  A Control Bin,
+-- In each LSO Data Record (LDR), there are three Bins:  A Control Bin,
 -- a List Bin (a List() of entries), and a Binary Bin (Compacted Bytes).
 -- Similar to its sibling method (readEntryList), readByteArray() pulls a Byte
 -- entry from the compact Byte array, applies the (assumed) UDF, and then
@@ -1704,7 +1977,7 @@ end -- readByteArray()
 
 -- ======================================================================
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
--- LDT Data Record (LDR) FUNCTIONS
+-- LSO Data Record (LDR) FUNCTIONS
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- ======================================================================
 -- LDR routines act specifically on the LDR "Data Chunk" records.
@@ -1719,7 +1992,7 @@ end -- readByteArray()
 -- not implicitly from "1".
 -- Parms:
 -- (*) ldrRec: Hotest of the Warm Chunk Records
--- (*) ldtMap: the LDT control information
+-- (*) ldtMap: the LSO control information
 -- (*) listIndex: Index into <insertList> from where we start copying.
 -- (*) insertList: The list of elements to be copied in
 -- Return: Number of items written
@@ -1729,7 +2002,7 @@ local function ldrInsertList(ldrRec,ldtMap,listIndex,insertList )
   GP=E and trace("[ENTER]: <%s:%s> Index(%d) List(%s)",
     MOD, meth, listIndex, tostring( insertList ) );
 
-  GP=F and trace("[DEBUG]<%s:%s> LDT MAP(%s)", MOD, meth, tostring(ldtMap));
+  GP=F and trace("[DEBUG]<%s:%s> LSO MAP(%s)", MOD, meth, tostring(ldtMap));
 
   local ldrMap = ldrRec[LDR_CTRL_BIN];
   local ldrValueList = ldrRec[LDR_LIST_BIN];
@@ -1757,7 +2030,7 @@ local function ldrInsertList(ldrRec,ldtMap,listIndex,insertList )
   -- If we EXACTLY fill up the chunk, then we flag that so the next Warm
   -- List Insert will know in advance to create a new chunk.
   if totalItemsToWrite == itemSlotsAvailable then
-    ldtMap[M_WarmTopFull] = AS_TRUE; -- Now, remember to reset on next update.
+    ldtMap[M_WarmTopFull] = true; -- Now, remember to reset on next update.
     GP=F and trace("[DEBUG]<%s:%s>TotalItems(%d)::SpaceAvail(%d):WTop FULL!!",
       MOD, meth, totalItemsToWrite, itemSlotsAvailable );
   end
@@ -1807,7 +2080,7 @@ end -- ldrInsertList()
 -- byte array in the chunk's LDR_BNRY_BIN.
 -- Parms:
 -- (*) ldrChunkRec: Hotest of the Warm Chunk Records
--- (*) ldtMap: the LDT control information
+-- (*) ldtMap: the LSO control information
 -- (*) listIndex: Index into <insertList> from where we start copying.
 -- (*) insertList: The list of elements to be copied in
 -- Return: Number of items written
@@ -1860,7 +2133,7 @@ local function ldrInsertBytes( ldrChunkRec, ldtMap, listIndex, insertList )
   -- If we EXACTLY fill up the chunk, then we flag that so the next Warm
   -- List Insert will know in advance to create a new chunk.
   if totalItemsToWrite == itemSlotsAvailable then
-    ldtMap[M_WarmTopFull] = AS_TRUE; -- Remember to reset on next update.
+    ldtMap[M_WarmTopFull] = true; -- Remember to reset on next update.
     GP=F and trace("[DEBUG]<%s:%s>TotalItems(%d)::SpaceAvail(%d):WTop FULL!!",
       MOD, meth, totalItemsToWrite, itemSlotsAvailable );
   end
@@ -1947,7 +2220,7 @@ end -- ldrInsertBytes()
 --
 -- Parms:
 -- (*) ldrChunkRec: Hotest of the Warm Chunk Records
--- (*) ldtMap: the LDT control information
+-- (*) ldtMap: the LSO control information
 -- (*) listIndex: Index into <insertList> from where we start copying.
 -- (*) insertList: The list of elements to be copied in
 -- Return: Number of items written
@@ -1971,9 +2244,9 @@ end -- ldrInsert()
 -- function (if present) and, for those elements that qualify, add them
 -- to the result list.  Read the chunk in FIFO order.
 -- Parms:
--- (*) ldrChunk: Record object for the warm or cold LDT Data Record
+-- (*) ldrChunk: Record object for the warm or cold LSO Data Record
 -- (*) resultList: What's been accumulated so far -- add to this
--- (*) ldtCtrl: Main LDT Control info
+-- (*) ldtCtrl: Main LSO Control info
 -- (*) count: Only used when "all" flag is false.  Return this many items
 -- (*) all: When true, read ALL.
 -- Return: the NUMBER of items read from this chunk.
@@ -2012,9 +2285,9 @@ end -- ldrRead()
 -- ======================================================================
 -- Synopsis:
 -- Parms:
--- (*) topRec: User-level Record holding the LDT Bin
+-- (*) topRec: User-level Record holding the LSO Bin
 -- (*) resultList: What's been accumulated so far -- add to this
--- (*) ldtCtrl: Main LDT Control info
+-- (*) ldtCtrl: Main LSO Control info
 -- (*) digestList: The List of Digests (Data Record Ptrs) we will Process
 -- (*) count: Only used when "all" flag is 0.  Return this many items
 -- (*) all: When == true, read all items, regardless of "count".
@@ -2182,7 +2455,7 @@ end -- extractHotListTransferList()
 -- hotListHasRoom( ldtMap, insertValue )
 -- ======================================================================
 -- Return true if there's room, otherwise return false.
--- (*) ldtMap: the map for the LDT Bin
+-- (*) ldtMap: the map for the LSO Bin
 -- (*) insertValue: the new value to be pushed on the stack
 -- NOTE: This is in its own function because it is possible that we will
 -- want to add more sophistication in the future.
@@ -2219,10 +2492,10 @@ end -- hotListHasRoom()
 -- Only when we transfer to Warm/Cold do we employ the COMPACT STORAGE
 -- trick of packing bytes contiguously in the Binary Bin.
 --
--- The Top LDT page (and the individual LDR chunk pages) have the control
+-- The Top LSO page (and the individual LDR chunk pages) have the control
 -- data about the byte entries (entry size, entry count).
 -- Parms:
--- (*) ldtCtrl: the control structure for the LDT Bin
+-- (*) ldtCtrl: the control structure for the LSO Bin
 -- (*) newStorageValue: the new value to be pushed on the stack
 local function hotListInsert( ldtCtrl, newStorageValue  )
   local meth = "hotListInsert()";
@@ -2247,7 +2520,7 @@ local function hotListInsert( ldtCtrl, newStorageValue  )
   local hotCount = ldtMap[M_HotEntryListItemCount];
   ldtMap[M_HotEntryListItemCount] = (hotCount + 1);
 
-  GP=E and trace("[EXIT]: <%s:%s> : LDT List Result(%s)",
+  GP=E and trace("[EXIT]: <%s:%s> : LSO List Result(%s)",
     MOD, meth, tostring( ldtCtrl ) );
 
   return 0;  -- all is well
@@ -2263,8 +2536,8 @@ end -- hotListInsert()
 -- warmListChunkCreate()
 -- Parms:
 -- (*) src: Subrec Context -- Manage the Open Subrec Pool
--- (*) topRec: User-level Record holding the LDT Bin
--- (*) ldtCtrl: The main structure of the LDT Bin.
+-- (*) topRec: User-level Record holding the LSO Bin
+-- (*) ldtCtrl: The main structure of the LSO Bin.
 -- ======================================================================
 -- Create and initialize a new LDR "chunk", load the new digest for that
 -- new chunk into the ldtMap (the warm dir list), and return it.
@@ -2283,7 +2556,7 @@ local function   warmListChunkCreate( src, topRec, ldtCtrl )
   local newChunkDigest = record.digest( newLdrChunkRecord );
   local lsoPropMap = ldtCtrl[1];
   local ldtMap     = ldtCtrl[2];
-  local ldtBinName    = lsoPropMap[PM_BinName];
+  local binName    = lsoPropMap[PM_BinName];
 
   initializeLdrMap(src,topRec,newLdrChunkRecord,ldrPropMap,ldrMap,ldtCtrl );
 
@@ -2307,7 +2580,7 @@ local function   warmListChunkCreate( src, topRec, ldtCtrl )
 
   list.append( ldtMap[M_WarmDigestList], newChunkDigest );
 
-  GP=F and trace("[DEBUG]<%s:%s>Post CHunkAppend:NewChunk(%s) LdtMap(%s)CH(%s)",
+  GP=F and trace("[DEBUG]<%s:%s>Post CHunkAppend:NewChunk(%s) LsoMap(%s)CH(%s)",
     MOD, meth, tostring(newChunkDigest), tostring(ldtMap),
     tostring( ldtMap[M_ColdDirListHead] ));
    
@@ -2318,8 +2591,8 @@ local function   warmListChunkCreate( src, topRec, ldtCtrl )
   -- NOTE: This may not be needed -- we may wish to update the topRec ONLY
   -- after all of the underlying SUB-REC  operations have been done.
   -- Update the top (LSO) record with the newly updated ldtMap;
-  topRec[ ldtBinName ] = ldtMap;
-  record.set_flags(topRec, ldtBinName, BF_LDT_BIN );--Must set every time
+  topRec[ binName ] = ldtMap;
+  record.set_flags(topRec, binName, BF_LDT_BIN );--Must set every time
 
   GP=E and trace("[EXIT]: <%s:%s> Return(%s) ",
     MOD, meth, ldrSummary(newLdrChunkRecord));
@@ -2366,7 +2639,7 @@ local function extractWarmListTransferList( ldtCtrl )
   oldWarmDigestList = nil;
   ldtMap[M_WarmListDigestCount] = ldtMap[M_WarmListDigestCount] - transAmount;
 
-  GP=E and trace("[EXIT]: <%s:%s> ResultList(%s) LdtMap(%s)",
+  GP=E and trace("[EXIT]: <%s:%s> ResultList(%s) LsoMap(%s)",
       MOD, meth, summarizeList(resultList), tostring(ldtMap));
 
   return resultList;
@@ -2378,7 +2651,7 @@ end -- extractWarmListTransferList()
 -- ======================================================================
 -- Look at the Warm list and return 1 if there's room, otherwise return 0.
 -- Parms:
--- (*) ldtMap: the map for the LDT Bin
+-- (*) ldtMap: the map for the LSO Bin
 -- Return: Decision: 1=Yes, there is room.   0=No, not enough room.
 local function warmListHasRoom( ldtMap )
   local meth = "warmListHasRoom()";
@@ -2401,9 +2674,9 @@ end -- warmListHasRoom()
 -- all of the work.
 -- Parms:
 -- (*) src: Subrec Context -- Manage the Open Subrec Pool
--- (*) topRec: User-level Record holding the LDT Bin
+-- (*) topRec: User-level Record holding the LSO Bin
 -- (*) resultList: What's been accumulated so far -- add to this
--- (*) ldtCtrl: The main structure of the LDT Bin.
+-- (*) ldtCtrl: The main structure of the LSO Bin.
 -- (*) count: Only used when "all" flag is false.  Return this many items
 -- (*) all: When == 1, read all items, regardless of "count".
 -- Return: Return the amount read from the Warm Dir List.
@@ -2424,7 +2697,7 @@ end -- warmListRead()
 -- return that opened record.
 -- (*) src: Subrec Context -- Manage the Open Subrec Pool
 -- (*) topRec: the top record -- needed if we create a new LDR
--- (*) ldtMap: the LDT control Map (ldtCtrl not needed here)
+-- (*) ldtMap: the LSO control Map (ldtCtrl not needed here)
 -- ======================================================================
 local function warmListGetTop( src, topRec, ldtMap )
   local meth = "warmListGetTop()";
@@ -2469,12 +2742,12 @@ local function warmListInsert( src, topRec, ldtCtrl, entryList )
 
   local propMap = ldtCtrl[1];
   local ldtMap  = ldtCtrl[2];
-  local ldtBinName = propMap[PM_BinName];
+  local binName = propMap[PM_BinName];
 
   GP=E and trace("[ENTER]: <%s:%s> WDL(%s)",
     MOD, meth, tostring(ldtMap[M_WarmDigestList]));
 
-  GP=F and trace("[DEBUG]:<%s:%s> LDT LIST(%s)", MOD, meth, tostring(ldtCtrl));
+  GP=F and trace("[DEBUG]:<%s:%s> LSO LIST(%s)", MOD, meth, tostring(ldtCtrl));
 
   local warmDigestList = ldtMap[M_WarmDigestList];
   local topWarmChunk;
@@ -2485,21 +2758,16 @@ local function warmListInsert( src, topRec, ldtCtrl, entryList )
   -- Note that the last write may have filled up the warmTopChunk, in which
   -- case it set a flag so that we will go ahead and allocate a new one now,
   -- rather than after we read the old top and see that it's already full.
-  if list.size( warmDigestList ) == 0 or ldtMap[M_WarmTopFull] == AS_TRUE then
+  if list.size( warmDigestList ) == 0 or ldtMap[M_WarmTopFull] == true then
     GP=F and trace("[DEBUG]: <%s:%s> Calling Chunk Create ", MOD, meth );
     topWarmChunk = warmListChunkCreate(src, topRec, ldtCtrl ); -- create new
-    ldtMap[M_WarmTopFull] = AS_FALSE; -- reset for next time.
+    ldtMap[M_WarmTopFull] = false; -- reset for next time.
   else
     GP=F and trace("[DEBUG]: <%s:%s> Calling Get TOP ", MOD, meth );
     topWarmChunk = warmListGetTop( src, topRec, ldtMap ); -- open existing
   end
-  GP=F and trace("[DEBUG]: <%s:%s> Post 'GetTop': LdtMap(%s) ", 
+  GP=F and trace("[DEBUG]: <%s:%s> Post 'GetTop': LsoMap(%s) ", 
     MOD, meth, tostring( ldtMap ));
-
-  if( topWarmChunk == nil ) then
-    warn("[ERROR] <%s:%s> Internal Error: Top Warm Chunk is NIL!!",MOD,meth);
-    error( ldte.ERR_INTERNAL );
-  end
 
   -- We have a warm Chunk -- write as much as we can into it.  If it didn't
   -- all fit -- then we allocate a new chunk and write the rest.
@@ -2544,10 +2812,10 @@ local function warmListInsert( src, topRec, ldtCtrl, entryList )
 
   -- All done -- Save the info of how much room we have in the top Warm
   -- chunk (entry count or byte count)
-  GP=F and trace("[DEBUG]: <%s:%s> Saving LdtMap (%s) Before Update ",
+  GP=F and trace("[DEBUG]: <%s:%s> Saving LsoMap (%s) Before Update ",
     MOD, meth, tostring( ldtMap ));
-  topRec[ldtBinName] = ldtMap;
-  record.set_flags(topRec, ldtBinName, BF_LDT_BIN );--Must set every time
+  topRec[binName] = ldtMap;
+  record.set_flags(topRec, binName, BF_LDT_BIN );--Must set every time
 
   GP=F and trace("[DEBUG]: <%s:%s> Chunk Summary before storage(%s)",
     MOD, meth, ldrSummary( topWarmChunk ));
@@ -2562,7 +2830,7 @@ local function warmListInsert( src, topRec, ldtCtrl, entryList )
   GP=F and trace("[DEBUG]: <%s:%s> SUB-REC  Close Status(%s) ",
     MOD,meth, tostring(status));
 
-  -- Notice that the TOTAL ITEM COUNT of the LDT doesn't change.  We've only
+  -- Notice that the TOTAL ITEM COUNT of the LSO doesn't change.  We've only
   -- moved entries from the hot list to the warm list.
 
   return rc;
@@ -2587,8 +2855,8 @@ end -- warmListInsert
 local function releaseStorage( topRec, ldtCtrl, digestList )
   local meth = "releaseStorage()";
   local rc = 0;
-  GP=E and trace("[ENTER]:<%s:%s> ldtSummary(%s) digestList(%s)",
-    MOD, meth, ldtSummaryString( ldtCtrl ), tostring(digestList));
+  GP=E and trace("[ENTER]:<%s:%s> lsoSummary(%s) digestList(%s)",
+    MOD, meth, lsoSummaryString( ldtCtrl ), tostring(digestList));
 
     info("LSTACK Subrecord Eviction: Subrec List(%s)",tostring(digestList));
 
@@ -2596,7 +2864,7 @@ local function releaseStorage( topRec, ldtCtrl, digestList )
     local digestString;
     local propMap = ldtCtrl[1];
     local ldtMap  = ldtCtrl[2];
-    local ldtBinName = propMap[PM_BinName];
+    local binName = propMap[PM_BinName];
 
     if( digestList == nil or list.size( digestList ) == 0 ) then
       warn("[INTERNAL ERROR]<%s:%s> DigestList is nil or empty", MOD, meth );
@@ -2609,7 +2877,7 @@ local function releaseStorage( topRec, ldtCtrl, digestList )
         if( rc == nil or rc == 0 ) then
           GP=F and trace("[STATUS]<%s:%s> Successful CREC REMOVE", MOD, meth );
         else
-          warn("[SUB DELETE ERROR] RC(%d) Bin(%s)", MOD, meth, rc, ldtBinName);
+          warn("[SUB DELETE ERROR] RC(%d) Bin(%s)", MOD, meth, rc, binName);
           error( ldte.ERR_SUBREC_DELETE );
         end
       end
@@ -2671,11 +2939,11 @@ end -- setPagePointers()
 -- ======================================================================
 local function coldDirHeadCreate( src, topRec, ldtCtrl, spaceEstimate )
   local meth = "coldDirHeadCreate()";
-  GP=E and trace("[ENTER]<%s:%s>LSO(%s)",MOD,meth,ldtSummaryString(ldtCtrl));
+  GP=E and trace("[ENTER]<%s:%s>LSO(%s)",MOD,meth,lsoSummaryString(ldtCtrl));
 
   local propMap = ldtCtrl[1];
   local ldtMap  = ldtCtrl[2];
-  local ldtBinName = propMap[PM_BinName];
+  local binName = propMap[PM_BinName];
   local ldrDeleteList; -- List of LDR subrecs to be removed (eviction)
   local dirDeleteList; -- List of Cold Directory Subrecs to be removed.
   local ldrItemCount = ldtMap[M_LdrEntryCountMax];
@@ -2895,8 +3163,8 @@ local function coldDirHeadCreate( src, topRec, ldtCtrl, spaceEstimate )
     -- the  underlying children record operations are complete.
     -- However, we can update topRec here, since that won't get written back
     -- to storage until there's an explicit update_subrec() call.
-    topRec[ ldtBinName ] = ldtMap;
-    record.set_flags(topRec, ldtBinName, BF_LDT_BIN );--Must set every time
+    topRec[ binName ] = ldtMap;
+    record.set_flags(topRec, binName, BF_LDT_BIN );--Must set every time
     returnColdHead = newColdHeadRec;
   end -- if we should create a new Cold HEAD
 
@@ -2955,7 +3223,7 @@ local function coldDirRecInsert(ldtCtrl,coldHeadRec,digestListIndex,digestList)
   -- If we EXACTLY fill up the ColdDirRec, then we flag that so the next Cold
   -- List Insert will know in advance to create a new ColdDirHEAD.
   if totalItemsToWrite == itemSlotsAvailable then
-    ldtMap[M_ColdTopFull] = AS_TRUE; -- Now, remember to reset on next update.
+    ldtMap[M_ColdTopFull] = true; -- Now, remember to reset on next update.
     GP=F and trace("[DEBUG]<%s:%s>TotalItems(%d) == SpaceAvail(%d):CTop FULL!!",
       MOD, meth, totalItemsToWrite, itemSlotsAvailable );
   end
@@ -3020,10 +3288,10 @@ local function coldListInsert( src, topRec, ldtCtrl, digestList )
   -- Extract the property map and lso control map from the lso bin list.
   local propMap = ldtCtrl[1];
   local ldtMap  = ldtCtrl[2];
-  local ldtBinName = propMap[PM_BinName];
+  local binName = propMap[PM_BinName];
 
-  GP=E and trace("[ENTER]<%s:%s>SRC(%s) LDT Summary(%s) DigestList(%s)", MOD,
-    meth, tostring(src), ldtSummaryString(ldtCtrl), tostring( digestList ));
+  GP=E and trace("[ENTER]<%s:%s>SRC(%s) LSO Summary(%s) DigestList(%s)", MOD,
+    meth, tostring(src), lsoSummaryString(ldtCtrl), tostring( digestList ));
 
   GP=F and trace("[DEBUG 0]:Map:WDL(%s)", tostring(ldtMap[M_WarmDigestList]));
 
@@ -3052,9 +3320,9 @@ local function coldListInsert( src, topRec, ldtCtrl, digestList )
   GP=F and trace("[DEBUG]<%s:%s>Cold List Head Digest(%s), ColdFullorNew(%s)",
       MOD, meth, tostring( coldHeadDigest), tostring(ldtMap[M_ColdTopFull]));
 
-  if( coldHeadDigest == nil or
+  if coldHeadDigest == nil or
      coldHeadDigest == 0 or
-     ldtMap[M_ColdTopFull] == AS_TRUE )
+     ldtMap[M_ColdTopFull] == true
   then
     -- Create a new Cold Directory Head and link it in the Dir Chain.
     GP=F and trace("[DEBUG]:<%s:%s>:Creating FIRST NEW COLD HEAD", MOD, meth );
@@ -3111,10 +3379,10 @@ local function coldListInsert( src, topRec, ldtCtrl, digestList )
 
   -- All done -- Save the info of how much room we have in the top Warm
   -- chunk (entry count or byte count)
-  GP=F and trace("[DEBUG]: <%s:%s> Saving LdtMap (%s) Before Update ",
+  GP=F and trace("[DEBUG]: <%s:%s> Saving LsoMap (%s) Before Update ",
     MOD, meth, tostring( ldtMap ));
-  topRec[ ldtBinName ] = ldtMap;
-  record.set_flags(topRec, ldtBinName, BF_LDT_BIN );--Must set every time
+  topRec[ binName ] = ldtMap;
+  record.set_flags(topRec, binName, BF_LDT_BIN );--Must set every time
 
   GP=F and trace("[DEBUG]: <%s:%s> New Cold Head Save: Summary(%s) ",
     MOD, meth, coldDirRecSummary( coldHeadRec ));
@@ -3142,9 +3410,9 @@ end -- coldListInsert
 -- warm list.
 -- Parms:
 -- (*) src: Subrec Context -- Manage the Open Subrec Pool
--- (*) topRec: User-level Record holding the LDT Bin
+-- (*) topRec: User-level Record holding the LSO Bin
 -- (*) resultList: What's been accumulated so far -- add to this
--- (*) ldtCtrl: The main structure of the LDT Bin.
+-- (*) ldtCtrl: The main structure of the LSO Bin.
 -- (*) count: Only used when "all" flag is 0.  Return this many items
 -- (*) all: When == 1, read all items, regardless of "count".
 -- Return: Return the amount read from the Cold Dir List.
@@ -3160,7 +3428,7 @@ local function coldListRead(src, topRec, resultList, ldtCtrl, count, all)
 
   -- If there is no Cold List, then return immediately -- nothing read.
   if(ldtMap[M_ColdDirListHead] == nil or ldtMap[M_ColdDirListHead] == 0) then
-    GP=F and trace("[WARNING]: <%s:%s> LDT MAP COLD LIST Head is Nil/ZERO",
+    GP=F and trace("[WARNING]: <%s:%s> LSO MAP COLD LIST Head is Nil/ZERO",
       MOD, meth, count, tostring( all ));
     return 0;
   end
@@ -3236,7 +3504,7 @@ local function coldListRead(src, topRec, resultList, ldtCtrl, count, all)
 
   end -- while Dir Page not empty.
 
-  GP=F and trace("[DEBUG]<%s:%s>After ColdListRead:LdtMap(%s) ColdHeadMap(%s)",
+  GP=F and trace("[DEBUG]<%s:%s>After ColdListRead:LsoMap(%s) ColdHeadMap(%s)",
       MOD, meth, tostring( ldtMap ), tostring( coldDirMap )); 
 
   GP=E and trace("[EXIT]:<%s:%s>totalAmountRead(%d) ResultListSummary(%s) ",
@@ -3246,7 +3514,7 @@ end -- coldListRead()
 
 -- ======================================================================
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
--- LDT General Functions
+-- LSO General Functions
 -- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- ======================================================================
 -- General Functions that require use of many of the above functions, so
@@ -3257,13 +3525,13 @@ end -- coldListRead()
 -- ======================================================================
 -- warmListTransfer()
 -- ======================================================================
--- Transfer some amount of the WarmDigestList contents (the list of LDT Data
+-- Transfer some amount of the WarmDigestList contents (the list of LSO Data
 -- Record digests) into the Cold List, which is a linked list of Cold List
 -- Directory pages that each point to a list of LDRs.
 --
--- There is a configuration parameter (kept in the LDT Control Bin) that 
+-- There is a configuration parameter (kept in the LSO Control Bin) that 
 -- tells us how much of the warm list to migrate to the cold list. That
--- value is set at LDT Create time.
+-- value is set at LSO Create time.
 --
 -- There is a lot of complexity at this level, as a single Warm List
 -- transfer can trigger several operations in the cold list (see the
@@ -3312,8 +3580,8 @@ end -- warmListTransfer()
 local function hotListTransfer( src, topRec, ldtCtrl )
   local meth = "hotListTransfer()";
   local rc = 0;
-  GP=E and trace("[ENTER]: <%s:%s> LDT Summary(%s) ",
-      MOD, meth, ldtSummaryString(ldtCtrl) );
+  GP=E and trace("[ENTER]: <%s:%s> LSO Summary(%s) ",
+      MOD, meth, tostring( lsoSummary(ldtCtrl) ));
       --
   -- Extract the property map and lso control map from the lso bin list.
   local propMap = ldtCtrl[1];
@@ -3331,7 +3599,7 @@ local function hotListTransfer( src, topRec, ldtCtrl )
   local transferList = extractHotListTransferList( ldtMap );
   rc = warmListInsert( src, topRec, ldtCtrl, transferList );
 
-  GP=E and trace("[EXIT]: <%s:%s> result(%d) LdtMap(%s) ",
+  GP=E and trace("[EXIT]: <%s:%s> result(%d) LsoMap(%s) ",
     MOD, meth, rc, tostring( ldtMap ));
   return rc;
 end -- hotListTransfer()
@@ -3342,18 +3610,18 @@ end -- hotListTransfer()
 -- object complies with the rules of Aerospike. Currently, a bin name
 -- cannot be larger than 14 characters (a seemingly low limit).
 -- ======================================================================
-local function validateBinName( ldtBinName )
+local function validateBinName( binName )
   local meth = "validateBinName()";
   GP=E and trace("[ENTER]: <%s:%s> validate Bin Name(%s)",
-      MOD, meth, tostring(ldtBinName));
+      MOD, meth, tostring(binName));
 
-  if ldtBinName == nil  then
+  if binName == nil  then
     warn("[ERROR EXIT]:<%s:%s> Null Bin Name", MOD, meth );
     error( ldte.ERR_NULL_BIN_NAME );
-  elseif type( ldtBinName ) ~= "string"  then
+  elseif type( binName ) ~= "string"  then
     warn("[ERROR EXIT]:<%s:%s> Bin Name Not a String", MOD, meth );
     error( ldte.ERR_BIN_NAME_NOT_STRING );
-  elseif string.len( ldtBinName ) > 14 then
+  elseif string.len( binName ) > 14 then
     warn("[ERROR EXIT]:<%s:%s> Bin Name Too Long", MOD, meth );
     error( ldte.ERR_BIN_NAME_TOO_LONG );
   end
@@ -3377,10 +3645,6 @@ local function validateRecBinAndMap( topRec, ldtBinName, mustExist )
   -- flag that error first if the user has given us a bad name.
   validateBinName( ldtBinName );
 
-  local ldtCtrl;
-  local propMap;
-  local ldtMap;
-
   -- If "mustExist" is true, then several things must be true or we will
   -- throw an error.
   -- (*) Must have a record.
@@ -3398,19 +3662,19 @@ local function validateRecBinAndMap( topRec, ldtBinName, mustExist )
 
     -- Control Bin Must Exist
     if( topRec[ldtBinName] == nil ) then
-      warn("[ERROR EXIT]: <%s:%s> LDT BIN (%s) DOES NOT Exists",
+      warn("[ERROR EXIT]: <%s:%s> LSO BIN (%s) DOES NOT Exists",
             MOD, meth, tostring(ldtBinName) );
       error( ldte.ERR_BIN_DOES_NOT_EXIST );
     end
 
     -- check that our bin is (mostly) there
-    ldtCtrl = topRec[ldtBinName]; -- The main ldtMap structure
+    local ldtCtrl = topRec[ldtBinName]; -- The main ldtMap structure
     -- Extract the property map and lso control map from the lso bin list.
-    propMap = ldtCtrl[1];
-    ldtMap  = ldtCtrl[2];
+    local propMap = ldtCtrl[1];
+    local ldtMap  = ldtCtrl[2];
 
     if propMap[PM_Magic] ~= MAGIC then
-      GP=E and warn("[ERROR EXIT]:<%s:%s>LDT BIN(%s) Corrupted (no magic)",
+      GP=E and warn("[ERROR EXIT]:<%s:%s>LSO BIN(%s) Corrupted (no magic)",
             MOD, meth, tostring( ldtBinName ) );
       error( ldte.ERR_BIN_DAMAGED );
     end
@@ -3420,20 +3684,18 @@ local function validateRecBinAndMap( topRec, ldtBinName, mustExist )
     -- is REQUIRED to be there.  Basically, if a control bin DOES exist
     -- then it MUST have magic.
     if topRec ~= nil and topRec[ldtBinName] ~= nil then
-      ldtCtrl = topRec[ldtBinName]; -- The main ldtMap structure
+      local ldtCtrl = topRec[ldtBinName]; -- The main ldtMap structure
       -- Extract the property map and lso control map from the lso bin list.
-      propMap = ldtCtrl[1];
-      ldtMap  = ldtCtrl[2];
+      local propMap = ldtCtrl[1];
+      local ldtMap  = ldtCtrl[2];
       if propMap[PM_Magic] ~= MAGIC then
-        GP=E and warn("[ERROR EXIT]:<%s:%s> LDT BIN(%s) Corrupted (no magic)2",
+        GP=E and warn("[ERROR EXIT]:<%s:%s> LSO BIN(%s) Corrupted (no magic)2",
               MOD, meth, tostring( ldtBinName ) );
         error( ldte.ERR_BIN_DAMAGED );
       end
     end -- if worth checking
   end -- else for must exist
   GP=E and trace("[EXIT]:<%s:%s> Ok", MOD, meth );
-
-  return ldtCtrl; -- to be trusted ONLY in the mustExist == true case;
 
 end -- validateRecBinAndMap()
 
@@ -3443,7 +3705,7 @@ end -- validateRecBinAndMap()
 -- Build the list of subrecs starting at location N.  ZERO means, get them
 -- all.
 -- Parms:
--- (1) topRec: the user-level record holding the LDT Bin
+-- (1) topRec: the user-level record holding the LSO Bin
 -- (2) ldtCtrl: The main LDT control structure
 -- (3) position: We start building the list with the first subrec that
 --     holds "position" (item count, not byte count).  If position is in
@@ -3455,8 +3717,8 @@ end -- validateRecBinAndMap()
 local function buildSubRecList( topRec, ldtCtrl, position )
   local meth = "buildSubRecList()";
 
-  GP=E and trace("[ENTER]: <%s:%s> position(%s) ldtSummary(%s)",
-    MOD, meth, tostring(position), ldtSummaryString( ldtCtrl ));
+  GP=E and trace("[ENTER]: <%s:%s> position(%s) lsoSummary(%s)",
+    MOD, meth, tostring(position), lsoSummaryString( ldtCtrl ));
 
   local propMap = ldtCtrl[1];
   local ldtMap  = ldtCtrl[2];
@@ -3568,17 +3830,17 @@ end -- buildResultList()
 -- Build the list of subrecs for the entire LDT.
 -- Parms:
 -- (*) src: Subrec Context -- Manage the Open Subrec Pool
--- (*) topRec: the user-level record holding the LDT Bin
+-- (*) topRec: the user-level record holding the LSO Bin
 -- (*) ldtCtrl: The main LDT control structure
 -- Result:
 --   res = (when successful) List of SUBRECs
 --   res = (when error) Empty List
 -- ========================================================================
-local function buildSubRecListAll( src, topRec, lsolist )
+function buildSubRecListAll( src, topRec, lsolist )
   local meth = "buildSubRecListAll()";
 
-  GP=E and trace("[ENTER]: <%s:%s> LDT Summary(%s)",
-    MOD, meth, ldtSummaryString( ldtCtrl ));
+  GP=E and trace("[ENTER]: <%s:%s> LSO Summary(%s)",
+    MOD, meth, lsoSummaryString( ldtCtrl ));
 
   -- Extract the property map and lso control map from the lso bin list.
   local propMap = ldtCtrl[1];
@@ -3760,7 +4022,7 @@ end -- locatePosition
 local function localTrim( topRec, ldtCtrl, searchPath )
   local meth = "localTrim()";
   GP=E and trace("[ENTER]:<%s:%s> LsoSummary(%s) SearchPath(%s)",
-    MOD, meth, ldtSummaryString(ldtCtrl), tostring(searchPath));
+    MOD, meth, lsoSummaryString(ldtCtrl), tostring(searchPath));
     
   -- TODO: Finish this later -- if needed at all.
   warn("[WARNING!!]<%s:%s> FUNCTION UNDER CONSTRUCTION!!! ", MOD, meth );
@@ -3786,8 +4048,8 @@ end -- localTrim()
 -- LDT, then iterate thru the list and delete them.
 -- Finally  -- Reset the record[ldtBinName] to NIL (does that work??)
 -- Parms:
--- (1) topRec: the user-level record holding the LDT Bin
--- (2) ldtBinName: The name of the LDT Bin
+-- (1) topRec: the user-level record holding the LSO Bin
+-- (2) ldtBinName: The name of the LSO Bin
 -- Result:
 --   res = 0: all is well
 --   res = -1: Some sort of error
@@ -3827,7 +4089,7 @@ function lstack_delete_subrecs( topRec, ldtBinName )
         if( rc == nil or rc == 0 ) then
           GP=F and trace("[STATUS]<%s:%s> Successful CREC REMOVE", MOD, meth );
         else
-          warn("[SUB DELETE ERROR] RC(%d) Bin(%s)", MOD, meth, rc, ldtBinName);
+          warn("[SUB DELETE ERROR] RC(%d) Bin(%s)", MOD, meth, rc, binName);
           error( ldte.ERR_SUBREC_DELETE );
         end
       else
@@ -3894,7 +4156,7 @@ end -- processModule()
 -- ======================================================================
 local function setupLdtBin( topRec, ldtBinName, userModule ) 
   local meth = "setupLdtBin()";
-  GP=E and trace("[ENTER]<%s:%s> Bin(%s)",MOD,meth,tostring(ldtBinName));
+  GP=E and trace("[ENTER]<%s:%s> binName(%s)",MOD,meth,tostring(ldtBinName));
 
   local ldtCtrl = initializeLdtCtrl( topRec, ldtBinName );
   local propMap = ldtCtrl[1]; 
@@ -3929,151 +4191,12 @@ local function setupLdtBin( topRec, ldtBinName, userModule )
   -- NOTE: The Caller will write out the LDT bin.
   return 0;
 end -- setupLdtBin()
--- ========================================================================
--- This function is (still) under construction
--- ========================================================================
--- lstack_trim() -- Remove all but the top N elements
--- Parms:
--- (1) topRec: the user-level record holding the LDT Bin
--- (2) ldtBinName: The name of the LDT Bin
--- (3) trimCount: Leave this many elements on the stack
--- Result:
---   rc = 0: ok
---   rc < 0: Aerospike Errors
--- NOTE: Any parameter that might be printed (for trace/debug purposes)
--- must be protected with "tostring()" so that we do not encounter a format
--- error if the user passes in nil or any other incorrect value/type.
--- ========================================================================
-function lstack_trim( topRec, ldtBinName, trimCount )
-  local meth = "lstack_trim()";
-
-  GP=E and trace("[ENTER1]: <%s:%s> ldtBinName(%s) trimCount(%s)",
-    MOD, meth, tostring(ldtBinName), tostring( trimCount ));
-
-  warn("[NOTICE!!]<%s:%s> Under Construction", MOD, meth );
-
-  -- validate the topRec, the bin and the map.  If anything is weird, then
-  -- this will kick out with a long jump error() call.
-  validateRecBinAndMap( topRec, ldtBinName, true );
-
-  ldtCtrl = topRec[ldtBinName];
-
-  -- Move to the location (Hot, Warm or Cold) that is the trim point.
-  -- TODO: Create locatePosition()
-  local searchPath = locatePosition( topRec, ldtCtrl, trimCount );
-
-  -- From searchPath to the end, release storage.
-  -- TODO: Create localTrim()
-  localTrim( topRec, ldtCtrl, searchPath );
-
-  GP=E and trace("[EXIT]: <%s:%s>", MOD, meth );
-
-  return config;
-end -- function lstack_trim()
--- ========================================================================
--- This function is (still) under construction.
--- ========================================================================
--- lstack_subrec_list() -- Return a list of subrecs
--- Parms:
--- (1) topRec: the user-level record holding the LDT Bin
--- (2) ldtBinName: The name of the LDT Bin
--- Result:
---   res = (when successful) List of SUBRECs
---   res = (when error) Empty List
--- NOTE: Any parameter that might be printed (for trace/debug purposes)
--- must be protected with "tostring()" so that we do not encounter a format
--- error if the user passes in nil or any other incorrect value/type.
--- ========================================================================
-function lstack_subrec_list( topRec, ldtBinName )
-  local meth = "lstack_subrec_list()";
-
-  GP=E and trace("[ENTER]: <%s:%s> ldtBinName(%s)",
-    MOD, meth, tostring(ldtBinName));
-
-  -- Extract the property map and lso control map from the lso bin list.
-  local ldtCtrl = topRec[ ldtBinName ];
-  local propMap = ldtCtrl[1];
-  local ldtMap  = ldtCtrl[2];
-
-  -- Copy the warm list into the result list
-  local wdList = ldtMap[M_WarmDigestList];
-  local transAmount = list.size( wdList );
-  local resultList = list.take( wdList, transAmount );
-
-  -- Now pull the digests from the Cold List
-  -- There are TWO types subrecords:
-  -- (*) There are the LDRs (Data Records) subrecs
-  -- (*) There are the Cold List Directory subrecs
-  -- We will read a Directory Head, and enter it's digest
-  -- Then we'll pull the digests out of it (just like a warm list)
-
-  -- If there is no Cold List, then return immediately -- nothing more read.
-  if(ldtMap[M_ColdDirListHead] == nil or ldtMap[M_ColdDirListHead] == 0) then
-    return resultList;
-  end
-
-  -- Process the coldDirList (a linked list) head to tail (that is "append"
-  -- order).  For each dir, read in the LDR Records (in reverse list order),
-  -- and then each page (in reverse list order), until we've read "count"
-  -- items.  If the 'all' flag is true, then read everything.
-  local coldDirRecDigest = ldtMap[M_ColdDirListHead];
-
-  while coldDirRecDigest ~= nil and coldDirRecDigest ~= 0 do
-    -- Save the Dir Digest
-    list.append( resultList, coldDirRecDigest );
-
-    -- Open the Directory Page, read the digest list
-    local stringDigest = tostring( coldDirRecDigest ); -- must be a string
-    local coldDirRec = aerospike:open_subrec( topRec, stringDigest );
-    local digestList = coldDirRec[COLD_DIR_LIST_BIN];
-    for i = 1, list.size(digestList), 1 do 
-      list.append( resultList, digestList[i] );
-    end
-
-    -- Get the next Cold Dir Node in the list
-    local coldDirMap = coldDirRec[COLD_DIR_CTRL_BIN];
-    coldDirRecDigest = coldDirMap[CDM_NextDirRec]; -- Next in Linked List.
-    -- If no more, we'll drop out of the loop, and if there's more, 
-    -- we'll get it in the next round.
-    -- Close this directory subrec before we open another one.
-    aerospike:close_subrec( coldDirRec );
-
-  end -- Loop thru each cold directory
-
-  GP=E and trace("[EXIT]:<%s:%s> SubRec Digest Result List(%s)",
-      MOD, meth, tostring( resultList ) );
-
-  return resultList
-end -- lstack_subrec_list()
 
 -- ======================================================================
--- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
--- LSTACK External Functions
--- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- || localCreate ||
 -- ======================================================================
--- (*) Status = lstack.push( topRec, ldtBinName, newValue, userModule )
--- (*) Status = lstack.push_all( topRec, ldtBinName, valueList, userModule )
--- (*) List   = lstack.peek( topRec, ldtBinName, peekCount,filter,fargs)) 
--- (*) List   = lstack.pop( topRec, ldtBinName, popCount ) 
--- (*) Status = lstack.destroy( topRec, ldtBinName )
--- (*) Number = lstack.size( topRec, ldtBinName )
--- (*) Map    = lstack.config( topRec, ldtBinName )
--- (*) Status = lstack.set_capacity( topRec, ldtBinName, new_capacity)
--- ======================================================================
--- The following functions are deprecated:
--- (*) Status =  create( topRec, ldtBinName, createSpec )
--- ======================================================================
--- Use this table to export the LSTACK functions to other UDF modules,
--- including the main Aerospike External LDT LSTACK module.
--- Then, each function that is exported from this module is placed in the
--- lstack table for export.  All other functions in this module are internal.
-local lstack = {};
-
--- ======================================================================
--- lstack.create() (Deprecated)
--- ======================================================================
--- Create/Initialize a Stack structure in a bin, using a single LSTACK
--- bin, using User's name, but Aerospike TYPE (LSTACK).
+-- Create/Initialize a Stack structure in a bin, using a single LSO
+-- bin, using User's name, but Aerospike TYPE (AS_LSO)
 --
 -- For this version of lstack, we will be using a SINGLE MAP object,
 -- which contains lots of metadata, plus one list:
@@ -4088,29 +4211,37 @@ local lstack = {};
 -- (*) Storage Mode (Compact or Regular) (0 for compact, 1 for regular)
 -- (*) Compact Item List
 --
--- The LDT starts out with the first N (default to 100) elements stored
--- directly in the record.  That list is referred to as the "Hot List. Once
--- the Hot List overflows, the entries flow into the warm list, which is a
--- list of Sub-Records.  Each Sub-Record holds N values, where N is
--- a configurable value -- but default is the same size as the Hot List.
+-- The LSO starts out in "Compact" mode, which allows the first 100 (or so)
+-- entries to be held directly in the record -- in the Hot List.  Once the
+-- Hot List overflows, the entries flow into the warm list, which is a
+-- list of LSO Data Records (each 2k record holds N values, where N is
+-- approximately (2k/rec size) ).
 -- Once the data overflows the warm list, it flows into the cold list,
 -- which is a linked list of directory pages -- where each directory page
--- points to a list of LDT Data Record pages.  Each directory page holds
+-- points to a list of LSO Data Record pages.  Each directory page holds
 -- roughly 100 page pointers (assuming a 2k page).
 -- Parms (inside argList)
--- (1) topRec: the user-level record holding the LDT Bin
--- (2) ldtBinName: The name of the LDT Bin
--- (3) createSpec: The Name of a configuration UDF for setting confif values.
+-- (1) topRec: the user-level record holding the LSO Bin
+-- (2) ldtBinName: The name of the LSO Bin
+-- (3) createSpec: The map (not list) of create parameters
 -- Result:
 --   rc = 0: ok
 --   rc < 0: Aerospike Errors
+--
+--  NOTE: 
+--  !!!! More parms needed here to appropriately configure the LSO
+--  -> Package (one of the pre-named packages that hold all the info)
+--  OR
+--  Individual entries (this is now less attractive)
+--  -> Hot List Size
+--  -> Hot List Transfer amount
+--  -> Warm List Size
+--  -> Warm List Transfer amount
 -- ========================================================================
-function lstack.create( topRec, ldtBinName, createSpec )
-  GP=B and trace("\n\n >>>>>>>>> API[ LSTACK CREATE ] <<<<<<<<<< \n");
+local function localCreate( topRec, ldtBinName, createSpec )
+  local meth = "localCreate()";
 
-  local meth = "lstack.create()";
-  GP=E and trace("[ENTER]:<%s:%s>BIN(%s) createSpec(%s)",
-      MOD, meth, tostring(ldtBinName), tostring( createSpec ));
+  GP=B and trace("\n\n >>>>>>>>> API[ LSTACK CREATE ] <<<<<<<<<< \n");
 
   -- First, check the validity of the Bin Name.
   -- This will throw and error and jump out of Lua if ldtBinName is bad.
@@ -4140,15 +4271,18 @@ function lstack.create( topRec, ldtBinName, createSpec )
   else
     error( ldte.ERR_CREATE );
   end
-end -- function lstack.create()
+end -- function localCreate()
+-- ======================================================================
 
--- =======================================================================
--- lstack.push() : Push a value onto the stack.
--- =======================================================================
--- Push a value on the stack, with the optional parm to set the LDT
--- configuration in case we have to create the LDT before calling the push.
--- Notice that the "createSpec" can be either the old style map or the
--- new style user modulename.
+-- ======================================================================
+-- |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- || local stackPush (with implicit create)
+-- |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- ======================================================================
+-- Push a value onto the stack.
+-- Also, if the LSO Bin does not yet exist, it will be created with the
+-- values defined by the "package" name, if specified in the create_spec,
+-- otherwise it will be created with the default values.
 --
 -- Regarding push(). There are different cases, with different
 -- levels of complexity:
@@ -4156,10 +4290,10 @@ end -- function lstack.create()
 -- (*) WarmListInsert: Result of HotList Overflow:  Medium
 -- (*) ColdListInsert: Result of WarmList Overflow:  Complex
 -- Parms:
--- (1) topRec: the user-level record holding the LDT Bin
--- (2) ldtBinName: The name of the LDT Bin
+-- (1) topRec: the user-level record holding the LSO Bin
+-- (2) ldtBinName: The name of the LSO Bin
 -- (3) newValue: The value to be inserted (pushed on the stack)
--- (4) createSpec: The map of create parameters or UDF create function.
+-- (4) createSpec: The map of create parameters
 -- Result:
 --   rc = 0: ok
 --   rc < 0: Aerospike Errors
@@ -4167,12 +4301,14 @@ end -- function lstack.create()
 -- with "tostring()" so that we do not encounter a format error if the user
 -- passes in nil or any other incorrect value/type.
 -- =======================================================================
-function lstack.push( topRec, ldtBinName, newValue, createSpec )
-  GP=B and trace("\n\n >>>>>>>>> API[ LSTACK.PUSH ] <<<<<<<<<< \n");
+local function localStackPush( topRec, ldtBinName, newValue, createSpec )
+  local meth = "localStackPush()";
 
-  local meth = "lstack.push()";
-  GP=E and trace("[ENTER]<%s:%s> BIN(%s) NewVal(%s) createSpec(%s)", MOD, meth,
-    tostring(ldtBinName), tostring( newValue ), tostring( createSpec ) );
+  GP=B and trace("\n\n >>>>>>>>> API[ LSTACK PUSH ] <<<<<<<<<< \n");
+
+  GP=E and trace("[ENTER1]:<%s:%s>LSO BIN(%s) NewVal(%s) createSpec(%s)",
+      MOD, meth, tostring(ldtBinName), tostring( newValue ),
+      tostring( createSpec ) );
 
   -- Validate the topRec, the bin and the map.  If anything is weird, then
   -- this will kick out with a long jump error() call.
@@ -4244,26 +4380,20 @@ function lstack.push( topRec, ldtBinName, newValue, createSpec )
     GP=E and trace("[ERROR EXIT]:<%s:%s> Return(%s)", MOD, meth,tostring(rc));
     error( ldte.ERR_INTERNAL );
   end
-end -- function lstack.push()
+end -- function localStackPush()
 
 -- =======================================================================
--- lstack.push_all()
+-- Local Push ALL
 -- =======================================================================
 -- Iterate thru the list and call localStackPush on each element
--- Parms:
--- (*) topRec: The AS Record
--- (*) ldtBinName: Name of the LDT record
--- (*) valueList: List of values to push onto the stack
--- (*) createSpec: Map or Name of Configure UDF
--- Notice that the "createSpec" can be either the old style map or the
--- new style user modulename.
 -- =======================================================================
-function lstack.push_all( topRec, ldtBinName, valueList, createSpec )
-  GP=B and trace("\n\n >>>>>>>>> API[ LSTACK.PUSH_ALL ] <<<<<<<<<< \n");
+local function localPushAll( topRec, ldtBinName, valueList, createSpec )
+  local meth = "localPushAll()";
 
-  local meth = "lstack.push_all()";
-  GP=E and trace("[ENTER]<%s:%s> BIN(%s) valueList(%s) createSpec(%s)", MOD,
-    meth, tostring(ldtBinName), tostring(valueList), tostring(createSpec));
+  GP=B and trace("\n\n >>>>>>>>> API[ LSTACK PUSH ALL ] <<<<<<<<<< \n");
+
+  GP=E and trace("[ENTER]:<%s:%s>LSO BIN(%s) valueList(%s) createSpec(%s)",
+    MOD, meth, tostring(ldtBinName), tostring(valueList), tostring(createSpec));
 
   -- Validate the topRec, the bin and the map.  If anything is weird, then
   -- this will kick out with a long jump error() call.
@@ -4299,10 +4429,6 @@ function lstack.push_all( topRec, ldtBinName, valueList, createSpec )
   -- That may, in turn, have to make room by moving some items to the
   -- cold list.  (Ok to use ldtMap and not ldtCtrl here).
   -- First -- set up our sub-rec context to track open sub-recs.
-  -- !!!!!!!!!!!!!!!!!!!!!!!
-  -- TODO: Move this common PUSH code to "localPush()" so that regular
-  -- PUSH and PUSH_ALL can use it.
-  -- !!!!!!!!!!!!!!!!!!!!!!!!!
 
   local rc = 0;
   local newStoreValue;
@@ -4354,10 +4480,12 @@ function lstack.push_all( topRec, ldtBinName, valueList, createSpec )
     error( ldte.ERR_INTERNAL );
   end
   return rc;
-end -- end lstack.push_all()
+end -- end localPushAll()
 
 -- ======================================================================
--- lstack.peek(): Return N elements from the top of the stack.
+-- |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- || Local StackPeek: 
+-- |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- ======================================================================
 -- Return "peekCount" values from the stack, in Stack (LIFO) order.
 -- For Each Bin (in LIFO Order), read each Bin in reverse append order.
@@ -4373,8 +4501,8 @@ end -- end lstack.push_all()
 -- order, but the data inside the blocks are in append order.
 --
 -- Parms:
--- (1) topRec: the user-level record holding the LDT Bin
--- (2) ldtBinName: The name of the LDT Bin
+-- (1) topRec: the user-level record holding the LSO Bin
+-- (2) ldtBinName: The name of the LSO Bin
 -- (3) newValue: The value to be inserted (pushed on the stack)
 -- (4) func: The "Inner UDF" that will filter Peek output
 -- (5) fargs: Arg List to the filter function (i.e. func(val, fargs)).
@@ -4391,11 +4519,13 @@ end -- end lstack.push_all()
 -- NOTE: July 2013:tjl: Now using the SubrecContext to track the open
 -- subrecs.
 -- ======================================================================
-function lstack.peek( topRec, ldtBinName, peekCount, userModule, filter, fargs )
-  GP=B and trace("\n\n >>>>>>>>> API[ LSTACK.PEEK ] <<<<<<<<<< \n");
+local function
+localStackPeek( topRec, ldtBinName, peekCount, userModule, filter, fargs )
+  local meth = "localStackPeek()";
 
-  local meth = "lstack.peek()";
-  GP=E and trace("[ENTER]: <%s:%s> LDT BIN(%s) Count(%s) func(%s) fargs(%s)",
+  GP=B and trace("\n\n >>>>>>>>> API[ LSTACK PEEK ] <<<<<<<<<< \n");
+
+  GP=E and trace("[ENTER]: <%s:%s> LSO BIN(%s) Count(%s) func(%s) fargs(%s)",
     MOD, meth, tostring(ldtBinName), tostring(peekCount),
     tostring(func), tostring(fargs) );
 
@@ -4406,8 +4536,8 @@ function lstack.peek( topRec, ldtBinName, peekCount, userModule, filter, fargs )
   local propMap = ldtCtrl[1];
   local ldtMap  = ldtCtrl[2];
 
-  GP=F and trace("[DEBUG]: <%s:%s> LDT List Summary(%s)",
-    MOD, meth, ldtSummaryString( ldtCtrl ) );
+  GP=F and trace("[DEBUG]: <%s:%s> LSO List Summary(%s)",
+    MOD, meth, lsoSummaryString( ldtCtrl ) );
 
   -- Set up the Read Functions (KeyFunction, Untransform, Filter)
   -- Note that KeyFunction would be used only for special TIMESTACK function.
@@ -4502,7 +4632,7 @@ function lstack.peek( topRec, ldtBinName, peekCount, userModule, filter, fargs )
   end
 
   GP=F and trace("[DEBUG]:<%s:%s>After WarmListRead: ldtMap(%s) ldtCtrl(%s)",
-    MOD, meth, tostring(ldtMap), ldtSummaryString(ldtCtrl));
+    MOD, meth, tostring(ldtMap), lsoSummaryString(ldtCtrl));
 
   numRead = list.size( resultList );
   -- If we've read enough, then return.
@@ -4520,13 +4650,55 @@ function lstack.peek( topRec, ldtBinName, peekCount, userModule, filter, fargs )
     MOD, meth, peekCount, summarizeList(resultList));
 
   return resultList;
-end -- function lstack.peek() 
+end -- function localStackPeek() 
 
 -- ========================================================================
--- lstack.size() -- return the number of elements (item count) in the stack.
+-- This function is (still) under construction
+-- ========================================================================
+-- lstack_trim() -- Remove all but the top N elements
 -- Parms:
--- (1) topRec: the user-level record holding the LDT Bin
--- (2) ldtBinName: The name of the LDT Bin
+-- (1) topRec: the user-level record holding the LSO Bin
+-- (2) ldtBinName: The name of the LSO Bin
+-- (3) trimCount: Leave this many elements on the stack
+-- Result:
+--   rc = 0: ok
+--   rc < 0: Aerospike Errors
+-- NOTE: Any parameter that might be printed (for trace/debug purposes)
+-- must be protected with "tostring()" so that we do not encounter a format
+-- error if the user passes in nil or any other incorrect value/type.
+-- ========================================================================
+function lstack_trim( topRec, ldtBinName, trimCount )
+  local meth = "lstack_trim()";
+
+  GP=E and trace("[ENTER1]: <%s:%s> ldtBinName(%s) trimCount(%s)",
+    MOD, meth, tostring(ldtBinName), tostring( trimCount ));
+
+  warn("[NOTICE!!]<%s:%s> Under Construction", MOD, meth );
+
+  -- validate the topRec, the bin and the map.  If anything is weird, then
+  -- this will kick out with a long jump error() call.
+  validateRecBinAndMap( topRec, ldtBinName, true );
+
+  ldtCtrl = topRec[ldtBinName];
+
+  -- Move to the location (Hot, Warm or Cold) that is the trim point.
+  -- TODO: Create locatePosition()
+  local searchPath = locatePosition( topRec, ldtCtrl, trimCount );
+
+  -- From searchPath to the end, release storage.
+  -- TODO: Create localTrim()
+  localTrim( topRec, ldtCtrl, searchPath );
+
+  GP=E and trace("[EXIT]: <%s:%s>", MOD, meth );
+
+  return config;
+end -- function lstack_trim()
+
+-- ========================================================================
+-- localGetSize() -- return the number of elements (item count) in the stack.
+-- Parms:
+-- (1) topRec: the user-level record holding the LSO Bin
+-- (2) ldtBinName: The name of the LSO Bin
 -- Result:
 --   rc >= 0  (the size)
 --   rc < 0: Aerospike Errors
@@ -4534,9 +4706,8 @@ end -- function lstack.peek()
 -- must be protected with "tostring()" so that we do not encounter a format
 -- error if the user passes in nil or any other incorrect value/type.
 -- ========================================================================
-function lstack.size( topRec, ldtBinName )
-  GP=B and trace("\n\n >>>>>>>>> API[ LSTACK.SIZE ] <<<<<<<<<< \n");
-  local meth = "lstack.size()";
+local function localGetSize( topRec, ldtBinName )
+  local meth = "localGetSize()";
 
   GP=E and trace("[ENTER1]: <%s:%s> ldtBinName(%s)",
     MOD, meth, tostring(ldtBinName));
@@ -4565,14 +4736,13 @@ function lstack.size( topRec, ldtBinName )
   GP=E and trace("[EXIT]: <%s:%s> : size(%d)", MOD, meth, itemCount );
 
   return itemCount;
-end -- function lstack.size()
+end -- function localGetSize()
 
 -- ========================================================================
--- lstack.get_capacity() -- return the current capacity setting for LSTACK.
--- ========================================================================
+-- localGetCapacity() -- return the current capacity setting for LSTACK.
 -- Parms:
--- (1) topRec: the user-level record holding the LDT Bin
--- (2) ldtBinName: The name of the LDT Bin
+-- (1) topRec: the user-level record holding the LSO Bin
+-- (2) ldtBinName: The name of the LSO Bin
 -- Result:
 --   rc >= 0  (the current capacity)
 --   rc < 0: Aerospike Errors
@@ -4580,10 +4750,8 @@ end -- function lstack.size()
 -- must be protected with "tostring()" so that we do not encounter a format
 -- error if the user passes in nil or any other incorrect value/type.
 -- ========================================================================
-function lstack.get_capacity( topRec, ldtBinName )
-  GP=B and trace("\n\n >>>>>>>>> API[ LSTACK.GET_CAPACITY ] <<<<<<<<<< \n");
-
-  local meth = "lstack.get_capacity()";
+local function localGetCapacity( topRec, ldtBinName )
+  local meth = "localGetCapacity()";
 
   GP=E and trace("[ENTER]: <%s:%s> ldtBinName(%s)",
     MOD, meth, tostring(ldtBinName));
@@ -4600,26 +4768,224 @@ function lstack.get_capacity( topRec, ldtBinName )
   GP=E and trace("[EXIT]: <%s:%s> : size(%d)", MOD, meth, capacity );
 
   return capacity;
-end -- function lstack.get_capacity()
+end -- function localGetCapacity()
 
 -- ========================================================================
--- lstack.set_capacity()
+-- lstack_config() -- return the config settings
+-- Parms:
+-- (1) topRec: the user-level record holding the LSO Bin
+-- (2) ldtBinName: The name of the LSO Bin
+-- Result:
+--   res = (when successful) config Map 
+--   res = (when error) nil
+-- NOTE: Any parameter that might be printed (for trace/debug purposes)
+-- must be protected with "tostring()" so that we do not encounter a format
+-- error if the user passes in nil or any other incorrect value/type.
+-- ========================================================================
+local function localConfig( topRec, ldtBinName )
+  local meth = "localConfig()";
+
+  GP=E and trace("[ENTER1]: <%s:%s> ldtBinName(%s)",
+    MOD, meth, tostring(ldtBinName));
+
+  -- validate the topRec, the bin and the map.  If anything is weird, then
+  -- this will kick out with a long jump error() call.
+  validateRecBinAndMap( topRec, ldtBinName, true );
+
+  local ldtCtrl = topRec[ ldtBinName ];
+  local config = lsoSummary( ldtCtrl );
+
+  GP=E and trace("[EXIT]: <%s:%s> : config(%s)", MOD, meth, tostring(config));
+
+  return config;
+end -- function localConfig()
+
+
+-- ========================================================================
+-- This function is (still) under construction.
+-- ========================================================================
+-- lstack_subrec_list() -- Return a list of subrecs
+-- Parms:
+-- (1) topRec: the user-level record holding the LSO Bin
+-- (2) ldtBinName: The name of the LSO Bin
+-- Result:
+--   res = (when successful) List of SUBRECs
+--   res = (when error) Empty List
+-- NOTE: Any parameter that might be printed (for trace/debug purposes)
+-- must be protected with "tostring()" so that we do not encounter a format
+-- error if the user passes in nil or any other incorrect value/type.
+-- ========================================================================
+function lstack_subrec_list( topRec, ldtBinName )
+  local meth = "lstack_subrec_list()";
+
+  GP=E and trace("[ENTER]: <%s:%s> ldtBinName(%s)",
+    MOD, meth, tostring(ldtBinName));
+
+  -- Extract the property map and lso control map from the lso bin list.
+  local ldtCtrl = topRec[ ldtBinName ];
+  local propMap = ldtCtrl[1];
+  local ldtMap  = ldtCtrl[2];
+
+  -- Copy the warm list into the result list
+  local wdList = ldtMap[M_WarmDigestList];
+  local transAmount = list.size( wdList );
+  local resultList = list.take( wdList, transAmount );
+
+  -- Now pull the digests from the Cold List
+  -- There are TWO types subrecords:
+  -- (*) There are the LDRs (Data Records) subrecs
+  -- (*) There are the Cold List Directory subrecs
+  -- We will read a Directory Head, and enter it's digest
+  -- Then we'll pull the digests out of it (just like a warm list)
+
+  -- If there is no Cold List, then return immediately -- nothing more read.
+  if(ldtMap[M_ColdDirListHead] == nil or ldtMap[M_ColdDirListHead] == 0) then
+    return resultList;
+  end
+
+  -- Process the coldDirList (a linked list) head to tail (that is "append"
+  -- order).  For each dir, read in the LDR Records (in reverse list order),
+  -- and then each page (in reverse list order), until we've read "count"
+  -- items.  If the 'all' flag is true, then read everything.
+  local coldDirRecDigest = ldtMap[M_ColdDirListHead];
+
+  while coldDirRecDigest ~= nil and coldDirRecDigest ~= 0 do
+    -- Save the Dir Digest
+    list.append( resultList, coldDirRecDigest );
+
+    -- Open the Directory Page, read the digest list
+    local stringDigest = tostring( coldDirRecDigest ); -- must be a string
+    local coldDirRec = aerospike:open_subrec( topRec, stringDigest );
+    local digestList = coldDirRec[COLD_DIR_LIST_BIN];
+    for i = 1, list.size(digestList), 1 do 
+      list.append( resultList, digestList[i] );
+    end
+
+    -- Get the next Cold Dir Node in the list
+    local coldDirMap = coldDirRec[COLD_DIR_CTRL_BIN];
+    coldDirRecDigest = coldDirMap[CDM_NextDirRec]; -- Next in Linked List.
+    -- If no more, we'll drop out of the loop, and if there's more, 
+    -- we'll get it in the next round.
+    -- Close this directory subrec before we open another one.
+    aerospike:close_subrec( coldDirRec );
+
+  end -- Loop thru each cold directory
+
+  GP=E and trace("[EXIT]:<%s:%s> SubRec Digest Result List(%s)",
+      MOD, meth, tostring( resultList ) );
+
+  return resultList
+end -- lstack_subrec_list()
+
+-- ========================================================================
+-- localLdtDestroy() -- Remove the LDT entirely from the record.
+-- NOTE: This could eventually be moved to COMMON, and be "localLdtDestroy()",
+-- since it will work the same way for all LDTs.
+-- Remove the ESR, Null out the topRec bin.
+-- ========================================================================
+-- Release all of the storage associated with this LDT and remove the
+-- control structure of the bin.  If this is the LAST LDT in the record,
+-- then ALSO remove the HIDDEN LDT CONTROL BIN.
+--
+-- Question  -- Reset the record[binName] to NIL (does that work??)
+-- Parms:
+-- (1) topRec: the user-level record holding the LSO Bin
+-- (2) binName: The name of the LDT Bin
+-- Result:
+--   res = 0: all is well
+--   res = -1: Some sort of error
+-- ========================================================================
+local function localLdtDestroy( topRec, binName )
+  local meth = "localLdtDestroy()";
+
+  GP=B and trace("\n\n >>>>>>>>> API[ LSTACK REMOVE ] <<<<<<<<<< \n");
+
+  GP=E and trace("[ENTER]<%s:%s> binName(%s)", MOD, meth, tostring(binName));
+  local rc = 0; -- start off optimistic
+
+  -- Validate the binName before moving forward
+  validateRecBinAndMap( topRec, binName, true );
+
+  -- Extract the property map and lso control map from the lso bin list.
+  local ldtList = topRec[ binName ];
+  local propMap = ldtList[1];
+
+  -- Get the ESR and delete it -- if it exists.  If we have ONLY a HotList,
+  -- then the ESR will be ZERO.
+  local esrDigest = propMap[PM_EsrDigest];
+  if( esrDigest ~= nil and esrDigest ~= 0 ) then
+    local esrDigestString = tostring(esrDigest);
+    GP=f and trace("[SUBREC OPEN]<%s:%s> Digest(%s)",MOD,meth,esrDigestString);
+    local esrRec = aerospike:open_subrec( topRec, esrDigestString );
+    if( esrRec ~= nil ) then
+      rc = aerospike:remove_subrec( esrRec );
+      if( rc == nil or rc == 0 ) then
+        GP=F and trace("[STATUS]<%s:%s> Successful CREC REMOVE", MOD, meth );
+      else
+        warn("[ESR DELETE ERROR]<%s:%s>RC(%d) Bin(%s)", MOD, meth, rc, binName);
+        error( ldte.ERR_SUBREC_DELETE );
+      end
+    else
+      warn("[ESR DELETE ERROR]<%s:%s> ERROR on ESR Open", MOD, meth );
+    end
+  else
+    info("[INFO]<%s:%s> LDT ESR is not yet set, so remove not needed. Bin(%s)",
+      MOD, meth, binName );
+  end
+
+  -- Get the Common LDT (Hidden) bin, and update the LDT count.  If this
+  -- is the LAST LDT in the record, then remove the Hidden Bin entirely.
+  local recPropMap = topRec[REC_LDT_CTRL_BIN];
+  if( recPropMap == nil or recPropMap[RPM_Magic] ~= MAGIC ) then
+    warn("[INTERNAL ERROR]<%s:%s> Prop Map for LDT Hidden Bin(%s) invalid",
+      MOD, meth, REC_LDT_CTRL_BIN );
+    error( ldte.ERR_INTERNAL );
+  end
+  local ldtCount = recPropMap[RPM_LdtCount];
+  if( ldtCount <= 1 ) then
+    -- Remove this bin
+    topRec[REC_LDT_CTRL_BIN] = nil;
+  else
+    recPropMap[RPM_LdtCount] = ldtCount - 1;
+    topRec[REC_LDT_CTRL_BIN] = recPropMap;
+    -- Set this control bin as HIDDEN
+    record.set_flags(topRec, REC_LDT_CTRL_BIN, BF_LDT_HIDDEN );
+  end
+
+  -- Null out the LDT bin and update the record.
+  topRec[binName] = nil;
+
+  -- Update the Top Record.  Not sure if this returns nil or ZERO for ok,
+  -- so just turn any NILs into zeros.
+  rc = aerospike:update( topRec );
+  if( rc == nil or rc == 0 ) then
+    GP=E and trace("[Normal EXIT]:<%s:%s> Return(0)", MOD, meth );
+    return 0;
+  else
+    GP=E and trace("[ERROR EXIT]:<%s:%s> Return(%s)", MOD, meth,tostring(rc));
+    error( ldte.ERR_INTERNAL );
+  end
+end -- localLdtDestroy()
+
+-- ========================================================================
+-- localSetCapacity()
 -- ========================================================================
 -- This is a special command to both set the new storage limit.  It does
 -- NOT release storage, however.  That is done either lazily after a 
 -- warm/cold insert or with an explit lstack_trim() command.
 -- Parms:
--- (*) topRec: the user-level record holding the LDT Bin
--- (*) ldtBinName: The name of the LDT Bin
+-- (*) topRec: the user-level record holding the LSO Bin
+-- (*) ldtBinName: The name of the LSO Bin
 -- (*) newLimit: The new limit of the number of entries
 -- Result:
 --   res = 0: all is well
 --   res = -1: Some sort of error
 -- ========================================================================
-function lstack.set_capacity( topRec, ldtBinName, newLimit )
+local function localSetCapacity( topRec, ldtBinName, newLimit )
+  local meth = "localSetCapacity()";
+
   GP=B and trace("\n\n >>>>>>>>> API[ LSTACK SET CAPACITY ] <<<<<<<<<< \n");
 
-  local meth = "lstack_set_capacity()";
   GP=E and trace("[ENTER]: <%s:%s> ldtBinName(%s) newLimit(%s)",
     MOD, meth, tostring(ldtBinName), tostring(newLimit));
 
@@ -4641,7 +5007,7 @@ function lstack.set_capacity( topRec, ldtBinName, newLimit )
   local ldtMap  = ldtCtrl[2];
 
   GP=F and trace("[LSO SUMMARY]: <%s:%s> Summary(%s)", MOD, meth,
-    ldtSummaryString( ldtCtrl ));
+    lsoSummaryString( ldtCtrl ));
 
   info("[PARAMETER UPDATE]<%s:%s> StoreLimit: Old(%d) New(%d) ItemCount(%d)",
     MOD, meth, ldtMap[M_StoreLimit], newLimit, propMap[PM_ItemCount] );
@@ -4712,7 +5078,7 @@ function lstack.set_capacity( topRec, ldtBinName, newLimit )
       GP=E and trace("[Early EXIT]:<%s:%s> Already Set. Return(0)", MOD, meth );
       return 0;
     end
-    -- Update the LDT Control map with the new storage limit
+    -- Update the LSO Control map with the new storage limit
     ldtMap[M_StoreLimit] = newLimit;
 
   else
@@ -4757,169 +5123,23 @@ function lstack.set_capacity( topRec, ldtBinName, newLimit )
     GP=E and trace("[ERROR EXIT]:<%s:%s> Return(%s)", MOD, meth,tostring(rc));
     error( ldte.ERR_INTERNAL );
   end
-end -- lstack.set_capacity();
+end -- localSetCapacity();
 
 -- ========================================================================
--- lstack.config() -- return the LDT config settings
--- ========================================================================
--- Parms:
--- (1) topRec: the user-level record holding the LDT Bin
--- (2) ldtBinName: The name of the LDT Bin
--- Result:
---   res = (when successful) config Map 
---   res = (when error) nil
--- NOTE: Any parameter that might be printed (for trace/debug purposes)
--- must be protected with "tostring()" so that we do not encounter a format
--- error if the user passes in nil or any other incorrect value/type.
--- ========================================================================
-function lstack.config( topRec, ldtBinName )
-  GP=B and trace("\n\n >>>>>>>>> API[ LSTACK.CONFIG ] <<<<<<<<<< \n");
-
-  local meth = "lstack.config()";
-  GP=E and trace("[ENTER1]: <%s:%s> ldtBinName(%s)",
-    MOD, meth, tostring(ldtBinName));
-
-  -- validate the topRec, the bin and the map.  If anything is weird, then
-  -- this will kick out with a long jump error() call.
-  validateRecBinAndMap( topRec, ldtBinName, true );
-
-  local ldtCtrl = topRec[ ldtBinName ];
-  local config = ldtSummary( ldtCtrl );
-
-  GP=E and trace("[EXIT]: <%s:%s> : config(%s)", MOD, meth, tostring(config));
-
-  return config;
-end -- function lstack.config()
-
--- ========================================================================
--- lstack.destroy() -- Remove the LDT entirely from the record.
--- ========================================================================
--- Release all of the storage associated with this LDT and remove the
--- control structure of the bin.  If this is the LAST LDT in the record,
--- then ALSO remove the HIDDEN LDT CONTROL BIN.
---
--- NOTE: This could eventually be moved to COMMON, and be "localLdtDestroy()",
--- since it will work the same way for all LDTs.
--- Remove the ESR, Null out the topRec bin.
---
--- Parms:
--- (1) topRec: the user-level record holding the LDT Bin
--- (2) ldtBinName: The name of the LDT Bin
--- Result:
---   res = 0: all is well
---   res = -1: Some sort of error
--- ========================================================================
-function lstack.destroy( topRec, ldtBinName )
-  GP=B and trace("\n\n >>>>>>>>> API[ LSTACK.DESTROY ] <<<<<<<<<< \n");
-
-  local meth = "lstack.destroy()";
-  GP=E and trace("[ENTER]<%s:%s> ldtBinName(%s)", MOD, meth, tostring(ldtBinName));
-  local rc = 0; -- start off optimistic
-
-  -- Validate the Bin Name before moving forward
-  validateRecBinAndMap( topRec, ldtBinName, true );
-
-  -- Extract the property map and lso control map from the lso bin list.
-  local ldtList = topRec[ ldtBinName ];
-  local propMap = ldtList[1];
-
-  -- Get the ESR and delete it -- if it exists.  If we have ONLY a HotList,
-  -- then the ESR will be ZERO.
-  local esrDigest = propMap[PM_EsrDigest];
-  if( esrDigest ~= nil and esrDigest ~= 0 ) then
-    local esrDigestString = tostring(esrDigest);
-    GP=f and trace("[SUBREC OPEN]<%s:%s> Digest(%s)",MOD,meth,esrDigestString);
-    local esrRec = aerospike:open_subrec( topRec, esrDigestString );
-    if( esrRec ~= nil ) then
-      rc = aerospike:remove_subrec( esrRec );
-      if( rc == nil or rc == 0 ) then
-        GP=F and trace("[STATUS]<%s:%s> Successful CREC REMOVE", MOD, meth );
-      else
-        warn("[ESR DELETE ERROR]<%s:%s>RC(%d) Bin(%s)", MOD, meth, rc, ldtBinName);
-        error( ldte.ERR_SUBREC_DELETE );
-      end
-    else
-      warn("[ESR DELETE ERROR]<%s:%s> ERROR on ESR Open", MOD, meth );
-    end
-  else
-    info("[INFO]<%s:%s> LDT ESR is not yet set, so remove not needed. Bin(%s)",
-      MOD, meth, ldtBinName );
-  end
-
-  -- Get the Common LDT (Hidden) bin, and update the LDT count.  If this
-  -- is the LAST LDT in the record, then remove the Hidden Bin entirely.
-  local recPropMap = topRec[REC_LDT_CTRL_BIN];
-  if( recPropMap == nil or recPropMap[RPM_Magic] ~= MAGIC ) then
-    warn("[INTERNAL ERROR]<%s:%s> Prop Map for LDT Hidden Bin(%s) invalid",
-      MOD, meth, REC_LDT_CTRL_BIN );
-    error( ldte.ERR_INTERNAL );
-  end
-  local ldtCount = recPropMap[RPM_LdtCount];
-  if( ldtCount <= 1 ) then
-    -- Remove this bin
-    topRec[REC_LDT_CTRL_BIN] = nil;
-  else
-    recPropMap[RPM_LdtCount] = ldtCount - 1;
-    topRec[REC_LDT_CTRL_BIN] = recPropMap;
-    -- Set this control bin as HIDDEN
-    record.set_flags(topRec, REC_LDT_CTRL_BIN, BF_LDT_HIDDEN );
-  end
-
-  -- Null out the LDT bin and update the record.
-  topRec[ldtBinName] = nil;
-
-  -- Update the Top Record.  Not sure if this returns nil or ZERO for ok,
-  -- so just turn any NILs into zeros.
-  rc = aerospike:update( topRec );
-  if( rc == nil or rc == 0 ) then
-    GP=E and trace("[Normal EXIT]:<%s:%s> Return(0)", MOD, meth );
-    return 0;
-  else
-    GP=E and trace("[ERROR EXIT]:<%s:%s> Return(%s)", MOD, meth,tostring(rc));
-    error( ldte.ERR_INTERNAL );
-  end
-end -- lstack.destroy()
-
--- ========================================================================
--- lstack.one()      -- Just return 1.  This is used for perf measurement.
--- ========================================================================
--- Do the minimal amount of work -- just return a number so that we
--- can measure the overhead of the LDT/UDF infrastructure.
--- Parms:
--- (1) topRec: the user-level record holding the LDT Bin
--- (2) Val:  Random number val (or nothing)
--- Result:
---   res = 1 or val
--- ========================================================================
-function lstack.one( topRec, ldtBinName )
-  return 1;
-end -- lstack.one()
-
--- ========================================================================
--- lstack.same()         -- Return Val parm.  Used for perf measurement.
--- ========================================================================
-function lstack.same( topRec, ldtBinName, val )
-  if( val == nil or type(val) ~= "number") then
-    return 1;
-  else
-    return val;
-  end
-end -- lstack.same()
-
--- ========================================================================
--- lstack.debug() -- Turn the debug setting on (1) or off (0)
+-- localDebug() -- Turn the debug setting on (1) or off (0)
 -- ========================================================================
 -- Turning the debug setting "ON" pushes LOTS of output to the console.
+-- It would be nice if we could figure out how to make this setting change
+-- PERSISTENT. Until we do that, this will be a no-op.
 -- Parms:
--- (1) topRec: the user-level record holding the LDT Bin
+-- (1) topRec: the user-level record holding the LSO Bin
 -- (2) setting: 0 turns it off, anything else turns it on.
 -- Result:
 --   res = 0: all is well
 --   res = -1: Some sort of error
 -- ========================================================================
-function lstack.debug( topRec, setting )
-  GP=B and trace("\n\n >>>>>>>>> API[ LSTACK.DEBUG ] <<<<<<<<<< \n");
-  local meth = "lstack.debug()";
+local function localDebug( topRec, setting )
+  local meth = "localDebug()";
   local rc = 0;
 
   GP=E and trace("[ENTER]: <%s:%s> setting(%s)", MOD, meth, tostring(setting));
@@ -4939,22 +5159,336 @@ function lstack.debug( topRec, setting )
     rc = -1;
   end
   return rc;
-end -- lstack.debug()
+end -- localDebug()
+
 
 -- ======================================================================
--- This is needed to export the function table for this module
--- Leave this statement at the end of the module.
--- ==> Define all functions before this end section.
+-- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+-- LSTACK External Functions
+-- ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 -- ======================================================================
-return lstack;
+-- Notice the namechange -- we're no longer using the name convention:
+-- lstack_xxx(), e.g. lstack_create()
+-- we're now using just the name without the "lstack_" prefix.
+-- So, lstack_create() now becomes create().
+-- ======================================================================
+
+-- ======================================================================
+-- || create        ||
+-- || lstack_create ||
+-- ======================================================================
+-- Create/Initialize a Stack structure in a bin, using a single LSO
+-- bin, using User's name, but Aerospike TYPE (AS_LSO)
+--
+-- Notice that the "createSpec" can be either the old style map or the
+-- new style user modulename.
+--
+-- For this version of lstack, we will be using a LIST of two maps,
+-- which contain lots of metadata, plus one list:
+-- (*) Namespace Name (just one Namespace -- for now)
+-- (*) Set Name
+-- (*) Chunk Size (same for both namespaces)
+-- (*) Warm Chunk Count: Number of Warm Chunk Data Records
+-- (*) Cold Chunk Count: Number of Cold Chunk Data Records
+-- (*) Item Count (will NOT be tracked in Stoneman)
+-- (*) The List of Warm Chunks of data (each Chunk is a list)
+-- (*) The Head of the Cold Data Directory
+-- (*) Storage Mode (Compact or Regular) (0 for compact, 1 for regular)
+-- (*) Compact Item List
+--
+-- The LSO starts out in "Compact" mode, which allows the first 100 (or so)
+-- entries to be held directly in the record -- in the Hot List.  Once the
+-- Hot List overflows, the entries flow into the warm list, which is a
+-- list of LSO Data Records (each 2k record holds N values, where N is
+-- approximately (2k/rec size) ).
+-- Once the data overflows the warm list, it flows into the cold list,
+-- which is a linked list of directory pages -- where each directory page
+-- points to a list of LSO Data Record pages.  Each directory page holds
+-- roughly 100 page pointers (assuming a 2k page).
+-- Parms (inside argList)
+-- (1) topRec: the user-level record holding the LSO Bin
+-- (2) ldtBinName: The name of the LSO Bin
+-- (3) createSpec: The map (not list) of create parameters
+-- Result:
+--   rc = 0: ok
+--   rc < 0: Aerospike Errors
+--
 -- ========================================================================
+-- NEW EXTERNAL FUNCTIONS
+function create( topRec, ldtBinName, createSpec )
+  return localCreate( topRec, ldtBinName, createSpec );
+end
+
+-- OLD EXTERNAL FUNCTIONS
+function lstack_create( topRec, ldtBinName, createSpec )
+  return localCreate( topRec, ldtBinName, createSpec );
+end
+
+-- =======================================================================
+-- push()
+-- lstack_push()
+-- =======================================================================
+-- Push a value on the stack, with the optional parm to set the LDT
+-- configuration in case we have to create the LDT before calling the push.
+-- Notice that the "createSpec" can be either the old style map or the
+-- new style user modulename.
+-- These are the globally visible calls -- that call the local UDF to do
+-- all of the work.
+-- =======================================================================
+-- NEW EXTERNAL FUNCTIONS
+function push( topRec, ldtBinName, newValue, createSpec )
+  return localStackPush( topRec, ldtBinName, newValue, createSpec )
+end -- push()
+
+function create_and_push( topRec, ldtBinName, newValue, createSpec )
+  return localStackPush( topRec, ldtBinName, newValue, createSpec );
+end -- create_and_push()
+
+-- OLD EXTERNAL FUNCTIONS
+function lstack_push( topRec, ldtBinName, newValue, createSpec )
+  return localStackPush( topRec, ldtBinName, newValue, createSpec )
+end -- end lstack_push()
+
+function lstack_create_and_push( topRec, ldtBinName, newValue, createSpec )
+  return localStackPush( topRec, ldtBinName, newValue, createSpec );
+end -- lstack_create_and_push()
+
+-- =======================================================================
+-- Stack Push ALL
+-- =======================================================================
+-- Iterate thru the list and call localStackPush on each element
+-- Notice that the "createSpec" can be either the old style map or the
+-- new style user modulename.
+-- =======================================================================
+-- NEW EXTERNAL FUNCTIONS
+function push_all( topRec, ldtBinName, valueList, createSpec )
+  return localPushAll( topRec, ldtBinName, valueList, createSpec )
+end
+
+-- OLD EXTERNAL FUNCTIONS
+function lstack_push_all( topRec, ldtBinName, valueList, createSpec )
+  return localPushAll( topRec, ldtBinName, valueList, createSpec )
+end
+
+-- =======================================================================
+-- lstack_peek() -- with and without filters
+-- peek() -- with and without filters
+--
+-- These are the globally visible calls -- that call the local UDF to do
+-- all of the work.
+-- NOTE: Any parameter that might be printed (for trace/debug purposes)
+-- must be protected with "tostring()" so that we do not encounter a format
+-- error if the user passes in nil or any other incorrect value/type.
+-- =======================================================================
+-- NEW EXTERNAL FUNCTIONS
+function peek( topRec, ldtBinName, peekCount )
+  return localStackPeek( topRec, ldtBinName, peekCount, nil, nil, nil )
+end -- peek()
+
+function filter( topRec, ldtBinName, peekCount, userModule, filter, fargs )
+  return localStackPeek(topRec,ldtBinName,peekCount,userModule,filter,fargs );
+end -- peek_then_filter()
+
+-- OLD EXTERNAL FUNCTIONS (didn't have userModule in the first version)
+function lstack_peek( topRec, ldtBinName, peekCount )
+  return localStackPeek( topRec, ldtBinName, peekCount, nil, nil, nil )
+end -- lstack_peek()
+
+-- OLD EXTERNAL FUNCTIONS (didn't have userModule in the first version)
+function lstack_peek_then_filter( topRec, ldtBinName, peekCount, filter, fargs )
+  return localStackPeek( topRec, ldtBinName, peekCount, nil, filter, fargs );
+end -- lstack_peek_then_filter()
+
+-- ========================================================================
+-- get_size() -- return the number of elements (item count) in the stack.
+-- Parms:
+-- (1) topRec: the user-level record holding the LSO Bin
+-- (2) ldtBinName: The name of the LSO Bin
+-- Result:
+--   rc >= 0  (the size)
+--   rc < 0: Aerospike Errors
+-- NOTE: Any parameter that might be printed (for trace/debug purposes)
+-- must be protected with "tostring()" so that we do not encounter a format
+-- error if the user passes in nil or any other incorrect value/type.
+-- ========================================================================
+-- NEW EXTERNAL FUNCTIONS
+function size( topRec, ldtBinName )
+  return localGetSize( topRec, ldtBinName );
+end -- function size()
+
+function get_size( topRec, ldtBinName )
+  return localGetSize( topRec, ldtBinName );
+end -- function get_size()
+
+-- OLD EXTERNAL FUNCTIONS
+function lstack_size( topRec, ldtBinName )
+  return localGetSize( topRec, ldtBinName );
+end -- function get_size()
+
+-- ========================================================================
+-- get_capacity() -- return the current capacity setting for LSTACK.
+-- Parms:
+-- (1) topRec: the user-level record holding the LSO Bin
+-- (2) ldtBinName: The name of the LSO Bin
+-- Result:
+--   rc >= 0  (the current capacity)
+--   rc < 0: Aerospike Errors
+-- NOTE: Any parameter that might be printed (for trace/debug purposes)
+-- must be protected with "tostring()" so that we do not encounter a format
+-- error if the user passes in nil or any other incorrect value/type.
+-- ========================================================================
+-- NEW EXTERNAL FUNCTIONS
+function get_capacity( topRec, ldtBinName )
+  return localGetCapacity( topRec, ldtBinName );
+end
+
+-- OLD EXTERNAL FUNCTIONS
+function lstack_get_capacity( topRec, ldtBinName )
+  return localGetCapacity( topRec, ldtBinName );
+end
+
+-- ========================================================================
+-- get_config() -- return the lstack config settings.
+-- Parms:
+-- (1) topRec: the user-level record holding the LSO Bin
+-- (2) ldtBinName: The name of the LSO Bin
+-- Result:
+--   res = (when successful) config Map 
+--   res = (when error) nil
+-- NOTE: Any parameter that might be printed (for trace/debug purposes)
+-- must be protected with "tostring()" so that we do not encounter a format
+-- error if the user passes in nil or any other incorrect value/type.
+-- ========================================================================
+-- NEW EXTERNAL FUNCTIONS
+function get_config( topRec, ldtBinName )
+  return localConfig( topRec, ldtBinName );
+end
+
+-- OLD EXTERNAL FUNCTIONS
+function lstack_config( topRec, ldtBinName )
+  return localConfig( topRec, ldtBinName );
+end
+
+-- ========================================================================
+-- destroy() -- Remove the LDT entirely from the record.
+-- lstack_remove() -- Remove the LDT entirely from the record.
+-- ========================================================================
+-- Release all of the storage associated with this LDT and remove the
+-- control structure of the bin.  If this is the LAST LDT in the record,
+-- then ALSO remove the HIDDEN LDT CONTROL BIN.
+--
+-- Question  -- Reset the record[ldtBinName] to NIL (does that work??)
+-- Parms:
+-- (1) topRec: the user-level record holding the LSO Bin
+-- (2) binName: The name of the LSO Bin
+-- Result:
+--   res = 0: all is well
+--   res = -1: Some sort of error
+-- ========================================================================
+-- NEW EXTERNAL FUNCTIONS
+function destroy( topRec, ldtBinName )
+  return localLdtDestroy( topRec, ldtBinName );
+end -- destroy()
+
+-- OLD EXTERNAL FUNCTIONS
+function lstack_remove( topRec, ldtBinName )
+  return localLdtDestroy( topRec, ldtBinName );
+end -- lstack_remove()
+-- ========================================================================
+-- lstack_set_storage_limit()
+-- lstack_set_capacity()
+-- set_storage_limit()
+-- set_capacity()
+-- ========================================================================
+-- This is a special command to both set the new storage limit.  It does
+-- NOT release storage, however.  That is done either lazily after a 
+-- warm/cold insert or with an explit lstack_trim() command.
+-- Parms:
+-- (*) topRec: the user-level record holding the LSO Bin
+-- (*) ldtBinName: The name of the LSO Bin
+-- (*) newLimit: The new limit of the number of entries
+-- Result:
+--   res = 0: all is well
+--   res = -1: Some sort of error
+-- ========================================================================
+-- NEW EXTERNAL FUNCTIONS
+function lstack_set_capacity( topRec, ldtBinName, newLimit )
+  return localSetCapacity( topRec, ldtBinName, newLimit );
+end
+
+function set_capacity( topRec, ldtBinName, newLimit )
+  return localSetCapacity( topRec, ldtBinName, newLimit );
+end
+
+-- OLD EXTERNAL FUNCTIONS
+function lstack_set_storage_limit( topRec, ldtBinName, newLimit )
+  return localSetCapacity( topRec, ldtBinName, newLimit );
+end
+
+function set_storage_limit( topRec, ldtBinName, newLimit )
+  return localSetCapacity( topRec, ldtBinName, newLimit );
+end
+
+-- ========================================================================
+-- one()          -- Just return 1.  This is used for perf measurement.
+-- same()         -- Return Val parm.  Used for perf measurement.
+-- ========================================================================
+-- Do the minimal amount of work -- just return a number so that we
+-- can measure the overhead of the LDT/UDF infrastructure.
+-- Parms:
+-- (1) topRec: the user-level record holding the LSO Bin
+-- (2) Val:  Random number val (or nothing)
+-- Result:
+--   res = 1 or val
+-- ========================================================================
+function one( topRec, ldtBinName )
+  return 1;
+end
+
+function same( topRec, ldtBinName, val )
+  if( val == nil or type(val) ~= "number") then
+    return 1;
+  else
+    return val;
+  end
+end
+
+-- ========================================================================
+-- lstack_debug() -- Turn the debug setting on (1) or off (0)
+-- debug()        -- Turn the debug setting on (1) or off (0)
+-- one()          -- Just return 1.  This is used for perf measurement.
+-- same()         -- Return Val parm.  Used for perf measurement.
+-- ========================================================================
+-- Turning the debug setting "ON" pushes LOTS of output to the console.
+-- It would be nice if we could figure out how to make this setting change
+-- PERSISTENT. Until we do that, this will be a no-op.
+-- Parms:
+-- (1) topRec: the user-level record holding the LSO Bin
+-- (2) setting: 0 turns it off, anything else turns it on.
+-- Result:
+--   res = 0: all is well
+--   res = -1: Some sort of error
+-- ========================================================================
+-- NEW EXTERNAL FUNCTIONS
+function debug( topRec, setting )
+  return localDebug( topRec, setting );
+end
+
+-- OLD EXTERNAL FUNCTIONS
+function lstack_debug( topRec, setting )
+  return localDebug( topRec, setting );
+end
+
+-- ========================================================================
+-- ========================================================================
+
+-- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> --
 --   _      _____ _____ ___  _____  _   __
 --  | |    /  ___|_   _/ _ \/  __ \| | / /
 --  | |    \ `--.  | |/ /_\ \ /  \/| |/ / 
 --  | |     `--. \ | ||  _  | |    |    \ 
 --  | |____/\__/ / | || | | | \__/\| |\  \
---  \_____/\____/  \_/\_| |_/\____/\_| \_/   (LIB)
+--  \_____/\____/  \_/\_| |_/\____/\_| \_/
 --                                        
--- ========================================================================
 -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> -- <EOF> --
 --
