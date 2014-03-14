@@ -229,6 +229,7 @@
 					../../src/include,
 					/usr/local/include,
 				);
+				MACOSX_DEPLOYMENT_TARGET = 10.8;
 				OTHER_CFLAGS = "-D_DARWIN_UNLIMITED_SELECT";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
@@ -245,6 +246,7 @@
 					../../src/include,
 					/usr/local/include,
 				);
+				MACOSX_DEPLOYMENT_TARGET = 10.8;
 				OTHER_CFLAGS = "-D_DARWIN_UNLIMITED_SELECT";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};

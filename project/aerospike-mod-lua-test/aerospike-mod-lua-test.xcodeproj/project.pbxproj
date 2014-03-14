@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		BF2D79BC18D3AD67008947A5 /* libaerospike-common.a in Frameworks */ = {isa = PBXBuildFile; fileRef = BF2D79B918D3AD15008947A5 /* libaerospike-common.a */; };
 		BFC7B29E18C90BEE0047DA3C /* mod_lua_test.c in Sources */ = {isa = PBXBuildFile; fileRef = BFC7B29B18C90BEE0047DA3C /* mod_lua_test.c */; };
 		BFC7B29F18C90BEE0047DA3C /* test.c in Sources */ = {isa = PBXBuildFile; fileRef = BFC7B29C18C90BEE0047DA3C /* test.c */; };
 		BFC7B2A118C90C040047DA3C /* record_udf.c in Sources */ = {isa = PBXBuildFile; fileRef = BFC7B2A018C90C040047DA3C /* record_udf.c */; };
@@ -22,6 +23,20 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		BF2D79B818D3AD15008947A5 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = BF2D799E18D39D8B008947A5 /* aerospike-common.xcodeproj */;
+			proxyType = 2;
+			remoteGlobalIDString = BFBB7EEF18BFFD2D0080851E;
+			remoteInfo = "aerospike-common";
+		};
+		BF2D79BA18D3AD5F008947A5 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = BF2D799E18D39D8B008947A5 /* aerospike-common.xcodeproj */;
+			proxyType = 1;
+			remoteGlobalIDString = BFBB7EEE18BFFD2D0080851E;
+			remoteInfo = "aerospike-common";
+		};
 		BFC7B29918C90A2B0047DA3C /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = BFC7B29518C90A2B0047DA3C /* aerospike-mod-lua.xcodeproj */;
@@ -74,6 +89,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				BFC7B2B218C90E480047DA3C /* libaerospike-mod-lua.a in Frameworks */,
+				BF2D79BC18D3AD67008947A5 /* libaerospike-common.a in Frameworks */,
 				BFC7B2C318C91B0D0047DA3C /* liblua.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -81,6 +97,14 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		BF2D79B518D3AD15008947A5 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				BF2D79B918D3AD15008947A5 /* libaerospike-common.a */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
 		BFC7B28018C90A0A0047DA3C = {
 			isa = PBXGroup;
 			children = (
@@ -132,6 +156,7 @@
 			buildRules = (
 			);
 			dependencies = (
+				BF2D79BB18D3AD5F008947A5 /* PBXTargetDependency */,
 				BFC7B2B118C90E3A0047DA3C /* PBXTargetDependency */,
 			);
 			name = "aerospike-mod-lua-test";
@@ -160,6 +185,10 @@
 			projectDirPath = "";
 			projectReferences = (
 				{
+					ProductGroup = BF2D79B518D3AD15008947A5 /* Products */;
+					ProjectRef = BF2D799E18D39D8B008947A5 /* aerospike-common.xcodeproj */;
+				},
+				{
 					ProductGroup = BFC7B29618C90A2B0047DA3C /* Products */;
 					ProjectRef = BFC7B29518C90A2B0047DA3C /* aerospike-mod-lua.xcodeproj */;
 				},
@@ -172,6 +201,13 @@
 /* End PBXProject section */
 
 /* Begin PBXReferenceProxy section */
+		BF2D79B918D3AD15008947A5 /* libaerospike-common.a */ = {
+			isa = PBXReferenceProxy;
+			fileType = archive.ar;
+			path = "libaerospike-common.a";
+			remoteRef = BF2D79B818D3AD15008947A5 /* PBXContainerItemProxy */;
+			sourceTree = BUILT_PRODUCTS_DIR;
+		};
 		BFC7B29A18C90A2B0047DA3C /* libaerospike-mod-lua.a */ = {
 			isa = PBXReferenceProxy;
 			fileType = archive.ar;
@@ -202,6 +238,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		BF2D79BB18D3AD5F008947A5 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = "aerospike-common";
+			targetProxy = BF2D79BA18D3AD5F008947A5 /* PBXContainerItemProxy */;
+		};
 		BFC7B2B118C90E3A0047DA3C /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			name = "aerospike-mod-lua";
