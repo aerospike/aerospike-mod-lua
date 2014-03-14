@@ -332,7 +332,6 @@
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(AerospikeCommon)/target/Darwin-i386/lib",
-					"/Users/bnichols/common/target/Darwin-i386/lib",
 				);
 				OTHER_LDFLAGS = "-L/usr/local/lib";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -352,7 +351,6 @@
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(AerospikeCommon)/target/Darwin-i386/lib",
-					"/Users/bnichols/common/target/Darwin-i386/lib",
 				);
 				OTHER_LDFLAGS = "-L/usr/local/lib";
 				PRODUCT_NAME = "$(TARGET_NAME)";
