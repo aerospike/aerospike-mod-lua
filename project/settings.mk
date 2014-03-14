@@ -15,6 +15,14 @@ NAME = $(shell basename $(CURDIR))
 OS = $(shell uname)
 ARCH = $(shell arch)
 
+ifeq ($(OS),Darwin)
+DYNAMIC_SUFFIX=dylib
+DYNAMIC_FLAG=-dynamiclib
+else
+DYNAMIC_SUFFIX=so
+DYNAMIC_FLAG=-shared
+endif
+
 PROJECT = project
 MODULES = modules
 SOURCE  = src
@@ -161,7 +169,7 @@ endef
 
 define library
 	@if [ ! -d `dirname $@` ]; then mkdir -p `dirname $@`; fi
-	$(strip $(CC) -shared \
+	$(strip $(CC) $(DYNAMIC_FLAG) \
 		$(addprefix -I, $(INC_PATH)) \
 		$(addprefix -L, $(SUBMODULES:%=%/$(TARGET_LIB))) \
 		$(addprefix -L, $(LIB_PATH)) \

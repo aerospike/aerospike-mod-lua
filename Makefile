@@ -88,10 +88,10 @@ build-clean:
 	@rm -rf $(TARGET_BIN)
 	@rm -rf $(TARGET_LIB)
 
-.PHONY: libmod_lua libmod_lua.a libmod_lua.so
-libmod_lua: libmod_lua.a libmod_lua.so
+.PHONY: libmod_lua libmod_lua.a libmod_lua.$(DYNAMIC_SUFFIX)
+libmod_lua: libmod_lua.a libmod_lua.$(DYNAMIC_SUFFIX)
 libmod_lua.a: $(TARGET_LIB)/libmod_lua.a
-libmod_lua.so: $(TARGET_LIB)/libmod_lua.so
+libmod_lua.$(DYNAMIC_SUFFIX): $(TARGET_LIB)/libmod_lua.$(DYNAMIC_SUFFIX)
 
 ###############################################################################
 ##  BUILD TARGETS                                                            ##
@@ -100,7 +100,7 @@ libmod_lua.so: $(TARGET_LIB)/libmod_lua.so
 $(TARGET_OBJ)/%.o: COMMON-prepare $(SOURCE_MAIN)/%.c | modules-prepare
 	$(object)
 
-$(TARGET_LIB)/libmod_lua.a $(TARGET_LIB)/libmod_lua.so: $(MOD_LUA:%=$(TARGET_OBJ)/%) | $(COMMON)/$(TARGET_INCL)/aerospike
+$(TARGET_LIB)/libmod_lua.a $(TARGET_LIB)/libmod_lua.$(DYNAMIC_SUFFIX): $(MOD_LUA:%=$(TARGET_OBJ)/%) | $(COMMON)/$(TARGET_INCL)/aerospike
 
 $(TARGET_INCL)/aerospike: | $(TARGET_INCL)
 	mkdir $@

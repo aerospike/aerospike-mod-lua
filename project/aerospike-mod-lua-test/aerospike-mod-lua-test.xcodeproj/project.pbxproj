@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		BF2D79A418D39DA9008947A5 /* libaerospike-common.a in Frameworks */ = {isa = PBXBuildFile; fileRef = BF2D79A318D39D8B008947A5 /* libaerospike-common.a */; };
 		BFC7B29E18C90BEE0047DA3C /* mod_lua_test.c in Sources */ = {isa = PBXBuildFile; fileRef = BFC7B29B18C90BEE0047DA3C /* mod_lua_test.c */; };
 		BFC7B29F18C90BEE0047DA3C /* test.c in Sources */ = {isa = PBXBuildFile; fileRef = BFC7B29C18C90BEE0047DA3C /* test.c */; };
 		BFC7B2A118C90C040047DA3C /* record_udf.c in Sources */ = {isa = PBXBuildFile; fileRef = BFC7B2A018C90C040047DA3C /* record_udf.c */; };
@@ -18,11 +19,24 @@
 		BFC7B2AD18C90C4C0047DA3C /* test_logger.c in Sources */ = {isa = PBXBuildFile; fileRef = BFC7B2A818C90C4C0047DA3C /* test_logger.c */; };
 		BFC7B2AF18C90C5D0047DA3C /* validation_basics.c in Sources */ = {isa = PBXBuildFile; fileRef = BFC7B2AE18C90C5D0047DA3C /* validation_basics.c */; };
 		BFC7B2B218C90E480047DA3C /* libaerospike-mod-lua.a in Frameworks */ = {isa = PBXBuildFile; fileRef = BFC7B29A18C90A2B0047DA3C /* libaerospike-mod-lua.a */; };
-		BFC7B2C018C919050047DA3C /* libaerospike-common.a in Frameworks */ = {isa = PBXBuildFile; fileRef = BFC7B2BF18C919050047DA3C /* libaerospike-common.a */; };
 		BFC7B2C318C91B0D0047DA3C /* liblua.a in Frameworks */ = {isa = PBXBuildFile; fileRef = BFC7B2C118C91A4D0047DA3C /* liblua.a */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		BF2D79A218D39D8B008947A5 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = BF2D799E18D39D8B008947A5 /* aerospike-common.xcodeproj */;
+			proxyType = 2;
+			remoteGlobalIDString = BFBB7EEF18BFFD2D0080851E;
+			remoteInfo = "aerospike-common";
+		};
+		BF2D79A518D39DE3008947A5 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = BF2D799E18D39D8B008947A5 /* aerospike-common.xcodeproj */;
+			proxyType = 1;
+			remoteGlobalIDString = BFBB7EEE18BFFD2D0080851E;
+			remoteInfo = "aerospike-common";
+		};
 		BFC7B29918C90A2B0047DA3C /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = BFC7B29518C90A2B0047DA3C /* aerospike-mod-lua.xcodeproj */;
@@ -52,6 +66,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		BF2D799E18D39D8B008947A5 /* aerospike-common.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = "aerospike-common.xcodeproj"; path = "../../../common/project/aerospike-common/aerospike-common.xcodeproj"; sourceTree = "<group>"; };
 		BFC7B28918C90A0A0047DA3C /* aerospike-mod-lua-test */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "aerospike-mod-lua-test"; sourceTree = BUILT_PRODUCTS_DIR; };
 		BFC7B29518C90A2B0047DA3C /* aerospike-mod-lua.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = "aerospike-mod-lua.xcodeproj"; path = "../aerospike-mod-lua/aerospike-mod-lua.xcodeproj"; sourceTree = "<group>"; };
 		BFC7B29B18C90BEE0047DA3C /* mod_lua_test.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = mod_lua_test.c; path = ../../src/test/mod_lua_test.c; sourceTree = "<group>"; };
@@ -65,7 +80,6 @@
 		BFC7B2A718C90C4C0047DA3C /* test_aerospike.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = test_aerospike.c; path = ../../src/test/util/test_aerospike.c; sourceTree = "<group>"; };
 		BFC7B2A818C90C4C0047DA3C /* test_logger.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = test_logger.c; path = ../../src/test/util/test_logger.c; sourceTree = "<group>"; };
 		BFC7B2AE18C90C5D0047DA3C /* validation_basics.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = validation_basics.c; path = ../../src/test/validation/validation_basics.c; sourceTree = "<group>"; };
-		BFC7B2BF18C919050047DA3C /* libaerospike-common.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = "libaerospike-common.a"; path = "target/Darwin-i386/lib/libaerospike-common.a"; sourceTree = AerospikeCommon; };
 		BFC7B2C118C91A4D0047DA3C /* liblua.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = liblua.a; path = ../../../../../usr/local/lib/liblua.a; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -74,20 +88,28 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				BFC7B2C318C91B0D0047DA3C /* liblua.a in Frameworks */,
-				BFC7B2C018C919050047DA3C /* libaerospike-common.a in Frameworks */,
 				BFC7B2B218C90E480047DA3C /* libaerospike-mod-lua.a in Frameworks */,
+				BF2D79A418D39DA9008947A5 /* libaerospike-common.a in Frameworks */,
+				BFC7B2C318C91B0D0047DA3C /* liblua.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		BF2D799F18D39D8B008947A5 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				BF2D79A318D39D8B008947A5 /* libaerospike-common.a */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
 		BFC7B28018C90A0A0047DA3C = {
 			isa = PBXGroup;
 			children = (
+				BF2D799E18D39D8B008947A5 /* aerospike-common.xcodeproj */,
 				BFC7B2C118C91A4D0047DA3C /* liblua.a */,
-				BFC7B2BF18C919050047DA3C /* libaerospike-common.a */,
 				BFC7B2AE18C90C5D0047DA3C /* validation_basics.c */,
 				BFC7B2A418C90C4C0047DA3C /* consumer_stream.c */,
 				BFC7B2A518C90C4C0047DA3C /* map_rec.c */,
@@ -134,6 +156,7 @@
 			buildRules = (
 			);
 			dependencies = (
+				BF2D79A618D39DE3008947A5 /* PBXTargetDependency */,
 				BFC7B2B118C90E3A0047DA3C /* PBXTargetDependency */,
 			);
 			name = "aerospike-mod-lua-test";
@@ -162,6 +185,10 @@
 			projectDirPath = "";
 			projectReferences = (
 				{
+					ProductGroup = BF2D799F18D39D8B008947A5 /* Products */;
+					ProjectRef = BF2D799E18D39D8B008947A5 /* aerospike-common.xcodeproj */;
+				},
+				{
 					ProductGroup = BFC7B29618C90A2B0047DA3C /* Products */;
 					ProjectRef = BFC7B29518C90A2B0047DA3C /* aerospike-mod-lua.xcodeproj */;
 				},
@@ -174,6 +201,13 @@
 /* End PBXProject section */
 
 /* Begin PBXReferenceProxy section */
+		BF2D79A318D39D8B008947A5 /* libaerospike-common.a */ = {
+			isa = PBXReferenceProxy;
+			fileType = archive.ar;
+			path = "libaerospike-common.a";
+			remoteRef = BF2D79A218D39D8B008947A5 /* PBXContainerItemProxy */;
+			sourceTree = BUILT_PRODUCTS_DIR;
+		};
 		BFC7B29A18C90A2B0047DA3C /* libaerospike-mod-lua.a */ = {
 			isa = PBXReferenceProxy;
 			fileType = archive.ar;
@@ -204,6 +238,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		BF2D79A618D39DE3008947A5 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = "aerospike-common";
+			targetProxy = BF2D79A518D39DE3008947A5 /* PBXContainerItemProxy */;
+		};
 		BFC7B2B118C90E3A0047DA3C /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			name = "aerospike-mod-lua";
@@ -286,14 +325,14 @@
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					"$(AerospikeCommon)/src/include",
 					../../src/include,
-					../../../common/src/include,
-					../../../common/src/default/include,
 					/usr/local/include,
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(AerospikeCommon)/target/Darwin-i386/lib",
+					"/Users/bnichols/common/target/Darwin-i386/lib",
 				);
 				OTHER_LDFLAGS = "-L/usr/local/lib";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -306,14 +345,14 @@
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					"$(AerospikeCommon)/src/include",
 					../../src/include,
-					../../../common/src/include,
-					../../../common/src/default/include,
 					/usr/local/include,
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(AerospikeCommon)/target/Darwin-i386/lib",
+					"/Users/bnichols/common/target/Darwin-i386/lib",
 				);
 				OTHER_LDFLAGS = "-L/usr/local/lib";
 				PRODUCT_NAME = "$(TARGET_NAME)";
