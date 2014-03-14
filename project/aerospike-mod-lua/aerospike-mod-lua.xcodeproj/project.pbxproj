@@ -225,10 +225,9 @@
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					"$(AerospikeCommon)/src/include",
 					../../src/include,
 					/usr/local/include,
-					../../../common/src/include,
-					../../../common/src/default/include,
 				);
 				OTHER_CFLAGS = "-D_DARWIN_UNLIMITED_SELECT";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -242,10 +241,9 @@
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					"$(AerospikeCommon)/src/include",
 					../../src/include,
 					/usr/local/include,
-					../../../common/src/include,
-					../../../common/src/default/include,
 				);
 				OTHER_CFLAGS = "-D_DARWIN_UNLIMITED_SELECT";
 				PRODUCT_NAME = "$(TARGET_NAME)";
