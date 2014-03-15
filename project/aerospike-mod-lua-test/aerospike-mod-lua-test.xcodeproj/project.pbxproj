@@ -66,7 +66,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		BF2D799E18D39D8B008947A5 /* aerospike-common.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = "aerospike-common.xcodeproj"; path = "project/aerospike-common/aerospike-common.xcodeproj"; sourceTree = AerospikeCommon; };
+		BF2D799E18D39D8B008947A5 /* aerospike-common.xcodeproj */ = {isa = PBXFileReference; name = "aerospike-common.xcodeproj"; path = "project/aerospike-common/aerospike-common.xcodeproj"; sourceTree = AerospikeCommon; };
 		BFC7B28918C90A0A0047DA3C /* aerospike-mod-lua-test */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "aerospike-mod-lua-test"; sourceTree = BUILT_PRODUCTS_DIR; };
 		BFC7B29518C90A2B0047DA3C /* aerospike-mod-lua.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = "aerospike-mod-lua.xcodeproj"; path = "../aerospike-mod-lua/aerospike-mod-lua.xcodeproj"; sourceTree = "<group>"; };
 		BFC7B29B18C90BEE0047DA3C /* mod_lua_test.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = mod_lua_test.c; path = ../../src/test/mod_lua_test.c; sourceTree = "<group>"; };
