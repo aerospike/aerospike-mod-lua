@@ -22,17 +22,17 @@
 
 /* Begin PBXFileReference section */
 		BFBB7F5118C0105A0080851E /* libaerospike-mod-lua.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libaerospike-mod-lua.a"; sourceTree = BUILT_PRODUCTS_DIR; };
-		BFBB7F5918C011A00080851E /* mod_lua_aerospike.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = mod_lua_aerospike.c; path = ../../src/main/mod_lua_aerospike.c; sourceTree = "<group>"; };
-		BFBB7F5A18C011A00080851E /* mod_lua_bytes.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = mod_lua_bytes.c; path = ../../src/main/mod_lua_bytes.c; sourceTree = "<group>"; };
-		BFBB7F5B18C011A10080851E /* mod_lua_iterator.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = mod_lua_iterator.c; path = ../../src/main/mod_lua_iterator.c; sourceTree = "<group>"; };
-		BFBB7F5C18C011A10080851E /* mod_lua_list.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = mod_lua_list.c; path = ../../src/main/mod_lua_list.c; sourceTree = "<group>"; };
-		BFBB7F5D18C011A10080851E /* mod_lua_map.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = mod_lua_map.c; path = ../../src/main/mod_lua_map.c; sourceTree = "<group>"; };
-		BFBB7F5E18C011A10080851E /* mod_lua_record.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = mod_lua_record.c; path = ../../src/main/mod_lua_record.c; sourceTree = "<group>"; };
-		BFBB7F5F18C011A10080851E /* mod_lua_reg.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = mod_lua_reg.c; path = ../../src/main/mod_lua_reg.c; sourceTree = "<group>"; };
-		BFBB7F6018C011A10080851E /* mod_lua_stream.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = mod_lua_stream.c; path = ../../src/main/mod_lua_stream.c; sourceTree = "<group>"; };
-		BFBB7F6118C011A10080851E /* mod_lua_val.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = mod_lua_val.c; path = ../../src/main/mod_lua_val.c; sourceTree = "<group>"; };
-		BFBB7F6218C011A10080851E /* mod_lua.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = mod_lua.c; path = ../../src/main/mod_lua.c; sourceTree = "<group>"; };
-		BFBB7F6D18C011BC0080851E /* internal.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = internal.c; path = ../../src/main/internal.c; sourceTree = "<group>"; };
+		BFBB7F5918C011A00080851E /* mod_lua_aerospike.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = mod_lua_aerospike.c; path = ../src/main/mod_lua_aerospike.c; sourceTree = "<group>"; };
+		BFBB7F5A18C011A00080851E /* mod_lua_bytes.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = mod_lua_bytes.c; path = ../src/main/mod_lua_bytes.c; sourceTree = "<group>"; };
+		BFBB7F5B18C011A10080851E /* mod_lua_iterator.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = mod_lua_iterator.c; path = ../src/main/mod_lua_iterator.c; sourceTree = "<group>"; };
+		BFBB7F5C18C011A10080851E /* mod_lua_list.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = mod_lua_list.c; path = ../src/main/mod_lua_list.c; sourceTree = "<group>"; };
+		BFBB7F5D18C011A10080851E /* mod_lua_map.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = mod_lua_map.c; path = ../src/main/mod_lua_map.c; sourceTree = "<group>"; };
+		BFBB7F5E18C011A10080851E /* mod_lua_record.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = mod_lua_record.c; path = ../src/main/mod_lua_record.c; sourceTree = "<group>"; };
+		BFBB7F5F18C011A10080851E /* mod_lua_reg.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = mod_lua_reg.c; path = ../src/main/mod_lua_reg.c; sourceTree = "<group>"; };
+		BFBB7F6018C011A10080851E /* mod_lua_stream.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = mod_lua_stream.c; path = ../src/main/mod_lua_stream.c; sourceTree = "<group>"; };
+		BFBB7F6118C011A10080851E /* mod_lua_val.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = mod_lua_val.c; path = ../src/main/mod_lua_val.c; sourceTree = "<group>"; };
+		BFBB7F6218C011A10080851E /* mod_lua.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = mod_lua.c; path = ../src/main/mod_lua.c; sourceTree = "<group>"; };
+		BFBB7F6D18C011BC0080851E /* internal.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = internal.c; path = ../src/main/internal.c; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -226,7 +226,7 @@
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					"$(AerospikeCommon)/src/include",
-					../../src/include,
+					../src/include,
 					/usr/local/include,
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.8;
@@ -244,7 +244,7 @@
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					"$(AerospikeCommon)/src/include",
-					../../src/include,
+					../src/include,
 					/usr/local/include,
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.8;
