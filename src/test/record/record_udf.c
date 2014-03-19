@@ -88,7 +88,6 @@ static bool before(atf_suite * suite)
     };
 
     char * system_path = getenv("AS_SYSTEM_LUA");
-    printf("AS_SYSTEM_LUA: %s\n", system_path);
     if ( system_path != NULL ) {
 	    strncpy(config.system_path, system_path, 255);
 	    config.system_path[255] = '\0';
