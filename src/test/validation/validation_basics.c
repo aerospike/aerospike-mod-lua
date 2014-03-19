@@ -135,12 +135,23 @@ static bool before(atf_suite * suite) {
 
 	test_aerospike_init(&as);
 
-	mod_lua_config config = {
-		.server_mode    = true,
-		.cache_enabled  = false,
-		.system_path    = "src/lua",
-		.user_path      = "src/test/lua"
-	};
+    mod_lua_config config = {
+        .server_mode    = true,
+        .cache_enabled  = false,
+        .system_path    = {'\0'},
+        .user_path      = "src/test/lua"
+    };
+
+    char * system_path = getenv("AS_SYSTEM_LUA");
+    printf("AS_SYSTEM_LUA: %s\n", system_path);
+    if ( system_path != NULL ) {
+	    strncpy(config.system_path, system_path, 255);
+	    config.system_path[255] = '\0';
+    }
+    else {
+    	error("environment variable 'AS_SYSTEM_LUA' should be set to point to the directory containing system lua files.")
+    	return false;
+    }
 
 	if ( mod_lua.logger == NULL ) {
 		mod_lua.logger = test_logger_new();
