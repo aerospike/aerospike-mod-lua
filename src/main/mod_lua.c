@@ -738,7 +738,7 @@ static int apply(lua_State * l, as_udf_context *udf_ctx, int err, int argc, as_r
 
 	as_logger_trace(mod_lua.logger, "apply");
 
-	as_timer *timer = as_udf_context_get_timer(udf_ctx);
+	as_timer *timer = udf_ctx->timer;
 
 	void hook(lua_State *L, lua_Debug *ar)
 	{
@@ -1013,7 +1013,7 @@ static int apply_record(as_module * m, as_udf_context * udf_ctx, const char * fi
 	lua_State * l       = (lua_State *) NULL;       // Lua State
 	int         argc    = 0;                        // Number of arguments pushed onto the stack
 	int         err     = 0;                        // Error handler
-	as_aerospike *as    = as_udf_context_get_aerospike(udf_ctx); // aerospike object 
+	as_aerospike *as    = udf_ctx->as;              // aerospike object 
 	
 	pthread_rwlock_rdlock(ctx->lock);
 	rc = verify_environment(ctx, as);
@@ -1110,7 +1110,7 @@ static int apply_stream(as_module * m, as_udf_context *udf_ctx, const char * fil
 	lua_State * l       = (lua_State *) NULL;   // Lua State
 	int         argc    = 0;                    // Number of arguments pushed onto the stack
 	int         err     = 0;                    // Error handler
-	as_aerospike *as    = as_udf_context_get_aerospike(udf_ctx); // aerospike object 
+	as_aerospike *as    = udf_ctx->as;          // aerospike object 
 	
 	pthread_rwlock_rdlock(ctx->lock);
 	rc = verify_environment(ctx, as);
