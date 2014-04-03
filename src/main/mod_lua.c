@@ -136,8 +136,8 @@ static context mod_lua_source = {
  ******************************************************************************/
 
 static int update(as_module *, as_module_event *);
-static int apply_record(as_module *, as_aerospike *, const char *, const char *, as_rec *, as_list *, as_result *);
-static int apply_stream(as_module *, as_aerospike *, const char *, const char *, as_stream *, as_list *, as_stream *);
+static int apply_record(as_module *, as_udf_context *, const char *, const char *, as_rec *, as_list *, as_result *);
+static int apply_stream(as_module *, as_udf_context *, const char *, const char *, as_stream *, as_list *, as_stream *);
 
 static lua_State * create_state(context *, const char *filename);
 static int poll_state(context *, cache_item *);
@@ -734,10 +734,24 @@ static int handle_error(lua_State * l) {
 	return 0;
 }
 
-static int apply(lua_State * l, int err, int argc, as_result * res) {
+static int apply(lua_State * l, as_udf_context *udf_ctx, int err, int argc, as_result * res) {
 
 	as_logger_trace(mod_lua.logger, "apply");
 
+	as_timer *timer = udf_ctx->timer;
+
+	void hook(lua_State *L, lua_Debug *ar)
+	{
+		if (ar->event == LUA_HOOKCOUNT) {
+			if (as_timer_timedout(timer)) {
+				luaL_error(L, "UDF Execution Timeout");
+			} 
+		}
+	}
+
+	if (timer) {
+		lua_sethook(l, &hook, LUA_MASKCOUNT, as_timer_timeslice(timer)); 
+	}
 	// call apply_record(f, r, ...)
 	as_logger_trace(mod_lua.logger, "call function");
 	int rc = lua_pcall(l, argc, 1, err);
@@ -985,19 +999,21 @@ Cleanup:
  * TODO: Remove redunancies between apply_record() and apply_stream()
  *
  * @param m module from which the fqn will be resolved.
+ * @param udf_ctx udf execution context
  * @param f fully-qualified name of the function to invoke.
  * @param r record to apply to the function.
  * @param args list of arguments for the function represented as vals 
  * @param result pointer to a val that will be populated with the result.
  * @return 0 on success, otherwise 1
  */
-static int apply_record(as_module * m, as_aerospike * as, const char * filename, const char * function, as_rec * r, as_list * args, as_result * res) {
+static int apply_record(as_module * m, as_udf_context * udf_ctx, const char * filename, const char * function, as_rec * r, as_list * args, as_result * res) {
 
 	int         rc      = 0;
 	context *   ctx     = (context *) m->source;    // mod-lua context
 	lua_State * l       = (lua_State *) NULL;       // Lua State
 	int         argc    = 0;                        // Number of arguments pushed onto the stack
 	int         err     = 0;                        // Error handler
+	as_aerospike *as    = udf_ctx->as;              // aerospike object 
 	
 	pthread_rwlock_rdlock(ctx->lock);
 	rc = verify_environment(ctx, as);
@@ -1058,7 +1074,7 @@ static int apply_record(as_module * m, as_aerospike * as, const char * filename,
 	
 	// apply the function
 	as_logger_trace(mod_lua.logger, "apply_record: apply the function");
-	rc = apply(l, err, argc, res);
+	rc = apply(l, udf_ctx, err, argc, res);
 
 	// return the state
 	pthread_rwlock_rdlock(ctx->lock);
@@ -1080,19 +1096,21 @@ static int apply_record(as_module * m, as_aerospike * as, const char * filename,
  * TODO: Remove redunancies between apply_record() and apply_stream()
  *
  * @param m module from which the fqn will be resolved.
+ * @param udf_ctx udf execution context
  * @param f fully-qualified name of the function to invoke.
  * @param s stream to apply to the function.
  * @param args list of arguments for the function represented as vals 
  * @param result pointer to a val that will be populated with the result.
  * @return 0 on success, otherwise 1
  */
-static int apply_stream(as_module * m, as_aerospike * as, const char * filename, const char * function, as_stream * istream, as_list * args, as_stream * ostream) {
+static int apply_stream(as_module * m, as_udf_context *udf_ctx, const char * filename, const char * function, as_stream * istream, as_list * args, as_stream * ostream) {
 
 	int         rc      = 0;
 	context *   ctx     = (context *) m->source;    // mod-lua context
 	lua_State * l       = (lua_State *) NULL;   // Lua State
 	int         argc    = 0;                    // Number of arguments pushed onto the stack
 	int         err     = 0;                    // Error handler
+	as_aerospike *as    = udf_ctx->as;          // aerospike object 
 	
 	pthread_rwlock_rdlock(ctx->lock);
 	rc = verify_environment(ctx, as);
@@ -1161,7 +1179,7 @@ static int apply_stream(as_module * m, as_aerospike * as, const char * filename,
 	
 	// call apply_stream(f, s, ...)
 	as_logger_trace(mod_lua.logger, "apply_stream: apply the function");
-	rc = apply(l, err, argc, NULL);
+	rc = apply(l, udf_ctx, err, argc, NULL);
 
 	// release the context
 	pthread_rwlock_rdlock(ctx->lock);
@@ -1216,6 +1234,5 @@ static const as_module_hooks mod_lua_hooks = {
 as_module mod_lua = {
 	.source         = &mod_lua_source,
 	.logger         = NULL,
-	.memtracker     = NULL,
 	.hooks          = &mod_lua_hooks
 };

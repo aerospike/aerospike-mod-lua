@@ -18,6 +18,7 @@
  *****************************************************************************/
 
 static as_aerospike as;
+static as_udf_context ctx;
 
 /******************************************************************************
  * TEST CASES
@@ -34,7 +35,7 @@ TEST( record_udf_1, "echo bin a of {a = 123, b = 456 }" )
 
     as_result * res = as_success_new(NULL);
 
-    int rc = as_module_apply_record(&mod_lua, &as, "records", "getbin", rec, arglist, res);
+    int rc = as_module_apply_record(&mod_lua, &ctx, "records", "getbin", rec, arglist, res);
 
     assert_int_eq( rc, 0 );
     assert_true( res->is_success );
@@ -59,7 +60,7 @@ TEST( record_udf_2, "concat bins a and b of {a = 'abc', b = 'def' }" )
 
     as_result * res = as_success_new(NULL);
 
-    int rc = as_module_apply_record(&mod_lua, &as, "records", "cat", rec, arglist, res);
+    int rc = as_module_apply_record(&mod_lua, &ctx, "records", "cat", rec, arglist, res);
 
     assert_int_eq( rc, 0);
     assert_true( res->is_success );
@@ -79,6 +80,7 @@ static bool before(atf_suite * suite)
 {
 
     test_aerospike_init(&as);
+	ctx.as = &as;
 
     mod_lua_config config = {
         .server_mode    = true,
