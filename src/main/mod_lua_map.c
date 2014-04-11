@@ -123,9 +123,12 @@ static int mod_lua_map_newindex(lua_State * l) {
     if ( map ) {
         as_val * key = mod_lua_takeval(l, 2);
         as_val * val = mod_lua_takeval(l, 3); 
-        if ( !key || !val ) {
+        if ( !key ) {
             as_val_destroy(key);
             as_val_destroy(val);
+        } 
+		else if ( !val ) {
+        	as_map_remove(map, key);
         }
         else {
             as_map_set(map, key, val);
