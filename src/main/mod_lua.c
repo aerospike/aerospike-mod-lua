@@ -738,6 +738,7 @@ static int apply(lua_State * l, as_udf_context *udf_ctx, int err, int argc, as_r
 
 	as_logger_trace(mod_lua.logger, "apply");
 
+#ifndef LUA_DEBUG_HOOK 
 	as_timer *timer = udf_ctx->timer;
 
 	void hook(lua_State *L, lua_Debug *ar)
@@ -752,6 +753,7 @@ static int apply(lua_State * l, as_udf_context *udf_ctx, int err, int argc, as_r
 	if (timer) {
 		lua_sethook(l, &hook, LUA_MASKCOUNT, as_timer_timeslice(timer)); 
 	}
+#endif 
 	// call apply_record(f, r, ...)
 	as_logger_trace(mod_lua.logger, "call function");
 	int rc = lua_pcall(l, argc, 1, err);
