@@ -1,4 +1,5 @@
 #include "test.h"
+#include "citrusleaf/alloc.h"
 #include "citrusleaf/cf_types.h"
 
 /******************************************************************************
@@ -20,7 +21,7 @@ atf_test_result * atf_test_run(atf_test * test) {
 }
 
 atf_test_result * atf_test_result_new(atf_test * test) {
-    atf_test_result * res = (atf_test_result *) malloc(sizeof(atf_test_result));
+    atf_test_result * res = (atf_test_result *) cf_malloc(sizeof(atf_test_result));
     res->test = test;
     res->success = true;
     res->message[0] = '\0';
@@ -28,7 +29,7 @@ atf_test_result * atf_test_result_new(atf_test * test) {
 }
 
 void atf_test_result_free(atf_test_result * test_result) {
-    free(test_result);
+    cf_free(test_result);
 }
 
 /******************************************************************************
@@ -107,7 +108,7 @@ void atf_suite_result_print(atf_suite_result * suite_result) {
 }
 
 atf_suite_result * atf_suite_result_new(atf_suite * suite) {
-    atf_suite_result * res = (atf_suite_result *) malloc(sizeof(atf_suite_result));
+    atf_suite_result * res = (atf_suite_result *) cf_malloc(sizeof(atf_suite_result));
     res->suite = suite;
     res->size = 0;
     res->success = 0;
@@ -115,7 +116,7 @@ atf_suite_result * atf_suite_result_new(atf_suite * suite) {
 }
 
 void atf_suite_result_free(atf_suite_result * suite_result) {
-    free(suite_result);
+    cf_free(suite_result);
 }
 
 atf_suite_result * atf_suite_result_add(atf_suite_result * suite_result, atf_test_result * test_result) {

@@ -233,7 +233,7 @@ static int mod_lua_list_tostring(lua_State * l) {
 
     if ( str ) {
         lua_pushstring(l, str);
-        free(str);
+        cf_free(str);
     }
     else {
         lua_pushstring(l, "List()");

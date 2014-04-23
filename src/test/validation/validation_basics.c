@@ -47,9 +47,9 @@ static int readfile(const char * filename, char ** content, uint32_t * size) {
 	} 
 
 	if ( content_v == NULL ) {
-		content_v = (uint8_t *) malloc(SCRIPT_LEN_MAX); 
+		content_v = (uint8_t *) cf_malloc(SCRIPT_LEN_MAX);
 		if ( content_v == NULL ) { 
-			error("malloc failed"); 
+			error("cf_malloc failed");
 			return -2;
 		}
 	}

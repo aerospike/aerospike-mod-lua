@@ -72,7 +72,7 @@ static as_val * map_rec_get(const as_rec * r, const char * name)
 static int map_rec_set(const as_rec * r, const char * name, const as_val * value)
 {
     as_map * m = (as_map *) r->data;
-    return as_map_set(m, (as_val *) as_string_new(strdup(name),true), (as_val *) value);
+    return as_map_set(m, (as_val *) as_string_new(cf_strdup(name),true), (as_val *) value);
 }
 
 static int map_rec_remove(const as_rec * r, const char * name)

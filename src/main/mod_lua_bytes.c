@@ -208,7 +208,7 @@ static int mod_lua_bytes_tostring(lua_State * l)
 
 	if ( str ) {
 		lua_pushstring(l, str);
-		free(str);
+		cf_free(str);
 	}
 	else {
 		lua_pushstring(l, "Bytes()");
@@ -1085,7 +1085,7 @@ static int mod_lua_bytes_get_string(lua_State * l)
 
 	uint32_t pos = (uint32_t)(i - 1);
 	uint32_t len = (uint32_t) n;
-	char *   val = (char *) calloc(len + 1, sizeof(char));
+	char *   val = (char *) cf_calloc(len + 1, sizeof(char));
 
 	if ( !val ) {
 		return 0;
@@ -1136,7 +1136,7 @@ static int mod_lua_bytes_get_bytes(lua_State * l)
 
 	uint32_t pos = (uint32_t)(i - 1);
 	uint32_t len = (uint32_t) n;
-	uint8_t * raw = (uint8_t *) calloc(len, sizeof(uint8_t));
+	uint8_t * raw = (uint8_t *) cf_calloc(len, sizeof(uint8_t));
 
 	if ( !raw ) {
 		return 0;

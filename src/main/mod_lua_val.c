@@ -62,7 +62,7 @@ as_val * mod_lua_toval(lua_State * l, int i) {
             return (as_val *) as_boolean_new(lua_toboolean(l, i));
         }
         case LUA_TSTRING : {
-            return (as_val *) as_string_new(strdup(lua_tostring(l, i)), true);
+            return (as_val *) as_string_new(cf_strdup(lua_tostring(l, i)), true);
         }
         case LUA_TUSERDATA : {
             mod_lua_box * box = (mod_lua_box *) lua_touserdata(l, i);

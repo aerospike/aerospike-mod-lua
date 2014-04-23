@@ -820,16 +820,16 @@ char * as_module_err_string(int err_no) {
 	char *rs;
 	switch(err_no) {
 		case -1: 
-			rs = strdup("UDF: Mod-Lua system path not found");
+			rs = cf_strdup("UDF: Mod-Lua system path not found");
 			break;
 		case -2:
-			rs = strdup("UDF: Mod-Lua user path not found");
+			rs = cf_strdup("UDF: Mod-Lua user path not found");
 			break;
 		case -3: 
-			rs = strdup("UDF: Mod-Lua system and user path not found");
+			rs = cf_strdup("UDF: Mod-Lua system and user path not found");
 			break;
 		default:
-			rs = malloc(sizeof(char) * 128);
+			rs = cf_malloc(sizeof(char) * 128);
 			sprintf(rs, "UDF: Excution Error - Check Logs %d", err_no);
 			break;
 	}
