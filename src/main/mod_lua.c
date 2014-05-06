@@ -63,7 +63,7 @@ pthread_rwlock_t g_cache_lock = PTHREAD_RWLOCK_INITIALIZER;
  * MACROS
  ******************************************************************************/
 
-#define CACHE_TABLE_ENTRY_MAX 128
+#define CACHE_TABLE_ENTRY_MAX 128 // Doesn't appear to be used
 #define CACHE_ENTRY_KEY_MAX 128
 #define CACHE_ENTRY_GEN_MAX 128
 #define CACHE_ENTRY_STATE_MAX 128
@@ -216,7 +216,8 @@ int cache_init(context * ctx, const char *key, const char * gen) {
 		centry = cf_rc_alloc(sizeof(cache_entry)); 
 		cf_atomic32_set(&centry->total, 0);
 		cf_atomic32_set(&centry->cache_miss, 0);
-		centry->max_cache_size = CACHE_ENTRY_STATE_MAX;
+		// Start Small and grow (as necessary) up to the max
+		centry->max_cache_size = CACHE_ENTRY_STATE_MIN;
 		centry->lua_state_q = cf_queue_create(sizeof(lua_State *), true);
 		cache_entry_init(ctx, centry, key, gen);
 		int retval = cf_rchash_put(centry_hash, (void *)key, (uint32_t)strlen(key), (void *)centry);
@@ -612,8 +613,7 @@ static int poll_state(context * ctx, cache_item * citem) {
 				citem->state = NULL;
 			}
 			total = cf_atomic32_incr(&centry->total);
-			if (((miss * 100 / total) > 1) && 
-					(total > 100000)) {
+			if (((miss * 100 / total) > 1) &&  (total > 100000)) {
 				centry->max_cache_size++;
 				if (centry->max_cache_size > CACHE_ENTRY_STATE_MAX)
 					centry->max_cache_size = CACHE_ENTRY_STATE_MAX; 
@@ -654,11 +654,16 @@ static int poll_state(context * ctx, cache_item * citem) {
 static int offer_state(context * ctx, cache_item * citem) {
 
 	if ( ctx->config.cache_enabled == true ) {
-		// Runnig GCCOLLECT is overkill because with every execution
+		// Runnig LUA_GCCOLLECT is overkill because with every execution
 		// lua itself does a garbage collection. Also do garbage 
-		// collection outside the spinlock. arg for GCSTEP 2 is a 
-		// random number. Experiment to get better number.
-		lua_gc(citem->state, LUA_GCSTEP, 2);
+		// collection outside the spinlock.
+		// Raj claims that MUCH experimentation has been done and that "2" is
+		// in fact a GREAT number.  (tjl: April 2014)
+		// lua_gc(citem->state, LUA_GCSTEP, 2);
+
+		// Switch from GC STEP to a FULL GC :: Customer HUGE UDF tends to cause
+		// server to over-use memory and be killed by the OOM-Killer.
+		lua_gc(citem->state, LUA_GCCOLLECT, 200);
 		cache_entry *centry = NULL;
 		RDLOCK;
 		if (CF_RCHASH_OK == cf_rchash_get(centry_hash, (void *)citem->key, (uint32_t)strlen(citem->key), (void *)&centry) ) {
