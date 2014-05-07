@@ -933,8 +933,8 @@ static int mod_lua_bytes_get_byte(lua_State * l)
  */
 static int mod_lua_bytes_get_int16(lua_State * l)
 { 
-	// we expect atleast 2 args
-	if ( lua_gettop(l) >= 2) {
+	// we expect exactly 2 args
+	if ( lua_gettop(l) != 2) {
 		return 0;
 	}
 
