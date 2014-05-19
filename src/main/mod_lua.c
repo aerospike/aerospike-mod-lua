@@ -697,7 +697,10 @@ static int offer_state(context * ctx, cache_item * citem) {
 		// Note that garbage collection should be done outside the spinlock.
 		int kmem_used = lua_gc(citem->state, LUA_GCCOUNT, 0);
 		if ( kmem_used > LUA_KMEM_GC_THRESHOLD ) {
-			// We will want some sort of counter here, but can't use g_config
+			// We will want some sort of counter here, but can't use a
+			// g_config-related stat because g_config is not visible here.
+			// This comment is a placeholder that we need to add some sort
+			// of bridge beween the AS world and the mod-lua world.
 			// cf_atomic_int_incr(&g_config.stat_lua_gc_step);
 			if ((rc = lua_gc(citem->state, LUA_GCSTEP, 40)) != 1) {
 				lua_gc(citem->state, LUA_GCCOLLECT, 200);
