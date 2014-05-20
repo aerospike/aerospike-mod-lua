@@ -643,6 +643,40 @@ static int poll_state(context * ctx, cache_item * citem) {
 	return 0;
 }
 
+// Soon we will make these defaults "overridable" via config so that someone
+// who actually knew what they were doing could make adjustments.
+// Experimentation showed that at least 40 steps were needed to clean up after
+// a simple UDF (in our system), so for us, that is the "light threshold". (tjl)
+#define LUA_KMEM_GC_THRESHOLD 200 // Perform GC if we've used over 200kb
+#define LUA_GC_STEP_THRESHOLD  40 // Perform 40 "iterations" of STEP GC
+
+// NB: When it comes to Lua garbage collection, it appears to be more art than
+// science.  When I fully understand what's really going on with GC, I will
+// document it more clearly (and fully). (tjl)
+// For now, here's the story:
+// Much has already been done with Lua GC measurement, and performance measurements
+// showed that a "light GC" with step data=2 provided for good performance.
+// However, once a customer build a pretty heavy-duty UDF (one that iteratively
+// built a list that exceeded Bin limits), the server ran out of memory and was
+// then killed by the "OOM-KILLER".  Initially, changing the light "Step 2" to
+// a heavy "full GC" solved the OOM problem, but ran noticeably slower
+// (about 1/2 to 2/3 the speed).  So, for now, we've decided to take the "tiered
+// approach", where for low thresholds we delay GC, and then when we decide to
+// perform GC, we try "light GC first", then "Heavy GC" if that fails.
+//
+// The current thresholds are part guess and part measurement.  The most trivial
+// UDF seems to use 99k of Lua space in our environment.  That's probably because
+// of the automatic cost of our existing system UDFs (including LDTs).  So, we
+// set the "start GC" threshold at 200k, at which point we perform "light GC".
+// Our measurements showed that we needed Step Data=40 to successfully perform
+// a cycle with a relatively simple UDF (read a record bin, update it and write
+// it back).  For heavier UDFs the simple step GC will not complete a cycle,
+// and so we then enlist the FULL GC to clean up.
+//
+// We've tested this approach for (sufficiently) large runs of small and large
+// UDFs, and we appear to get the best possible performance coupled with the
+// safety of full GC when we need it. (May 9, 2014 tjl)
+
 /**
  * Release the context. 
  *
@@ -652,18 +686,33 @@ static int poll_state(context * ctx, cache_item * citem) {
  * @return 0 on success, otherwise 1
  */
 static int offer_state(context * ctx, cache_item * citem) {
+	int rc;
 
 	if ( ctx->config.cache_enabled == true ) {
-		// Runnig LUA_GCCOLLECT is overkill because with every execution
-		// lua itself does a garbage collection. Also do garbage 
-		// collection outside the spinlock.
-		// Raj claims that MUCH experimentation has been done and that "2" is
-		// in fact a GREAT number.  (tjl: April 2014)
-		// lua_gc(citem->state, LUA_GCSTEP, 2);
+		// For Lua GC, we take the tiered approach, where if mem-used is below
+		// our threshold, we don't do anything (we wait until later).  If
+		// we should do "something", then we try "GC Light" first and look at
+		// the result. If that didn't work (didn't complete a cycle), then we
+		// call in the heavy artillery, "GC Heavy". (tjl: May 2014).
+		// Note that garbage collection should be done outside the spinlock.
+		int kmem_used = lua_gc(citem->state, LUA_GCCOUNT, 0);
+		if ( kmem_used > LUA_KMEM_GC_THRESHOLD ) {
+			// We will want some sort of counter here, but can't use a
+			// g_config-related stat because g_config is not visible here.
+			// This comment is a placeholder that we need to add some sort
+			// of bridge beween the AS world and the mod-lua world.
+			// cf_atomic_int_incr(&g_config.stat_lua_gc_step);
+			if ((rc = lua_gc(citem->state, LUA_GCSTEP, 40)) != 1) {
+				lua_gc(citem->state, LUA_GCCOLLECT, 200);
+				// We will want some sort of counter here, but can't use g_config
+				// cf_atomic_int_incr(&g_config.stat_lua_gc_full);
+			}
+		}
+		// else {
+		// We will want some sort of counter here, but can't use g_config
+		// cf_atomic_int_incr(&g_config.stat_lua_gc_delay);
+		// }
 
-		// Switch from GC STEP to a FULL GC :: Customer HUGE UDF tends to cause
-		// server to over-use memory and be killed by the OOM-Killer.
-		lua_gc(citem->state, LUA_GCCOLLECT, 200);
 		cache_entry *centry = NULL;
 		RDLOCK;
 		if (CF_RCHASH_OK == cf_rchash_get(centry_hash, (void *)citem->key, (uint32_t)strlen(citem->key), (void *)&centry) ) {
