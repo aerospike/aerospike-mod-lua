@@ -228,7 +228,7 @@ static int mod_lua_bytes_tostring(lua_State * l)
 static int mod_lua_bytes_get_type(lua_State * l)
 {
 	// we expect atleast 1 arg
-	if ( lua_gettop(l) >= 1 ) {
+	if ( lua_gettop(l) < 1 ) {
 		return 0;
 	}
 
@@ -891,8 +891,8 @@ static int mod_lua_bytes_set_bytes(lua_State * l)
  */
 static int mod_lua_bytes_get_byte(lua_State * l)
 { 
-	// we expect atleast 2 args
-	if ( lua_gettop(l) >= 2) {
+    // we expect exactly 2 args
+	if ( lua_gettop(l) != 2) {
 		return 0;
 	}
 
@@ -976,8 +976,8 @@ static int mod_lua_bytes_get_int16(lua_State * l)
  */
 static int mod_lua_bytes_get_int32(lua_State * l)
 { 
-	// we expect atleast 2 args
-	if ( lua_gettop(l) >= 2) {
+	// we expect exactly 2 args
+	if ( lua_gettop(l) != 2) {
 		return 0;
 	}
 
@@ -1019,8 +1019,8 @@ static int mod_lua_bytes_get_int32(lua_State * l)
  */
 static int mod_lua_bytes_get_int64(lua_State * l)
 { 
-	// we expect atleast 2 args
-	if ( lua_gettop(l) >= 2) {
+	// we expect exactly 2 args
+	if ( lua_gettop(l) != 2) {
 		return 0;
 	}
 
@@ -1061,11 +1061,11 @@ static int mod_lua_bytes_get_int64(lua_State * l)
  *	
  *	@return On success, the value. Otherwise nil on failure.
  */
-/*
+
 static int mod_lua_bytes_get_string(lua_State * l)
 {
-	// we expect atleast 3 args
-	if ( lua_gettop(l) >= 3 ) {
+	// we expect exactly 3 args
+	if ( lua_gettop(l) != 3 ) {
 		return 0;
 	}
 
@@ -1098,7 +1098,7 @@ static int mod_lua_bytes_get_string(lua_State * l)
 	lua_pushlstring(l, val, len);
 	return 1;
 }
-*/
+
 
 /**
  *	Get an bytes value from the specified index.
@@ -1115,8 +1115,8 @@ static int mod_lua_bytes_get_string(lua_State * l)
  */
 static int mod_lua_bytes_get_bytes(lua_State * l)
 {
-	// we expect atleast 3 args
-	if ( lua_gettop(l) >= 3 ) {
+	// we expect exactly 3 args
+	if ( lua_gettop(l) != 3 ) {
 		return 0;
 	}
 
@@ -1196,6 +1196,7 @@ static const luaL_reg bytes_object_table[] = {
 	{"get_int16",		mod_lua_bytes_get_int16},
 	{"get_int32",		mod_lua_bytes_get_int32},
 	{"get_int64",		mod_lua_bytes_get_int64},
+    {"get_string",      mod_lua_bytes_get_string},
 
 	{"ensure",			mod_lua_bytes_ensure},
 	{"truncate",		mod_lua_bytes_ensure},
