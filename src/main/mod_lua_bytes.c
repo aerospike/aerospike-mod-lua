@@ -1196,7 +1196,7 @@ static const luaL_reg bytes_object_table[] = {
 	{"get_int16",		mod_lua_bytes_get_int16},
 	{"get_int32",		mod_lua_bytes_get_int32},
 	{"get_int64",		mod_lua_bytes_get_int64},
-    {"get_string",      mod_lua_bytes_get_string},
+	{"get_string",      mod_lua_bytes_get_string},
 
 	{"ensure",			mod_lua_bytes_ensure},
 	{"truncate",		mod_lua_bytes_ensure},
