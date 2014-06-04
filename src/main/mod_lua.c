@@ -583,6 +583,8 @@ static lua_State * create_state(context * ctx, const char * filename) {
 		lua_close(l);
 		return NULL;
 	}
+	as_logger_debug(mod_lua.logger, "Size of the lua state created for the file %s in KB %d", 
+			filename, lua_gc(l, LUA_GCCOUNT,0));
 	return l;
 }
 
