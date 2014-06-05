@@ -55,10 +55,8 @@ info:
 	@echo
 
 .PHONY: clean
-clean: 
+clean:	modules-clean
 	@rm -rf $(TARGET)
-	$(call make_each, $(SUBMODULES), clean)
-
 
 .PHONY: $(TARGET_OBJ)/%.o
 $(TARGET_OBJ)/%.o : %.c | $(TARGET_OBJ) 
