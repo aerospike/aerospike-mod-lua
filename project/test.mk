@@ -11,7 +11,7 @@ TEST_CFLAGS += -I$(COMMON)/$(TARGET_INCL)
 ifeq ($(OS),Darwin)
 TEST_LDFLAGS = -L/usr/local/lib -lssl -lcrypto -llua -lpthread -lm
 else
-TEST_LDFLAGS = -lssl -lcrypto -llua -lpthread -lm -lrt 
+TEST_LDFLAGS = -lssl -lcrypto -llua$(LUA_SUFFIX) -lpthread -lm -lrt
 endif
 
 TEST_DEPS =
@@ -56,8 +56,6 @@ else
 	AS_SYSTEM_LUA=$(LUA_CORE)/src $(TARGET_BIN)/test/mod_lua_test
 endif
 
-	
-
 .PHONY: test-valgrind
 test-valgrind: test-build
 ifndef LUA_CORE
@@ -81,18 +79,18 @@ test-clean:
 	@rm -rf $(TARGET_OBJ)/test
 
 $(TARGET_OBJ)/test/%/%.o: CFLAGS = $(TEST_CFLAGS)
-$(TARGET_OBJ)/test/%/%.o: LDFLAGS += $(TEST_LDFLAGS)
+$(TARGET_OBJ)/test/%/%.o: LDFLAGS = $(TEST_LDFLAGS)
 $(TARGET_OBJ)/test/%/%.o: $(SOURCE_TEST)/%/%.c
 	$(object)
 
 $(TARGET_OBJ)/test/%.o: CFLAGS = $(TEST_CFLAGS)
-$(TARGET_OBJ)/test/%.o: LDFLAGS += $(TEST_LDFLAGS)
+$(TARGET_OBJ)/test/%.o: LDFLAGS = $(TEST_LDFLAGS)
 $(TARGET_OBJ)/test/%.o: $(SOURCE_TEST)/%.c
 	$(object)
 
 .PHONY: test/mod_lua_test
 test/mod_lua_test: $(TARGET_BIN)/test/mod_lua_test
 $(TARGET_BIN)/test/mod_lua_test: CFLAGS = $(TEST_CFLAGS)
-$(TARGET_BIN)/test/mod_lua_test: LDFLAGS += $(TEST_LDFLAGS)
+$(TARGET_BIN)/test/mod_lua_test: LDFLAGS = $(TEST_DEPS) $(TEST_LDFLAGS)
 $(TARGET_BIN)/test/mod_lua_test: $(TEST_MOD_LUA:%=$(TARGET_OBJ)/test/%.o) $(TARGET_OBJ)/test/test.o $(wildcard $(TARGET_OBJ)/*) | modules build prepare
-	$(executable) $(TEST_DEPS)
+	$(executable)

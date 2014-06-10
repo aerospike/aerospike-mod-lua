@@ -57,6 +57,12 @@ VPATH = $(SOURCE_MAIN) $(SOURCE_INCL)
 LIB_PATH = 
 INC_PATH = $(SOURCE_INCL) /usr/local/include
 
+INCLUDE_LUA_5_1 = /usr/include/lua5.1
+ifneq ($(wildcard $(INCLUDE_LUA_5_1)),)
+  INC_PATH += $(INCLUDE_LUA_5_1)
+  LUA_SUFFIX=5.1
+endif
+
 ###############################################################################
 ##  TARGET PATHS                                                             ##
 ###############################################################################
@@ -148,12 +154,11 @@ define executable
 		$(addprefix -L, $(SUBMODULES:%=%/$(TARGET_LIB))) \
 		$(addprefix -L, $(LIB_PATH)) \
 		$(addprefix -l, $(LIBRARIES)) \
-		$(LD_FLAGS) \
-		$(LDFLAGS) \
 		$(CC_FLAGS) \
 		$(CFLAGS) \
 		-o $@ \
 		$(filter %.o %.a %.so, $^) \
+		$(LD_FLAGS) \
 	)
 endef
 
