@@ -1,26 +1,33 @@
 # aerospike-mod-lua
 
-Adds support to Aerospike for executing Lua functions.
+Aeospike Mod Lua provides support for executing Lua language functions
+using the Aerospike data types. This module is used by both the
+Aerospike Server and the Aerospike C Client as a `git` submodule.
 
 ## Dependencies
 
 ### Linux Dependencies
 
-#### Redhat Dependencies
+Building Aerospike Mod Lua requires the development resources for the
+Lua language version 5.1.4.  The installation instructions for common
+Linux distributions are as follows:
 
-Redhat based Linux Distributions (Redhat, Fedora, CentOS, SUS, etc.)require the following packages:
+#### Red Hat Dependencies
 
-* `lua-devel.x86_64` - should install development resources for `lua-5.1.4` 
+Red Hat Package Manager (RPM) based Linux Distributions (Red Hat,
+Fedora, CentOS, SUSE, etc.) require the following packages:
+
+* `lua-devel` - Development resources for the Lua language.
 
 If `yum` is your package manager, then you should be able to run the following command:
 
-	$ sudo yum install lua-devel.x86_64
+	$ sudo yum install lua-devel
 
 #### Debian Dependencies
 
 Debian based Linux Distributions (Debian, Ubuntu, etc.) require the following packages:
 
-* `liblua5.1-dev` - should install development resources for `lua-5.1.4` 
+* `liblua5.1-dev` - Development resources for the Lua language.
 
 If `apt-get` is your package manager, then you should be able to run the following command:
 
@@ -44,7 +51,7 @@ To build a dynamic library `libmod_lua.so`:
 
 All generated files are placed in `./target/{arch}`, where:
 
-- `{arch}` is the target architecture:
+- `{arch}` is the target architecture, e.g., `Linux-x86_64`.
 - The `lib` subdirectory contains all libraries. 
 - The `bin` subdirectory contains all executables.
 
@@ -52,10 +59,8 @@ All generated files are placed in `./target/{arch}`, where:
 
 You will want to either:
 
-1. Move the `libmod_lua.so` to a location your program can access. 
+1. Move the `libmod_lua.so` to a location your program can access.
 2. Add the path to `libmod_lua.so` to your `LD_LIBRARY_PATH`.
- 
-
 
 ## Test
 
