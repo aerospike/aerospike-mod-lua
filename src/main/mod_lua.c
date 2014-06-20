@@ -132,7 +132,7 @@ static context mod_lua_source = {
 
 static int update(as_module *, as_module_event *);
 static int apply_record(as_module *, as_udf_context *, const char *, const char *, as_rec *, as_list *, as_result *);
-static int apply_stream(as_module *, as_udf_context *, const char *, const char *, as_stream *, as_list *, as_stream *);
+static int apply_stream(as_module *, as_udf_context *, const char *, const char *, as_stream *, as_list *, as_stream *, as_result *);
 
 static lua_State * create_state(context *, const char *filename);
 static int poll_state(context *, cache_item *);
@@ -782,7 +782,7 @@ static int handle_error(lua_State * l) {
 	const char * msg = luaL_optstring(l, 1, 0);
 	as_logger_error(mod_lua.logger, "Lua Runtime Error: %s", msg);
 	// cf_warning(AS_SPROC, (char *) msg);
-	return 0;
+	return 1;
 }
 
 static int apply(lua_State * l, as_udf_context *udf_ctx, int err, int argc, as_result * res) {
@@ -838,6 +838,58 @@ static int apply(lua_State * l, as_udf_context *udf_ctx, int err, int argc, as_r
 		return 0;
 	}
 }
+
+static int applyS(lua_State * l, as_udf_context *udf_ctx, int err, int argc, as_result * res)
+{
+
+    as_logger_trace(mod_lua.logger, "applyS");
+
+#ifndef LUA_DEBUG_HOOK 
+    as_timer *timer = udf_ctx->timer;
+
+    void hook(lua_State *L, lua_Debug *ar)
+    {
+        if (ar->event == LUA_HOOKCOUNT) {
+            if (as_timer_timedout(timer)) {
+                luaL_error(L, "UDF Execution Timeout");
+            }
+        }
+    }
+
+    if (timer) {
+        lua_sethook(l, &hook, LUA_MASKCOUNT, as_timer_timeslice(timer)); 
+    }
+#endif 
+    // call apply_record(f, r, ...)
+    as_logger_trace(mod_lua.logger, "call function");
+    int rc = lua_pcall(l, argc, 1, err);
+
+    as_logger_trace(mod_lua.logger, "rc = %d", rc);
+
+    // Convert the return value from a lua type to a val type
+    as_logger_trace(mod_lua.logger, "convert lua type to val");
+
+
+    if ( rc == 0 ) {
+        if ( res != NULL ) {
+            as_val * rv = mod_lua_retval(l);
+            as_result_setsuccess(res, rv);
+        }
+    }
+    else {
+        if ( res != NULL ) {
+            as_val * rv = mod_lua_retval(l);
+            as_result_setfailure(res, rv);
+        }
+    }
+
+    // Pop the return value off the stack
+    as_logger_trace(mod_lua.logger, "pop return value from the stack");
+    lua_pop(l, -1);
+    return rc;
+}
+
+
 
 // Returning negative number as positive number collide with lua return codes
 // Used in udf_rw.c function to print the error message 
@@ -1232,7 +1284,7 @@ static int apply_stream(as_module * m, as_udf_context *udf_ctx, const char * fil
 	
 	// call apply_stream(f, s, ...)
 	as_logger_trace(mod_lua.logger, "apply_stream: apply the function");
-	rc = apply(l, udf_ctx, err, argc, NULL);
+	rc = applyS(l, udf_ctx, err, argc, res);
 
 	// release the context
 	pthread_rwlock_rdlock(ctx->lock);
