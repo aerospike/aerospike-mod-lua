@@ -1208,7 +1208,7 @@ static int apply_record(as_module * m, as_udf_context * udf_ctx, const char * fi
  * @param result pointer to a val that will be populated with the result.
  * @return 0 on success, otherwise 1
  */
-static int apply_stream(as_module * m, as_udf_context *udf_ctx, const char * filename, const char * function, as_stream * istream, as_list * args, as_stream * ostream) {
+static int apply_stream(as_module * m, as_udf_context *udf_ctx, const char * filename, const char * function, as_stream * istream, as_list * args, as_stream * ostream, as_result * res) {
 
 	int         rc      = 0;
 	context *   ctx     = (context *) m->source;    // mod-lua context
