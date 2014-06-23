@@ -933,7 +933,7 @@ char * as_module_err_string(int err_no) {
 			break;
 		default:
 			rs = cf_malloc(sizeof(char) * 128);
-			sprintf(rs, "UDF: Excution Error - Check Logs %d", err_no);
+			sprintf(rs, "UDF: Execution Error %d : ", err_no);
 			break;
 	}
 	return rs;
