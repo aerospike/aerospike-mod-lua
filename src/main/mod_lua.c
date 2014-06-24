@@ -816,7 +816,7 @@ static int apply(lua_State * l, as_udf_context *udf_ctx, int err, int argc, as_r
 
 
 	if ( rc == 0 ) {
-		if ( res != NULL ) {
+		if ( (is_stream == false) && (res != NULL) ) { // if is_stream is true, no need to set result as success
 			as_val * rv = mod_lua_retval(l);
 			as_result_setsuccess(res, rv);
 		}
