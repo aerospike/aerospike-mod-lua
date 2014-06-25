@@ -132,7 +132,7 @@ static context mod_lua_source = {
 
 static int update(as_module *, as_module_event *);
 static int apply_record(as_module *, as_udf_context *, const char *, const char *, as_rec *, as_list *, as_result *);
-static int apply_stream(as_module *, as_udf_context *, const char *, const char *, as_stream *, as_list *, as_stream *);
+static int apply_stream(as_module *, as_udf_context *, const char *, const char *, as_stream *, as_list *, as_stream *, as_result *);
 
 static lua_State * create_state(context *, const char *filename);
 static int poll_state(context *, cache_item *);
@@ -782,10 +782,10 @@ static int handle_error(lua_State * l) {
 	const char * msg = luaL_optstring(l, 1, 0);
 	as_logger_error(mod_lua.logger, "Lua Runtime Error: %s", msg);
 	// cf_warning(AS_SPROC, (char *) msg);
-	return 0;
+	return 1;
 }
 
-static int apply(lua_State * l, as_udf_context *udf_ctx, int err, int argc, as_result * res) {
+static int apply(lua_State * l, as_udf_context *udf_ctx, int err, int argc, as_result * res, bool is_stream) {
 
 	as_logger_trace(mod_lua.logger, "apply");
 
@@ -816,7 +816,7 @@ static int apply(lua_State * l, as_udf_context *udf_ctx, int err, int argc, as_r
 
 
 	if ( rc == 0 ) {
-		if ( res != NULL ) {
+		if ( (is_stream == false) && (res != NULL) ) { // if is_stream is true, no need to set result as success
 			as_val * rv = mod_lua_retval(l);
 			as_result_setsuccess(res, rv);
 		}
@@ -832,12 +832,13 @@ static int apply(lua_State * l, as_udf_context *udf_ctx, int err, int argc, as_r
 	as_logger_trace(mod_lua.logger, "pop return value from the stack");
 	lua_pop(l, -1);
 
-	if ( res == NULL ) {
+	if ( is_stream || (res == NULL) ) { //if is_stream is true then whether res is null or not rc should be returned
 		return rc;
 	} else {
 		return 0;
 	}
 }
+
 
 // Returning negative number as positive number collide with lua return codes
 // Used in udf_rw.c function to print the error message 
@@ -881,7 +882,7 @@ char * as_module_err_string(int err_no) {
 			break;
 		default:
 			rs = cf_malloc(sizeof(char) * 128);
-			sprintf(rs, "UDF: Excution Error - Check Logs %d", err_no);
+			sprintf(rs, "UDF: Execution Error %d", err_no);
 			break;
 	}
 	return rs;
@@ -1127,7 +1128,7 @@ static int apply_record(as_module * m, as_udf_context * udf_ctx, const char * fi
 	
 	// apply the function
 	as_logger_trace(mod_lua.logger, "apply_record: apply the function");
-	rc = apply(l, udf_ctx, err, argc, res);
+	rc = apply(l, udf_ctx, err, argc, res, false);
 
 	// return the state
 	pthread_rwlock_rdlock(ctx->lock);
@@ -1156,7 +1157,7 @@ static int apply_record(as_module * m, as_udf_context * udf_ctx, const char * fi
  * @param result pointer to a val that will be populated with the result.
  * @return 0 on success, otherwise 1
  */
-static int apply_stream(as_module * m, as_udf_context *udf_ctx, const char * filename, const char * function, as_stream * istream, as_list * args, as_stream * ostream) {
+static int apply_stream(as_module * m, as_udf_context *udf_ctx, const char * filename, const char * function, as_stream * istream, as_list * args, as_stream * ostream, as_result * res) {
 
 	int         rc      = 0;
 	context *   ctx     = (context *) m->source;    // mod-lua context
@@ -1232,7 +1233,7 @@ static int apply_stream(as_module * m, as_udf_context *udf_ctx, const char * fil
 	
 	// call apply_stream(f, s, ...)
 	as_logger_trace(mod_lua.logger, "apply_stream: apply the function");
-	rc = apply(l, udf_ctx, err, argc, NULL);
+	rc = apply(l, udf_ctx, err, argc, res, true);
 
 	// release the context
 	pthread_rwlock_rdlock(ctx->lock);

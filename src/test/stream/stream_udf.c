@@ -69,7 +69,7 @@ TEST( stream_udf_1, "filter even numbers from range (1-10)" )
     as_stream * ostream = consumer_stream_new(consume1);
     as_list *   arglist = NULL;
 
-    int rc = as_module_apply_stream(&mod_lua, &auctx, "aggr", "even", istream, arglist, ostream);
+    int rc = as_module_apply_stream(&mod_lua, &auctx, "aggr", "even", istream, arglist, ostream,NULL);
 
     assert_int_eq( rc, 0);
     assert_int_eq( produced, limit);
@@ -90,7 +90,7 @@ TEST( stream_udf_2, "increment range (1-10)" )
     as_stream * ostream = consumer_stream_new(consume1);
     as_list *   arglist = NULL;
 
-    int rc = as_module_apply_stream(&mod_lua, &auctx, "aggr", "increment", istream, arglist, ostream);
+    int rc = as_module_apply_stream(&mod_lua, &auctx, "aggr", "increment", istream, arglist, ostream,NULL);
 
     assert_int_eq( rc, 0);
     assert_int_eq( produced, limit);
@@ -135,7 +135,7 @@ TEST( stream_udf_3, "sum range (1-1,000,000)" )
     as_stream * ostream = consumer_stream_new(consume3);
     as_list *   arglist = NULL;
 
-    int rc = as_module_apply_stream(&mod_lua, &auctx, "aggr", "sum", istream, arglist, ostream);
+    int rc = as_module_apply_stream(&mod_lua, &auctx, "aggr", "sum", istream, arglist, ostream,NULL);
 
     uint64_t result = (uint64_t) as_integer_get(result3);
 
@@ -162,7 +162,7 @@ TEST( stream_udf_4, "product range (1-10)" )
     as_stream * ostream = consumer_stream_new(consume3);
     as_list *   arglist = NULL;
 
-    int rc = as_module_apply_stream(&mod_lua, &auctx, "aggr", "product", istream, arglist, ostream);
+    int rc = as_module_apply_stream(&mod_lua, &auctx, "aggr", "product", istream, arglist, ostream,NULL);
 
     assert_int_eq( rc, 0);
     assert_int_eq( produced, limit);
@@ -214,7 +214,7 @@ TEST( stream_udf_5, "campaign rollup w/ map & reduce" )
     as_stream * ostream = consumer_stream_new(consume5);
     as_list *   arglist = (as_list *) as_arraylist_new(0,0);
 
-    int rc = as_module_apply_stream(&mod_lua, &auctx, "aggr", "rollup", istream, arglist, ostream);
+    int rc = as_module_apply_stream(&mod_lua, &auctx, "aggr", "rollup", istream, arglist, ostream,NULL);
 
     assert_int_eq( rc, 0);
     assert_int_eq( produced, limit);
@@ -252,7 +252,7 @@ TEST( stream_udf_6, "campaign rollup w/ aggregate" )
     as_stream * ostream = consumer_stream_new(consume5);
     as_list *   arglist = (as_list *) as_arraylist_new(0,0);
 
-    int rc = as_module_apply_stream(&mod_lua, &auctx, "aggr", "rollup2", istream, arglist, ostream);
+    int rc = as_module_apply_stream(&mod_lua, &auctx, "aggr", "rollup2", istream, arglist, ostream,NULL);
 
     assert_int_eq( rc, 0);
     assert_int_eq( produced, limit);
