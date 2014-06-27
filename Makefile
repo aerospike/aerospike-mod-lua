@@ -60,6 +60,10 @@ CFLAGS = -O$(O)
 # Include Paths
 INC_PATH += $(COMMON)/$(TARGET_INCL)
 
+INC_PATH += $(or \
+    $(wildcard /usr/include/lua-5.1), \
+    $(wildcard /usr/include/lua5.1))
+
 # Library Paths
 # LIB_PATH +=
 
