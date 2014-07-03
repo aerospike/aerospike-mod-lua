@@ -270,6 +270,14 @@ static char * dropext(char * name, size_t name_len, const char * ext, size_t ext
 	return NULL;
 }
 
+static bool hasext(char * name, size_t name_len, const char * ext, size_t ext_len) {
+	char * p = (name + name_len - ext_len);
+	if ( strncmp(p, ext, ext_len) == 0 ) {
+		return true;
+	}
+	return false;
+}
+
 static int cache_scan_dir(context * ctx, const char * directory) {
 
 	DIR *           dir     = NULL;
@@ -1014,6 +1022,12 @@ static int validate(as_module * m, as_aerospike * as, const char * filename, con
 	rc = lua_pcall(l, 1, 1, 0);
 	if ( rc ) {
 		populate_error(l, filename, rc, err);
+		goto Cleanup;
+	}
+
+	// No validation for .so file
+	if (hasext(filename, strlen(filename), ".so", 3)) {
+		as_logger_trace(mod_lua.logger, "No validation required for native module: %s", filename);
 		goto Cleanup;
 	}
 
