@@ -270,8 +270,8 @@ static char * dropext(char * name, size_t name_len, const char * ext, size_t ext
 	return NULL;
 }
 
-static bool hasext(char * name, size_t name_len, const char * ext, size_t ext_len) {
-	char * p = (name + name_len - ext_len);
+static bool hasext(const char * name, size_t name_len, const char * ext, size_t ext_len) {
+	const char * p = (name + name_len - ext_len);
 	if ( strncmp(p, ext, ext_len) == 0 ) {
 		return true;
 	}
@@ -925,6 +925,10 @@ static void populate_error(lua_State * l, const char * filename, int rc, as_modu
 		}
 	}
 
+	if ( ! message ) {
+		message = "(Null error message returned by lua)";
+	}
+
 	if ( err->code == 10 || err->code == 11 ) {
 		if ( message[0] == '[' ) {
 			char * fileL = strchr(message,'"');
@@ -948,6 +952,29 @@ static void populate_error(lua_State * l, const char * filename, int rc, as_modu
 						}
 					}
 				}
+			}
+		}
+		else {
+			char * c = strstr(message, "module 'aerospike' not found");
+			if ( c ) {
+				strcpy(err->message, "'aerospike' lua module not found, check mod-lua system-path");
+			}
+			else {
+				// Unrecognized error message. Just return the first line, up
+				// to 256 chars.
+				c = strchr(message, '\n');
+				size_t len;
+				if ( c ) {
+					len = c - message;
+				}
+				else {
+					len = strlen(message);
+				}
+				if ( len > 256 ) {
+					len = 256;
+				}
+				memcpy(err->message, message, len);
+				err->message[len] = '\0';
 			}
 		}
 	}
