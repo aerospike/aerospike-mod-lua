@@ -144,6 +144,22 @@ static int mod_lua_record_set_type(lua_State * l) {
 }
 
 /**
+ * Set a record time to live (ttl)
+ */
+static int mod_lua_record_set_ttl(lua_State * l) {
+    as_rec *        rec     = mod_lua_checkrecord(l, 1);
+
+    // Get the 2nd arg off the stack -- and process as ttl
+    uint32_t   ttl    = luaL_optinteger(l, 2, 0);
+
+    // This function just sets up the arguments,
+    // The udf record method will do the real work.
+    as_rec_set_ttl( rec, ttl );
+
+    return 0;
+}
+
+/**
  * Get a value from the named bin
  */
 static int mod_lua_record_index(lua_State * l) {
@@ -199,6 +215,7 @@ static const luaL_reg object_table[] = {
     {"numbins",    mod_lua_record_numbins},
     {"set_flags",  mod_lua_record_set_flags},
     {"set_type",   mod_lua_record_set_type},
+    {"set_ttl",    mod_lua_record_set_ttl},
     {0, 0}
 };
 
