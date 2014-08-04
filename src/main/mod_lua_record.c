@@ -160,6 +160,19 @@ static int mod_lua_record_set_ttl(lua_State * l) {
 }
 
 /**
+ * Drop a record's key
+ */
+static int mod_lua_record_drop_key(lua_State * l) {
+    as_rec *        rec     = mod_lua_checkrecord(l, 1);
+
+    // This function just sets up the arguments,
+    // The udf record method will do the real work.
+    as_rec_drop_key( rec );
+
+    return 0;
+}
+
+/**
  * Get a value from the named bin
  */
 static int mod_lua_record_index(lua_State * l) {
@@ -216,6 +229,7 @@ static const luaL_reg object_table[] = {
     {"set_flags",  mod_lua_record_set_flags},
     {"set_type",   mod_lua_record_set_type},
     {"set_ttl",    mod_lua_record_set_ttl},
+    {"drop_key",   mod_lua_record_drop_key},
     {0, 0}
 };
 
