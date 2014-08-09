@@ -86,6 +86,7 @@ static int mod_lua_bytes_size(lua_State * l)
 	return 1;
 }
 
+/*
 static int mod_lua_bytes_capacity(lua_State * l)
 {
 	// we expect 1 arg
@@ -106,6 +107,7 @@ static int mod_lua_bytes_capacity(lua_State * l)
 	lua_pushinteger(l, as_bytes_capacity(b));
 	return 1;
 }
+*/
 
 static int mod_lua_bytes_ensure(lua_State *l)
 {
@@ -319,10 +321,10 @@ static int mod_lua_bytes_append_byte(lua_State * l)
 }
 
 /**
- *	Append an int16_t value.
+ *	Append a big endian int16 value.
  *
  *	----------{.c}
- *	bool bytes.append_int16(bytes b, int16 v)
+ *	bool bytes.append_int16_be(bytes b, int16 v)
  *	----------
  *
  *	@param b 	The bytes to set a value in.
@@ -330,7 +332,7 @@ static int mod_lua_bytes_append_byte(lua_State * l)
  *
  *	@return On success, true. Otherwise, false on error.
  */
-static int mod_lua_bytes_append_int16(lua_State * l)
+static int mod_lua_bytes_append_int16_be(lua_State * l)
 {
 	// we expect 2 args
 	if ( lua_gettop(l) != 2 ) {
@@ -366,10 +368,57 @@ static int mod_lua_bytes_append_int16(lua_State * l)
 }
 
 /**
- *	Append an int32_t value.
+ *	Append a little endian int16 value.
  *
  *	----------{.c}
- *	bool bytes.append_int32(b, v)
+ *	bool bytes.append_int16_le(bytes b, int16 v)
+ *	----------
+ *
+ *	@param b 	The bytes to set a value in.
+ *	@param v	The int16_t value to append to b.
+ *
+ *	@return On success, true. Otherwise, false on error.
+ */
+static int mod_lua_bytes_append_int16_le(lua_State * l)
+{
+	// we expect 2 args
+	if ( lua_gettop(l) != 2 ) {
+		lua_pushboolean(l, false);
+		return 1;
+	}
+	
+	as_bytes * 	b = mod_lua_checkbytes(l, 1);
+	lua_Integer v = luaL_optinteger(l, 2, 0);
+	
+	// check preconditions:
+	//	- b != NULL
+	//	- INT32_MIN <= v <= INT32_MAX
+	if ( !b ||
+		v < INT16_MIN || v > INT16_MAX ) {
+		lua_pushboolean(l, false);
+		return 1;
+	}
+	
+	bool 		res = false;
+	uint32_t	pos = b->size;
+	uint32_t 	size = 2;
+	
+	// ensure we have capacity, if not, then resize
+	if ( as_bytes_ensure(b, pos + size, true) == true ) {
+		// write the bytes
+		int16_t	val	= cf_swap_to_le16((int16_t) v);
+		res	= as_bytes_append_int16(b, val);
+	}
+	
+	lua_pushboolean(l, res);
+	return 1;
+}
+
+/**
+ *	Append a big endian int32 value.
+ *
+ *	----------{.c}
+ *	bool bytes.append_int32_be(b, v)
  *	----------
  *
  *	@param b 	The bytes to set a value in.
@@ -377,7 +426,7 @@ static int mod_lua_bytes_append_int16(lua_State * l)
  *
  *	@return On success, true. Otherwise, false on error.
  */
-static int mod_lua_bytes_append_int32(lua_State * l)
+static int mod_lua_bytes_append_int32_be(lua_State * l)
 {
 	// we expect 2 args
 	if ( lua_gettop(l) != 2 ) {
@@ -413,10 +462,57 @@ static int mod_lua_bytes_append_int32(lua_State * l)
 }
 
 /**
- *	Append an int64_t value.
+ *	Append a little endian int32 value.
  *
  *	----------{.c}
- *	bool bytes.append_int64(b, v)
+ *	bool bytes.append_int32_le(b, v)
+ *	----------
+ *
+ *	@param b 	The bytes to set a value in.
+ *	@param v	The int32_t value to append to b.
+ *
+ *	@return On success, true. Otherwise, false on error.
+ */
+static int mod_lua_bytes_append_int32_le(lua_State * l)
+{
+	// we expect 2 args
+	if ( lua_gettop(l) != 2 ) {
+		lua_pushboolean(l, false);
+		return 1;
+	}
+	
+	as_bytes * 	b = mod_lua_checkbytes(l, 1);
+	lua_Integer	v = luaL_optinteger(l, 2, 0);
+	
+	// check preconditions:
+	//	- b != NULL
+	//	- INT32_MIN <= v <= INT32_MAX
+	if ( !b ||
+		v < INT32_MIN || v > INT32_MAX ) {
+		lua_pushboolean(l, false);
+		return 1;
+	}
+	
+	bool 		res = false;
+	uint32_t	pos = b->size;
+	uint32_t 	size = 4;
+	
+	// ensure we have capacity, if not, then resize
+	if ( as_bytes_ensure(b, pos + size, true) == true ) {
+		// write the bytes
+		int32_t	val	= cf_swap_to_le32((int32_t) v);
+		res	= as_bytes_append_int32(b, val);
+	}
+	
+	lua_pushboolean(l, res);
+	return 1;
+}
+
+/**
+ *	Append a big endian int64 value.
+ *
+ *	----------{.c}
+ *	bool bytes.append_int64_be(b, v)
  *	----------
  *
  *	@param b 	The bytes to set a value in.
@@ -424,7 +520,7 @@ static int mod_lua_bytes_append_int32(lua_State * l)
  *
  *	@return On success, true. Otherwise, false on error.
  */
-static int mod_lua_bytes_append_int64(lua_State * l)
+static int mod_lua_bytes_append_int64_be(lua_State * l)
 {
 	// we expect 2 args
 	if ( lua_gettop(l) != 2 ) {
@@ -455,6 +551,53 @@ static int mod_lua_bytes_append_int64(lua_State * l)
 		res = as_bytes_append_int64(b, val);
 	}
 
+	lua_pushboolean(l, res);
+	return 1;
+}
+
+/**
+ *	Append a little endian int64 value.
+ *
+ *	----------{.c}
+ *	bool bytes.append_int64_le(b, v)
+ *	----------
+ *
+ *	@param b 	The bytes to set a value in.
+ *	@param v	The int64_t value to append to b.
+ *
+ *	@return On success, true. Otherwise, false on error.
+ */
+static int mod_lua_bytes_append_int64_le(lua_State * l)
+{
+	// we expect 2 args
+	if ( lua_gettop(l) != 2 ) {
+		lua_pushboolean(l, false);
+		return 1;
+	}
+	
+	as_bytes * 	b = mod_lua_checkbytes(l, 1);
+	lua_Integer v = luaL_optinteger(l, 2, 0);
+	
+	// check preconditions:
+	// 	- b != NULL
+	//	- INT64_MIN <= v <= INT64_MAX
+	if ( !b ||
+		v < INT64_MIN || v > INT64_MAX ) {
+		lua_pushboolean(l, false);
+		return 1;
+	}
+	
+	bool 		res = false;
+	uint32_t	pos = b->size;
+	uint32_t 	size = 8;
+	
+	// ensure we have capacity, if not, then resize
+	if ( as_bytes_ensure(b, pos + size, true) == true ) {
+		// write the bytes
+		int64_t	val	= cf_swap_to_le64((int64_t) v);
+		res = as_bytes_append_int64(b, val);
+	}
+	
 	lua_pushboolean(l, res);
 	return 1;
 }
@@ -611,10 +754,10 @@ static int mod_lua_bytes_set_byte(lua_State * l)
 }
 
 /**
- *	Set an int16_6 value at specified index.
+ *	Set a big endian int16 value at specified index.
  *
  *	----------{.c}
- *	bool bytes.set_int16(bytes b, uint32 i, int16 v)
+ *	bool bytes.set_int16_be(bytes b, uint32 i, int16 v)
  *	----------
  *
  *	@param b 	The bytes to set a value in.
@@ -623,7 +766,7 @@ static int mod_lua_bytes_set_byte(lua_State * l)
  *
  *	@return On success, true. Otherwise, false on error.
  */
-static int mod_lua_bytes_set_int16(lua_State * l)
+static int mod_lua_bytes_set_int16_be(lua_State * l)
 {
 	// we expect 3 args
 	if ( lua_gettop(l) != 3 ) {
@@ -662,10 +805,61 @@ static int mod_lua_bytes_set_int16(lua_State * l)
 }
 
 /**
- *	Set an int32_t value at specified index.
+ *	Set a little endian int16 value at specified index.
  *
  *	----------{.c}
- *	bool bytes.set_int32(bytes b, uint32 i, int32 v)
+ *	bool bytes.set_int16_le(bytes b, uint32 i, int16 v)
+ *	----------
+ *
+ *	@param b 	The bytes to set a value in.
+ *	@param i	The index in b to set the value of.
+ *	@param v	The int16_t value to set at i.
+ *
+ *	@return On success, true. Otherwise, false on error.
+ */
+static int mod_lua_bytes_set_int16_le(lua_State * l)
+{
+	// we expect 3 args
+	if ( lua_gettop(l) != 3 ) {
+		lua_pushboolean(l, false);
+		return 1;
+	}
+	
+	as_bytes * 	b = mod_lua_checkbytes(l, 1);
+	lua_Integer	i = luaL_optinteger(l, 2, 0);
+	lua_Integer	v = luaL_optinteger(l, 3, 0);
+	
+	// check preconditions:
+	// 	- b != NULL
+	//	- 1 <= i <= UINT32_MAX
+	//	- INT16_MIN <= v <= INT16_MAX
+	if ( !b ||
+		i < 1 || i > UINT32_MAX ||
+		v < INT16_MIN || v > INT16_MAX ) {
+		lua_pushboolean(l, false);
+		return 1;
+	}
+	
+	bool 		res = false;
+	uint32_t	pos = (uint32_t)(i - 1);
+	uint32_t	size = 2;
+	
+	// ensure we have capacity, if not, then resize
+	if ( as_bytes_ensure(b, pos + size, true) == true ) {
+		// write the bytes
+		int16_t	val	= cf_swap_to_le16((int16_t) v);
+		res	= as_bytes_set_int16(b, pos, val);
+	}
+	
+	lua_pushboolean(l, res);
+	return 1;
+}
+
+/**
+ *	Set a big endian int32 value at specified index.
+ *
+ *	----------{.c}
+ *	bool bytes.set_int32_be(bytes b, uint32 i, int32 v)
  *	----------
  *
  *	@param b 	The bytes to set a value in.
@@ -674,7 +868,7 @@ static int mod_lua_bytes_set_int16(lua_State * l)
  *
  *	@return On success, true. Otherwise, false on error.
  */
-static int mod_lua_bytes_set_int32(lua_State * l)
+static int mod_lua_bytes_set_int32_be(lua_State * l)
 {
 	// we expect 3 args
 	if ( lua_gettop(l) != 3 ) {
@@ -713,10 +907,61 @@ static int mod_lua_bytes_set_int32(lua_State * l)
 }
 
 /**
- *	Set an int64_t value at specified index.
+ *	Set a little endian int32 value at specified index.
  *
  *	----------{.c}
- *	bool bytes.set_int64(bytes b, uint32 i, int64 v)
+ *	bool bytes.set_int32_le(bytes b, uint32 i, int32 v)
+ *	----------
+ *
+ *	@param b 	The bytes to set a value in.
+ *	@param i	The index in b to set the value of.
+ *	@param v	The int32_t value to set at i.
+ *
+ *	@return On success, true. Otherwise, false on error.
+ */
+static int mod_lua_bytes_set_int32_le(lua_State * l)
+{
+	// we expect 3 args
+	if ( lua_gettop(l) != 3 ) {
+		lua_pushboolean(l, false);
+		return 1;
+	}
+	
+	as_bytes * 	b = mod_lua_checkbytes(l, 1);
+	lua_Integer	i = luaL_optinteger(l, 2, 0);
+	lua_Integer	v = luaL_optinteger(l, 3, 0);
+	
+	// check preconditions:
+	// 	- b != NULL
+	//	- 1 <= i <= UINT32_MAX
+	//	- INT32_MIN <= v <= INT32_MAX
+	if ( !b ||
+		i < 1 || i > UINT32_MAX ||
+		v < INT32_MIN || v > INT32_MAX ) {
+		lua_pushboolean(l, false);
+		return 1;
+	}
+	
+	bool 		res = false;
+	uint32_t	pos = (uint32_t)(i - 1);
+	uint32_t	size = 4;
+	
+	// ensure we have capacity, if not, then resize
+	if ( as_bytes_ensure(b, pos + size, true) == true ) {
+		// write the bytes
+		int32_t	val	= cf_swap_to_le32((int32_t) v);
+		res	= as_bytes_set_int32(b, pos, val);
+	}
+	
+	lua_pushboolean(l, res);
+	return 1;
+}
+
+/**
+ *	Set a big endian int64_t value at specified index.
+ *
+ *	----------{.c}
+ *	bool bytes.set_int64_be(bytes b, uint32 i, int64 v)
  *	----------
  *
  *	@param b 	The bytes to set a value in.
@@ -725,7 +970,7 @@ static int mod_lua_bytes_set_int32(lua_State * l)
  *
  *	@return On success, true. Otherwise, false on error.
  */
-static int mod_lua_bytes_set_int64(lua_State * l)
+static int mod_lua_bytes_set_int64_be(lua_State * l)
 {
 	// we expect 3 args
 	if ( lua_gettop(l) != 3 ) {
@@ -759,6 +1004,57 @@ static int mod_lua_bytes_set_int64(lua_State * l)
 		res = as_bytes_set_int64(b, pos, val);
 	}
 
+	lua_pushboolean(l, res);
+	return 1;
+}
+
+/**
+ *	Set a little endian int64_t value at specified index.
+ *
+ *	----------{.c}
+ *	bool bytes.set_int64_le(bytes b, uint32 i, int64 v)
+ *	----------
+ *
+ *	@param b 	The bytes to set a value in.
+ *	@param i	The index in b to set the value of.
+ *	@param v	The int64_t value to set at i.
+ *
+ *	@return On success, true. Otherwise, false on error.
+ */
+static int mod_lua_bytes_set_int64_le(lua_State * l)
+{
+	// we expect 3 args
+	if ( lua_gettop(l) != 3 ) {
+		lua_pushboolean(l, false);
+		return 1;
+	}
+	
+	as_bytes * 	b = mod_lua_checkbytes(l, 1);
+	lua_Integer	i = luaL_optinteger(l, 2, 0);
+	lua_Integer	v = luaL_optinteger(l, 3, 0);
+	
+	// check preconditions:
+	// 	- b != NULL
+	//	- 1 <= i <= UINT32_MAX
+	//	- INT64_MIN <= v <= INT64_MAX
+	if ( !b ||
+		i < 1 || i > UINT32_MAX ||
+		v < INT64_MIN || v > INT64_MAX ) {
+		lua_pushboolean(l, false);
+		return 1;
+	}
+	
+	bool 		res = false;
+	uint32_t	pos = (uint32_t)(i - 1);
+	uint32_t	size = 8;
+	
+	// ensure we have capacity, if not, then resize
+	if ( as_bytes_ensure(b, pos + size, true) == true ) {
+		// write the bytes
+		int64_t	val	= cf_swap_to_le64((int64_t) v);
+		res = as_bytes_set_int64(b, pos, val);
+	}
+	
 	lua_pushboolean(l, res);
 	return 1;
 }
@@ -915,10 +1211,10 @@ static int mod_lua_bytes_get_byte(lua_State * l)
 }
 
 /**
- *	Get an int16 value from the specified index.
+ *	Get a big endian int16 value from the specified index.
  *	
  *	----------{.c}
- *	int16 bytes.get_int16(bytes b, uint32 i)
+ *	int16 bytes.get_int16_be(bytes b, uint32 i)
  *	----------
  *	
  *	@param b 	The bytes to get a value from.
@@ -926,7 +1222,7 @@ static int mod_lua_bytes_get_byte(lua_State * l)
  *	
  *	@return On success, the value. Otherwise nil on failure.
  */
-static int mod_lua_bytes_get_int16(lua_State * l)
+static int mod_lua_bytes_get_int16_be(lua_State * l)
 { 
 	// we expect exactly 2 args
 	if ( lua_gettop(l) != 2) {
@@ -958,10 +1254,53 @@ static int mod_lua_bytes_get_int16(lua_State * l)
 }
 
 /**
- *	Get an int32 value from the specified index.
+ *	Get a little endian int16 value from the specified index.
+ *
+ *	----------{.c}
+ *	int16 bytes.get_int16_le(bytes b, uint32 i)
+ *	----------
+ *
+ *	@param b 	The bytes to get a value from.
+ *	@param i	The index in b to get the value of.
+ *
+ *	@return On success, the value. Otherwise nil on failure.
+ */
+static int mod_lua_bytes_get_int16_le(lua_State * l)
+{
+	// we expect exactly 2 args
+	if ( lua_gettop(l) != 2) {
+		return 0;
+	}
+	
+	as_bytes *	b = mod_lua_checkbytes(l, 1);
+	lua_Integer	i = luaL_optinteger(l, 2, 0);
+	
+	// check preconditions:
+	//	- b != NULL
+	//	- 1 <= i <= UINT32_MAX
+	if ( !b ||
+		i < 1 || i > UINT32_MAX ) {
+		return 0;
+	}
+	
+	uint32_t pos = (uint32_t)(i - 1);
+	int16_t  val = 0;
+	
+	// get returns 0 on failure
+	if ( as_bytes_get_int16(b, pos, &val) == 0 ) {
+		return 0;
+	}
+	
+	int16_t res = cf_swap_from_le16(val);
+	lua_pushinteger(l, res);
+	return 1;
+}
+
+/**
+ *	Get a big endian int32 value from the specified index.
  *	
  *	----------{.c}
- *	int32 bytes.get_int32(bytes b, uint32 i)
+ *	int32 bytes.get_int32_be(bytes b, uint32 i)
  *	----------
  *	
  *	@param b 	The bytes to get a value from.
@@ -969,7 +1308,7 @@ static int mod_lua_bytes_get_int16(lua_State * l)
  *	
  *	@return On success, the value. Otherwise nil on failure.
  */
-static int mod_lua_bytes_get_int32(lua_State * l)
+static int mod_lua_bytes_get_int32_be(lua_State * l)
 { 
 	// we expect exactly 2 args
 	if ( lua_gettop(l) != 2) {
@@ -1001,10 +1340,53 @@ static int mod_lua_bytes_get_int32(lua_State * l)
 }
 
 /**
- *	Get an int64 value from the specified index.
+ *	Get a little endian int32 value from the specified index.
+ *
+ *	----------{.c}
+ *	int32 bytes.get_int32_le(bytes b, uint32 i)
+ *	----------
+ *
+ *	@param b 	The bytes to get a value from.
+ *	@param i	The index in b to get the value of.
+ *
+ *	@return On success, the value. Otherwise nil on failure.
+ */
+static int mod_lua_bytes_get_int32_le(lua_State * l)
+{
+	// we expect exactly 2 args
+	if ( lua_gettop(l) != 2) {
+		return 0;
+	}
+	
+	as_bytes *	b = mod_lua_checkbytes(l, 1);
+	lua_Integer	i = luaL_optinteger(l, 2, 0);
+	
+	// check preconditions:
+	//	- b != NULL
+	//	- 1 <= i <= UINT32_MAX
+	if ( !b ||
+		i < 1 || i > UINT32_MAX ) {
+		return 0;
+	}
+	
+	uint32_t pos = (uint32_t)(i - 1);
+	int32_t  val = 0;
+	
+	// get returns 0 on failure
+	if ( as_bytes_get_int32(b, pos, &val) == 0 ) {
+		return 0;
+	}
+	
+	int32_t res = cf_swap_from_le32(val);
+	lua_pushinteger(l, res);
+	return 1;
+}
+
+/**
+ *	Get a big endian int64 value from the specified index.
  *	
  *	----------{.c}
- *	int64 bytes.get_int64(bytes b, uint32 i)
+ *	int64 bytes.get_int64_be(bytes b, uint32 i)
  *	----------
  *	
  *	@param b 	The bytes to get a value from.
@@ -1012,7 +1394,7 @@ static int mod_lua_bytes_get_int32(lua_State * l)
  *	
  *	@return On success, the value. Otherwise nil on failure.
  */
-static int mod_lua_bytes_get_int64(lua_State * l)
+static int mod_lua_bytes_get_int64_be(lua_State * l)
 { 
 	// we expect exactly 2 args
 	if ( lua_gettop(l) != 2) {
@@ -1039,6 +1421,49 @@ static int mod_lua_bytes_get_int64(lua_State * l)
 	}
 
 	int64_t res = cf_swap_from_be64(val);
+	lua_pushinteger(l, res);
+	return 1;
+}
+
+/**
+ *	Get a little endian int64 value from the specified index.
+ *
+ *	----------{.c}
+ *	int64 bytes.get_int64_le(bytes b, uint32 i)
+ *	----------
+ *
+ *	@param b 	The bytes to get a value from.
+ *	@param i	The index in b to get the value of.
+ *
+ *	@return On success, the value. Otherwise nil on failure.
+ */
+static int mod_lua_bytes_get_int64_le(lua_State * l)
+{
+	// we expect exactly 2 args
+	if ( lua_gettop(l) != 2) {
+		return 0;
+	}
+	
+	as_bytes *	b = mod_lua_checkbytes(l, 1);
+	lua_Integer	i = luaL_optinteger(l, 2, 0);
+	
+	// check preconditions:
+	//	- b != NULL
+	//	- 1 <= i <= UINT32_MAX
+	if ( !b ||
+		i < 1 || i > UINT32_MAX ) {
+		return 0;
+	}
+	
+	uint32_t pos = (uint32_t)(i - 1);
+	int64_t  val = 0;
+	
+	// get returns 0 on failure
+	if ( as_bytes_get_int64(b, pos, &val) == 0 ) {
+		return 0;
+	}
+	
+	int64_t res = cf_swap_from_le64(val);
 	lua_pushinteger(l, res);
 	return 1;
 }
@@ -1158,44 +1583,50 @@ static int mod_lua_bytes_get_bytes(lua_State * l)
 static const luaL_reg bytes_object_table[] = {
 
 	{"size",			mod_lua_bytes_size},
-	{"capacity",		mod_lua_bytes_capacity},
+	{"set_size",		mod_lua_bytes_ensure},
 
-	{"set_type",		mod_lua_bytes_set_type},
 	{"get_type",		mod_lua_bytes_get_type},
+	{"set_type",		mod_lua_bytes_set_type},
+	
+	{"get_string",		mod_lua_bytes_get_string},
+	{"get_bytes",		mod_lua_bytes_get_bytes},
+	{"get_byte",		mod_lua_bytes_get_byte},
+	{"get_int16",		mod_lua_bytes_get_int16_be},
+	{"get_int16_be",	mod_lua_bytes_get_int16_be},
+	{"get_int16_le",	mod_lua_bytes_get_int16_le},
+	{"get_int32",		mod_lua_bytes_get_int32_be},
+	{"get_int32_be",	mod_lua_bytes_get_int32_be},
+	{"get_int32_le",	mod_lua_bytes_get_int32_le},
+	{"get_int64",		mod_lua_bytes_get_int64_be},
+	{"get_int64_be",	mod_lua_bytes_get_int64_be},
+	{"get_int64_le",	mod_lua_bytes_get_int64_le},
 
-	{"tostring",		mod_lua_bytes_tostring},
+	{"set_string",		mod_lua_bytes_set_string},
+	{"set_bytes",		mod_lua_bytes_set_bytes},
+	{"set_byte",		mod_lua_bytes_set_byte},
+	{"set_int16",		mod_lua_bytes_set_int16_be},
+	{"set_int16_be",	mod_lua_bytes_set_int16_be},
+	{"set_int16_le",	mod_lua_bytes_set_int16_le},
+	{"set_int32",		mod_lua_bytes_set_int32_be},
+	{"set_int32_be",	mod_lua_bytes_set_int32_be},
+	{"set_int32_le",	mod_lua_bytes_set_int32_le},
+	{"set_int64",		mod_lua_bytes_set_int64_be},
+	{"set_int64_be",	mod_lua_bytes_set_int64_be},
+	{"set_int64_le",	mod_lua_bytes_set_int64_le},
 	
 	{"append_string",	mod_lua_bytes_append_string},
 	{"append_bytes",	mod_lua_bytes_append_bytes},
 	{"append_byte",		mod_lua_bytes_append_byte},
-	{"append_int16",	mod_lua_bytes_append_int16},
-	{"append_int32",	mod_lua_bytes_append_int32},
-	{"append_int64",	mod_lua_bytes_append_int64},
-	
-	{"set_string",		mod_lua_bytes_set_string},
-	{"set_bytes",		mod_lua_bytes_set_bytes},
-	{"set_byte",		mod_lua_bytes_set_byte},
-	{"set_int16",		mod_lua_bytes_set_int16},
-	{"set_int32",		mod_lua_bytes_set_int32},
-	{"set_int64",		mod_lua_bytes_set_int64},
-	
-	{"put_string",		mod_lua_bytes_set_string},
-	{"put_bytes",		mod_lua_bytes_set_bytes},
-	{"put_byte",		mod_lua_bytes_set_byte},
-	{"put_int16",		mod_lua_bytes_set_int16},
-	{"put_int32",		mod_lua_bytes_set_int32},
-	{"put_int64",		mod_lua_bytes_set_int64},
-	
-	{"get_bytes",		mod_lua_bytes_get_bytes},
-	{"get_byte",		mod_lua_bytes_get_byte},
-	{"get_int16",		mod_lua_bytes_get_int16},
-	{"get_int32",		mod_lua_bytes_get_int32},
-	{"get_int64",		mod_lua_bytes_get_int64},
-	{"get_string",		mod_lua_bytes_get_string},
-
-	{"ensure",			mod_lua_bytes_ensure},
-	{"truncate",		mod_lua_bytes_ensure},
-	
+	{"append_int16",	mod_lua_bytes_append_int16_be},
+	{"append_int16_be",	mod_lua_bytes_append_int16_be},
+	{"append_int16_le",	mod_lua_bytes_append_int16_le},
+	{"append_int32",	mod_lua_bytes_append_int32_be},
+	{"append_int32_be",	mod_lua_bytes_append_int32_be},
+	{"append_int32_le",	mod_lua_bytes_append_int32_le},
+	{"append_int64",	mod_lua_bytes_append_int64_be},
+	{"append_int64_be",	mod_lua_bytes_append_int64_be},
+	{"append_int64_le",	mod_lua_bytes_append_int64_le},
+		
 	{0, 0}
 };
 
