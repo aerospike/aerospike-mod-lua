@@ -83,6 +83,11 @@ MOD_LUA += mod_lua_bytes.o
 MOD_LUA += mod_lua_stream.o
 MOD_LUA += mod_lua_val.o
 
+AEROSPIKE-HEADERS = $(patsubst $(SOURCE_INCL)/aerospike/%.h,%.h,$(wildcard $(SOURCE_INCL)/aerospike/*.h))
+
+HEADERS =
+HEADERS += $(AEROSPIKE-HEADERS:%=$(TARGET_INCL)/aerospike/%)
+
 ###############################################################################
 ##  MAIN TARGETS                                                             ##
 ###############################################################################
@@ -90,7 +95,7 @@ MOD_LUA += mod_lua_val.o
 all: build prepare
 
 .PHONY: prepare
-prepare: $(TARGET_INCL)/aerospike/*.h
+prepare: $(HEADERS)
 
 .PHONY: build 
 build: libmod_lua
