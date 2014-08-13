@@ -1469,6 +1469,46 @@ static int mod_lua_bytes_get_int64_le(lua_State * l)
 }
 
 /**
+ *	Get an integer that was encoded in 7-bit format.
+ *	The high bit tells the reader to continue reading more bytes.
+ *
+ *	----------{.c}
+ *	int bytes.get_var_int(bytes b, uint32 i)
+ *	----------
+ *
+ *	@param b 	The bytes to get a value from.
+ *	@param i	The index in b to get the value of.
+ *
+ *	@return On success, the value. Otherwise nil on failure.
+ */
+static int mod_lua_bytes_get_var_int(lua_State * l)
+{
+	// we expect exactly 2 args
+	if ( lua_gettop(l) != 2) {
+		return 0;
+	}
+	
+	as_bytes *	b = mod_lua_checkbytes(l, 1);
+	lua_Integer	i = luaL_optinteger(l, 2, 0);
+	
+	// check preconditions:
+	//	- b != NULL
+	//	- 1 <= i <= UINT32_MAX
+	if ( !b ||
+		i < 1 || i > UINT32_MAX ) {
+		return 0;
+	}
+	
+	uint32_t pos = (uint32_t)(i - 1);
+	int32_t  val = 0;
+	uint32_t size = as_bytes_get_int32_var(b, pos, &val);
+		
+	lua_pushinteger(l, val);
+	lua_pushinteger(l, size);
+	return 2;
+}
+
+/**
  *	Get an bytes value from the specified index.
  *	
  *	----------{.c}
@@ -1600,6 +1640,7 @@ static const luaL_reg bytes_object_table[] = {
 	{"get_int64",		mod_lua_bytes_get_int64_be},
 	{"get_int64_be",	mod_lua_bytes_get_int64_be},
 	{"get_int64_le",	mod_lua_bytes_get_int64_le},
+	{"get_var_int",		mod_lua_bytes_get_var_int},
 
 	{"set_string",		mod_lua_bytes_set_string},
 	{"set_bytes",		mod_lua_bytes_set_bytes},
