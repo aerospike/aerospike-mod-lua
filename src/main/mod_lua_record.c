@@ -150,7 +150,7 @@ static int mod_lua_record_set_ttl(lua_State * l) {
     as_rec *        rec     = mod_lua_checkrecord(l, 1);
 
     // Get the 2nd arg off the stack -- and process as ttl
-    uint32_t   ttl    = luaL_optinteger(l, 2, 0);
+    uint32_t   ttl    = (uint32_t)luaL_optinteger(l, 2, 0);
 
     // This function just sets up the arguments,
     // The udf record method will do the real work.
