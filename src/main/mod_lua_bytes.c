@@ -603,6 +603,51 @@ static int mod_lua_bytes_append_int64_le(lua_State * l)
 }
 
 /**
+ *	Append an integer in variable 7-bit format at specified index.
+ *	The high bit indicates if more bytes are used.
+ *
+ *	----------{.c}
+ *	bool bytes.append_var_int(b, v)
+ *	----------
+ *
+ *	@param b 	The bytes to set a value in.
+ *	@param v	The integer value to append to b.
+ *
+ *	@return number of bytes used to store integer
+ */
+static int mod_lua_bytes_append_var_int(lua_State * l)
+{
+	// we expect 2 args
+	if ( lua_gettop(l) != 2 ) {
+		lua_pushinteger(l, 0);
+		return 1;
+	}
+	
+	as_bytes * 	b = mod_lua_checkbytes(l, 1);
+	lua_Integer	v = luaL_optinteger(l, 2, 0);
+	
+	// check preconditions:
+	//	- b != NULL
+	//	- INT32_MIN <= v <= INT32_MAX
+	if ( !b ||
+		v < INT32_MIN || v > INT32_MAX ) {
+		lua_pushinteger(l, 0);
+		return 1;
+	}
+	
+	uint32_t size = 0;
+	uint32_t pos = b->size;
+	
+	// ensure we have capacity, if not, then resize
+	if ( as_bytes_ensure(b, pos + 5, true) == true ) {
+		size = as_bytes_set_var_int(b, pos, (uint32_t)v);
+	}
+	
+	lua_pushinteger(l, size);
+	return 1;
+}
+
+/**
  *	Append a NULL-terminated string value.
  *
  *	----------{.c}
@@ -1060,6 +1105,55 @@ static int mod_lua_bytes_set_int64_le(lua_State * l)
 }
 
 /**
+ *	Encode an integer in variable 7-bit format at specified index.
+ *	The high bit indicates if more bytes are used.
+ *
+ *	----------{.c}
+ *	bool bytes.set_var_int(bytes b, uint32 i, int32 v)
+ *	----------
+ *
+ *	@param b 	The bytes to set a value in.
+ *	@param i	The index in b to set the value of.
+ *	@param v	The integer value to set at i.
+ *
+ *	@return number of bytes used to store integer
+ */
+static int mod_lua_bytes_set_var_int(lua_State * l)
+{
+	// we expect 3 args
+	if ( lua_gettop(l) != 3 ) {
+		lua_pushinteger(l, 0);
+		return 1;
+	}
+	
+	as_bytes * 	b = mod_lua_checkbytes(l, 1);
+	lua_Integer	i = luaL_optinteger(l, 2, 0);
+	lua_Integer	v = luaL_optinteger(l, 3, 0);
+	
+	// check preconditions:
+	// 	- b != NULL
+	//	- 1 <= i <= UINT32_MAX
+	//	- INT32_MIN <= v <= INT32_MAX
+	if ( !b ||
+		i < 1 || i > UINT32_MAX ||
+		v < INT32_MIN || v > INT32_MAX ) {
+		lua_pushinteger(l, 0);
+		return 1;
+	}
+	
+	uint32_t size = 0;
+	uint32_t pos = (uint32_t)(i - 1);
+	
+	// ensure we have capacity, if not, then resize
+	if ( as_bytes_ensure(b, pos + 5, true) == true ) {
+		size = as_bytes_set_var_int(b, pos, (uint32_t)v);
+	}
+	
+	lua_pushinteger(l, size);
+	return 1;
+}
+
+/**
  *	Set an NULL-terminated string value at specified index.
  *
  *	----------{.c}
@@ -1469,8 +1563,8 @@ static int mod_lua_bytes_get_int64_le(lua_State * l)
 }
 
 /**
- *	Get an integer that was encoded in 7-bit format.
- *	The high bit tells the reader to continue reading more bytes.
+ *	Decode an integer in variable 7-bit format.
+ *	The high bit indicates if more bytes are used.
  *
  *	----------{.c}
  *	int bytes.get_var_int(bytes b, uint32 i)
@@ -1500,8 +1594,8 @@ static int mod_lua_bytes_get_var_int(lua_State * l)
 	}
 	
 	uint32_t pos = (uint32_t)(i - 1);
-	int32_t  val = 0;
-	uint32_t size = as_bytes_get_int32_var(b, pos, &val);
+	uint32_t val = 0;
+	uint32_t size = as_bytes_get_var_int(b, pos, &val);
 		
 	lua_pushinteger(l, val);
 	lua_pushinteger(l, size);
@@ -1654,6 +1748,7 @@ static const luaL_reg bytes_object_table[] = {
 	{"set_int64",		mod_lua_bytes_set_int64_be},
 	{"set_int64_be",	mod_lua_bytes_set_int64_be},
 	{"set_int64_le",	mod_lua_bytes_set_int64_le},
+	{"set_var_int",		mod_lua_bytes_set_var_int},
 	
 	{"append_string",	mod_lua_bytes_append_string},
 	{"append_bytes",	mod_lua_bytes_append_bytes},
@@ -1667,6 +1762,7 @@ static const luaL_reg bytes_object_table[] = {
 	{"append_int64",	mod_lua_bytes_append_int64_be},
 	{"append_int64_be",	mod_lua_bytes_append_int64_be},
 	{"append_int64_le",	mod_lua_bytes_append_int64_le},
+	{"append_var_int",	mod_lua_bytes_append_var_int},
 		
 	{0, 0}
 };
