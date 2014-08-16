@@ -22,6 +22,7 @@
 #include <lauxlib.h>
 #include <lualib.h>
 
+#include <aerospike/as_nil.h>
 #include <aerospike/as_val.h>
 
 #include <aerospike/mod_lua_val.h>
@@ -86,6 +87,7 @@ as_val * mod_lua_toval(lua_State * l, int i) {
             }
         }
         case LUA_TNIL :
+        	return &as_nil;
         case LUA_TTABLE :
         case LUA_TFUNCTION :
         case LUA_TLIGHTUSERDATA :
