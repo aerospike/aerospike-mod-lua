@@ -87,7 +87,7 @@ as_val * mod_lua_toval(lua_State * l, int i) {
             }
         }
         case LUA_TNIL :
-        	return &as_nil;
+        	return (as_val *)&as_nil;
         case LUA_TTABLE :
         case LUA_TFUNCTION :
         case LUA_TLIGHTUSERDATA :

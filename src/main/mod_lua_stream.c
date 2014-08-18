@@ -94,11 +94,16 @@ static int mod_lua_stream_readable(lua_State * l) {
 
 static int mod_lua_stream_write(lua_State * l) {
     as_stream * stream = mod_lua_tostream(l, 1);
-    // increases reference: box has, stream has
-    as_val * val = mod_lua_toval(l, 2);
     if ( stream ) {
-        int rc = as_stream_write(stream, val);
-        lua_pushinteger(l, rc);
+        as_val * val = mod_lua_toval(l, 2);
+    	if ( val == &as_nil ) {
+    		// as_nil terminates the stream in Lua,
+    		// while NULL terminates the stream in C,
+    		// so we map the former to the latter here.
+    		val = NULL;
+    	}
+		int rc = as_stream_write(stream, val);
+		lua_pushinteger(l, rc);
         return 1;
     }
     else {
