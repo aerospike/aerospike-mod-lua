@@ -22,6 +22,7 @@
 #include <aerospike/mod_lua_val.h>
 #include <aerospike/mod_lua_bytes.h>
 #include <aerospike/mod_lua_reg.h>
+#include <aerospike/mod_lua_list.h>
 
 #include "internal.h"
 
@@ -107,6 +108,17 @@ static int mod_lua_record_digest(lua_State * l) {
 static int mod_lua_record_numbins(lua_State * l) {
     as_rec * rec = (as_rec *) mod_lua_checkrecord(l, 1);
     lua_pushinteger(l, as_rec_numbins(rec));
+    return 1;
+}
+
+/**
+ * Get a list of a record's bin names:
+ *      record.bin_names(r)
+ */
+static int mod_lua_record_bin_names(lua_State * l) {
+    as_rec * rec = (as_rec *) mod_lua_checkrecord(l, 1);
+    as_list * list = as_rec_bin_names(rec);
+    mod_lua_pushlist(l, list);
     return 1;
 }
 
@@ -230,6 +242,7 @@ static const luaL_reg object_table[] = {
     {"set_type",   mod_lua_record_set_type},
     {"set_ttl",    mod_lua_record_set_ttl},
     {"drop_key",   mod_lua_record_drop_key},
+    {"bin_names",  mod_lua_record_bin_names},
     {0, 0}
 };
 
