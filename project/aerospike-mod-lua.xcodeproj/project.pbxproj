@@ -230,7 +230,10 @@
 					/usr/local/include,
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.8;
-				OTHER_CFLAGS = "-D_DARWIN_UNLIMITED_SELECT";
+				OTHER_CFLAGS = (
+					"-D_DARWIN_UNLIMITED_SELECT",
+					"-DLUA_DEBUG_HOOK",
+				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx10.8;
 			};
@@ -248,7 +251,10 @@
 					/usr/local/include,
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.8;
-				OTHER_CFLAGS = "-D_DARWIN_UNLIMITED_SELECT";
+				OTHER_CFLAGS = (
+					"-D_DARWIN_UNLIMITED_SELECT",
+					"-DLUA_DEBUG_HOOK",
+				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx10.8;
 			};
