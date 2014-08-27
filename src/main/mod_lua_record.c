@@ -111,14 +111,37 @@ static int mod_lua_record_numbins(lua_State * l) {
     return 1;
 }
 
+typedef struct {
+	lua_State * state;
+	int return_val;
+} bin_names_data;
+
+void bin_names_callback(char * bin_names, uint32_t nbins, uint16_t max_name_size, void * udata) {
+	bin_names_data * data = (bin_names_data *) udata;
+	lua_State * l = data->state;
+	lua_createtable(l, nbins, 0);
+	if (nbins == 1 && *bin_names == 0) { // single-bin case
+		lua_pushnil(l);
+		lua_rawseti(l, -2, 1);
+	}
+	else {
+		for (uint16_t i = 0; i < nbins; i++) {
+			lua_pushstring(l, &bin_names[i * max_name_size]);
+			lua_rawseti(l, -2, i + 1);
+		}
+	}
+}
+
 /**
- * Get a list of a record's bin names:
+ * Get a table of a record's bin names:
  *      record.bin_names(r)
  */
 static int mod_lua_record_bin_names(lua_State * l) {
     as_rec * rec = (as_rec *) mod_lua_checkrecord(l, 1);
-    as_list * list = as_rec_bin_names(rec);
-    mod_lua_pushlist(l, list);
+    bin_names_data udata = {.state = l, .return_val = 0};
+
+	as_rec_bin_names(rec, bin_names_callback, (void *) &udata);
+
     return 1;
 }
 
