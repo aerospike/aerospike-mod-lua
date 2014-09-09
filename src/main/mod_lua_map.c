@@ -132,6 +132,17 @@ static int mod_lua_map_newindex(lua_State * l) {
     return 0;
 }
 
+static int mod_lua_map_remove(lua_State * l) {
+    as_map * map = mod_lua_checkmap(l, 1);
+    if ( map ) {
+        as_val * key = mod_lua_takeval(l, 2);
+        if ( key ) {
+        	as_map_remove(map, key);
+        }
+    }
+    return 0;
+}
+
 static int mod_lua_map_len(lua_State * l) {
     mod_lua_box *   box     = mod_lua_checkbox(l, 1, CLASS_NAME);
     as_map *        map     = (as_map *) mod_lua_box_value(box);
@@ -276,6 +287,7 @@ static const luaL_reg object_table[] = {
     {"pairs",           mod_lua_map_pairs},
     {"keys",            mod_lua_map_keys},
     {"values",          mod_lua_map_values},
+    {"remove",          mod_lua_map_remove},
     {"size",            mod_lua_map_size},
     {"tostring",        mod_lua_map_tostring},
     {0, 0}
