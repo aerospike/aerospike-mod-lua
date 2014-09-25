@@ -595,8 +595,8 @@ static lua_State * create_state(context * ctx, const char * filename) {
  * Leases a context (lua_State). This will attempt to reuse an 
  * existing context or create a new one as needed.
  *
- * @param m the module from which the context will be leased from.
- * @param filename name of the udf file
+ * @param ctx mod lua context.
+ * @param citem context cache item to be populated.
  * @return populate citem with lua_State to be used as the context.
  * @return 0 on success, otherwise 1
  */
@@ -636,7 +636,9 @@ static int poll_state(context * ctx, cache_item * citem) {
 
 	if ( citem->state == NULL ) {
 		citem->gen[0] = '\0';
+		pthread_rwlock_rdlock(ctx->lock);
 		citem->state = create_state(ctx, citem->key);
+		pthread_rwlock_unlock(ctx->lock);
 		if (!citem->state) {
 			as_logger_trace(mod_lua.logger, "[CACHE] state create failed: %s", citem->key);
 			return 1;
@@ -847,34 +849,6 @@ static int apply(lua_State * l, as_udf_context *udf_ctx, int err, int argc, as_r
 	}
 }
 
-
-// Returning negative number as positive number collide with lua return codes
-// Used in udf_rw.c function to print the error message 
-// NB: No protection in this function callers should have a multi threaded
-//     protection
-static int verify_environment(context * ctx, as_aerospike * as) {
-	int rc = 0;
-
-	if ( ctx->config.system_path[0] == '\0' ) {
-		char * p = ctx->config.system_path;
-		char msg[256] = {'\0'};
-		strcpy(msg, "system-path is invalid: ");
-		strncpy(msg+24, p+1, 230);
-		as_aerospike_log(as, __FILE__, __LINE__, 1, msg);
-		rc += 1;
-	}
-
-	if ( ctx->config.user_path[0] == '\0' ) {
-		char * p = ctx->config.user_path;
-		char msg[256] = {'\0'};
-		strcpy(msg, "user-path is invalid: ");
-		strncpy(msg+22, p+1, 233);
-		as_aerospike_log(as, __FILE__, __LINE__, 1, msg);
-		rc += 2;
-	}
-
-	return rc;
-} 
 
 char * as_module_err_string(int err_no) {
 	char *rs;
@@ -1091,14 +1065,14 @@ Cleanup:
  *
  * Proxies to `m->hooks->apply_record(m, ...)`
  *
- * TODO: Remove redunancies between apply_record() and apply_stream()
+ * TODO: Remove redundancies between apply_record() and apply_stream()
  *
  * @param m module from which the fqn will be resolved.
  * @param udf_ctx udf execution context
- * @param f fully-qualified name of the function to invoke.
+ * @param function fully-qualified name of the function to invoke.
  * @param r record to apply to the function.
  * @param args list of arguments for the function represented as vals 
- * @param result pointer to a val that will be populated with the result.
+ * @param res pointer to an as_result that will be populated with the result.
  * @return 0 on success, otherwise 1
  */
 static int apply_record(as_module * m, as_udf_context * udf_ctx, const char * filename, const char * function, as_rec * r, as_list * args, as_result * res) {
@@ -1110,13 +1084,6 @@ static int apply_record(as_module * m, as_udf_context * udf_ctx, const char * fi
 	int         err     = 0;                        // Error handler
 	as_aerospike *as    = udf_ctx->as;              // aerospike object 
 	
-	pthread_rwlock_rdlock(ctx->lock);
-	rc = verify_environment(ctx, as);
-	if ( rc ) {
-		pthread_rwlock_unlock(ctx->lock);
-		return rc;
-	}
-
 	cache_item  citem   = {
 		.key    = "",
 		.gen    = "",
@@ -1130,7 +1097,6 @@ static int apply_record(as_module * m, as_udf_context * udf_ctx, const char * fi
 	// lease a state
 	as_logger_trace(mod_lua.logger, "apply_record: poll state");
 	rc = poll_state(ctx, &citem);
-	pthread_rwlock_unlock(ctx->lock);
 
 	if ( rc != 0 ) {
 		as_logger_trace(mod_lua.logger, "apply_record: Unable to poll a state");
@@ -1188,14 +1154,15 @@ static int apply_record(as_module * m, as_udf_context * udf_ctx, const char * fi
  *
  * Proxies to `m->hooks->apply_stream(m, ...)`
  *
- * TODO: Remove redunancies between apply_record() and apply_stream()
+ * TODO: Remove redundancies between apply_record() and apply_stream()
  *
  * @param m module from which the fqn will be resolved.
  * @param udf_ctx udf execution context
- * @param f fully-qualified name of the function to invoke.
- * @param s stream to apply to the function.
+ * @param function fully-qualified name of the function to invoke.
+ * @param istream stream to apply to the function.
  * @param args list of arguments for the function represented as vals 
- * @param result pointer to a val that will be populated with the result.
+ * @param ostream output stream which will be populated by applying the function.
+ * @param res pointer to an as_result that will be populated with the result.
  * @return 0 on success, otherwise 1
  */
 static int apply_stream(as_module * m, as_udf_context *udf_ctx, const char * filename, const char * function, as_stream * istream, as_list * args, as_stream * ostream, as_result * res) {
@@ -1207,13 +1174,6 @@ static int apply_stream(as_module * m, as_udf_context *udf_ctx, const char * fil
 	int         err     = 0;                    // Error handler
 	as_aerospike *as    = udf_ctx->as;          // aerospike object 
 	
-	pthread_rwlock_rdlock(ctx->lock);
-	rc = verify_environment(ctx, as);
-	if ( rc ) {
-		pthread_rwlock_unlock(ctx->lock);
-		return rc;
-	}
-
 	cache_item  citem   = {
 		.key    = "",
 		.gen    = "",
@@ -1227,7 +1187,6 @@ static int apply_stream(as_module * m, as_udf_context *udf_ctx, const char * fil
 	// lease a state
 	as_logger_trace(mod_lua.logger, "apply_stream: poll state");
 	rc = poll_state(ctx, &citem);
-	pthread_rwlock_unlock(ctx->lock);
 
 	if ( rc != 0 ) {
 		as_logger_trace(mod_lua.logger, "apply_stream: Unable to poll a state");
