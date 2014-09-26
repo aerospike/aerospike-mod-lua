@@ -830,9 +830,8 @@ static int apply(lua_State * l, as_udf_context *udf_ctx, int err, int argc, as_r
 	}
 	else {
 		if ( res != NULL ) {
-			char err_str[256]; // error-string must be explicitly set to avoid a crash in ASD
-			snprintf(err_str, 256, "apply() call failed with lua run-time execution");
-			as_result_setfailure(res, (as_val *) as_string_new(err_str,false));
+			as_val * rv = mod_lua_retval(l);
+			as_result_setfailure(res, rv);
 		}
 	}
 
