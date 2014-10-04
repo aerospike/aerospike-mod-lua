@@ -169,7 +169,7 @@ static int mod_lua_record_set_type(lua_State * l) {
     as_rec *        rec     = mod_lua_checkrecord(l, 1);
 
     // Get the 2nd arg off the stack -- and process as rec Type (@LDT @TOBY)
-    uint8_t   rec_type    = luaL_optinteger(l, 2, 0);
+    int8_t   rec_type    = luaL_optinteger(l, 2, 0);
 
     // This function just sets up the arguments,
     // The udf record method will do the real work.
