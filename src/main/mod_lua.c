@@ -35,6 +35,7 @@
 #include <citrusleaf/alloc.h>
 
 #include <aerospike/as_aerospike.h>
+#include <aerospike/as_log_macros.h>
 #include <aerospike/as_types.h>
 
 #include <aerospike/mod_lua.h>
@@ -223,7 +224,7 @@ int cache_init(context * ctx, const char *key, const char * gen) {
 			cf_rc_releaseandfree(centry);
 			return 1;
 		} else {
-			as_logger_trace(mod_lua.logger, "[CACHE] Added [%s:%p]", key, centry);
+			as_log_trace("[CACHE] Added [%s:%p]", key, centry);
 		}
 	} else { 
 		UNLOCK;
@@ -253,7 +254,7 @@ static int cache_add_file(context * ctx, const char * filename) {
 	   || key == tmp_char       // '.' as first character
 	   || strlen(tmp_char) <= 1) // '.' in filename , but no extension e.g. "abc."
 	{
-		as_logger_error(mod_lua.logger, "LUA registration failed : Invalid filename %s", filename);
+		as_log_error("LUA registration failed : Invalid filename %s", filename);
 		return -1;
 	}
 	*tmp_char = '\0';
@@ -568,13 +569,13 @@ static lua_State * create_state(context * ctx, const char * filename) {
 	lua_pushstring(l, "aerospike");
 	int rc = lua_pcall(l, 1, 1, 0);
 	if (rc) {
-		as_logger_error(mod_lua.logger, "Lua Create Error: %s", lua_tostring(l, -1));
+		as_log_error("Lua Create Error: %s", lua_tostring(l, -1));
 		lua_close(l);
 		return NULL;
 	}
 
 	if (is_native_module(ctx, filename)) {
-		as_logger_trace(mod_lua.logger, "Not requiring native module: %s", filename);
+		as_log_trace("Not requiring native module: %s", filename);
 		return l;
 	}
 
@@ -582,11 +583,11 @@ static lua_State * create_state(context * ctx, const char * filename) {
 	lua_pushstring(l, filename);
 	rc = lua_pcall(l, 1, 1, 0);
 	if (rc) {
-		as_logger_error(mod_lua.logger, "Lua Create Error: %s", lua_tostring(l, -1));
+		as_log_error("Lua Create Error: %s", lua_tostring(l, -1));
 		lua_close(l);
 		return NULL;
 	}
-	as_logger_debug(mod_lua.logger, "Size of the lua state created for the file %s in KB %d", 
+	as_log_debug("Size of the lua state created for the file %s in KB %d", 
 			filename, lua_gc(l, LUA_GCCOUNT,0));
 	return l;
 }
@@ -612,7 +613,7 @@ static int poll_state(context * ctx, cache_item * citem) {
 			if (cf_queue_pop(centry->lua_state_q, &citem->state, CF_QUEUE_NOWAIT) != CF_QUEUE_EMPTY) {
 				strncpy(citem->key, centry->key, CACHE_ENTRY_KEY_MAX);
 				strncpy(citem->gen, centry->gen, CACHE_ENTRY_GEN_MAX);
-				as_logger_trace(mod_lua.logger, "[CACHE] took state: %s (%d)", citem->key, centry->max_cache_size);
+				as_log_trace("[CACHE] took state: %s (%d)", citem->key, centry->max_cache_size);
 			} else {
 				miss = cf_atomic32_incr(&centry->cache_miss);
 				citem->state = NULL;
@@ -625,13 +626,13 @@ static int poll_state(context * ctx, cache_item * citem) {
 			}
 			cf_rc_releaseandfree(centry);
 			centry = 0;
-			as_logger_trace(mod_lua.logger, "[CACHE] Miss %d : Total %d", miss, total);
+			as_log_trace("[CACHE] Miss %d : Total %d", miss, total);
 		} else {
 			centry = NULL;
 		}
 	}
 	else {
-		as_logger_trace(mod_lua.logger, "[CACHE] is disabled.");
+		as_log_trace("[CACHE] is disabled.");
 	}
 
 	if ( citem->state == NULL ) {
@@ -640,10 +641,10 @@ static int poll_state(context * ctx, cache_item * citem) {
 		citem->state = create_state(ctx, citem->key);
 		pthread_rwlock_unlock(ctx->lock);
 		if (!citem->state) {
-			as_logger_trace(mod_lua.logger, "[CACHE] state create failed: %s", citem->key);
+			as_log_trace("[CACHE] state create failed: %s", citem->key);
 			return 1;
 		} else { 
-			as_logger_trace(mod_lua.logger, "[CACHE] state created: %s", citem->key);
+			as_log_trace("[CACHE] state created: %s", citem->key);
 		}
 	}
 
@@ -724,11 +725,11 @@ static int offer_state(context * ctx, cache_item * citem) {
 		RDLOCK;
 		if (CF_RCHASH_OK == cf_rchash_get(centry_hash, (void *)citem->key, (uint32_t)strlen(citem->key), (void *)&centry) ) {
 			UNLOCK;
-			as_logger_trace(mod_lua.logger, "[CACHE] found entry: %s (%d)", citem->key, centry->max_cache_size);
+			as_log_trace("[CACHE] found entry: %s (%d)", citem->key, centry->max_cache_size);
 			if (( CF_Q_SZ(centry->lua_state_q) < centry->max_cache_size ) 
 				&& ( !strncmp(centry->gen, citem->gen, CACHE_ENTRY_GEN_MAX) )) {
 				cf_queue_push(centry->lua_state_q, &citem->state);
-				as_logger_trace(mod_lua.logger, "[CACHE] returning state: %s (%d)", citem->key, centry->max_cache_size);
+				as_log_trace("[CACHE] returning state: %s (%d)", citem->key, centry->max_cache_size);
 				citem->state = NULL;
 			}
 			cf_rc_releaseandfree(centry);
@@ -736,11 +737,11 @@ static int offer_state(context * ctx, cache_item * citem) {
 		}
 		else {
 			UNLOCK;
-			as_logger_trace(mod_lua.logger, "[CACHE] entry not found: %s", citem->key);
+			as_log_trace("[CACHE] entry not found: %s", citem->key);
 		}
 	}
 	else {
-		as_logger_trace(mod_lua.logger, "[CACHE] is disabled.");
+		as_log_trace("[CACHE] is disabled.");
 	}
 	
 	// l is not NULL
@@ -748,7 +749,7 @@ static int offer_state(context * ctx, cache_item * citem) {
 	// So, we free it up.
 	if ( citem->state != NULL) {
 		lua_close(citem->state);
-		as_logger_trace(mod_lua.logger, "[CACHE] state closed: %s", citem->key);
+		as_log_trace("[CACHE] state closed: %s", citem->key);
 	}
 
 	return 0;
@@ -784,20 +785,19 @@ static int pushargs(lua_State * l, as_list * args) {
 	};
 
 	as_list_foreach(args, pushargs_foreach, &data);
-	as_logger_trace(mod_lua.logger, "pushargs: %d", data.count);
+	as_log_trace("pushargs: %d", data.count);
 	return data.count;
 }
 
 static int handle_error(lua_State * l) {
 	const char * msg = luaL_optstring(l, 1, 0);
-	as_logger_error(mod_lua.logger, "Lua Runtime Error: %s", msg);
-	// cf_warning(AS_SPROC, (char *) msg);
+	as_log_error("Lua Runtime Error: %s", msg);
 	return 1;
 }
 
 static int apply(lua_State * l, as_udf_context *udf_ctx, int err, int argc, as_result * res, bool is_stream) {
 
-	as_logger_trace(mod_lua.logger, "apply");
+	as_log_trace("apply");
 
 #ifndef LUA_DEBUG_HOOK 
 	as_timer *timer = udf_ctx->timer;
@@ -816,13 +816,13 @@ static int apply(lua_State * l, as_udf_context *udf_ctx, int err, int argc, as_r
 	}
 #endif 
 	// call apply_record(f, r, ...)
-	as_logger_trace(mod_lua.logger, "call function");
+	as_log_trace("call function");
 	int rc = lua_pcall(l, argc, 1, err);
 
-	as_logger_trace(mod_lua.logger, "rc = %d", rc);
+	as_log_trace("rc = %d", rc);
 
 	// Convert the return value from a lua type to a val type
-	as_logger_trace(mod_lua.logger, "convert lua type to val");
+	as_log_trace("convert lua type to val");
 
 	if ( rc == 0 ) { // indicates lua-execution success
 		if ( (is_stream == false) && (res != NULL) ) { // if is_stream is true, no need to set result as success
@@ -838,7 +838,7 @@ static int apply(lua_State * l, as_udf_context *udf_ctx, int err, int argc, as_r
 	}
 
 	// Pop the return value off the stack
-	as_logger_trace(mod_lua.logger, "pop return value from the stack");
+	as_log_trace("pop return value from the stack");
 	lua_pop(l, -1);
 
 	if ( is_stream || (res == NULL) ) { //if is_stream is true then whether res is null or not rc should be returned
@@ -1027,7 +1027,7 @@ static int validate(as_module * m, as_aerospike * as, const char * filename, con
 
 	// No validation for .so file
 	if (hasext(filename, strlen(filename), ".so", 3)) {
-		as_logger_trace(mod_lua.logger, "No validation required for native module: %s", filename);
+		as_log_trace("No validation required for native module: %s", filename);
 		goto Cleanup;
 	}
 
@@ -1045,10 +1045,10 @@ static int validate(as_module * m, as_aerospike * as, const char * filename, con
 
 Cleanup:
 	if ( err->code == 0 ) {
-		as_logger_trace(mod_lua.logger, "Lua Validation Pass for '%s'", filename);
+		as_log_trace("Lua Validation Pass for '%s'", filename);
 	}
 	else {
-		as_logger_debug(mod_lua.logger, "Lua Validation Fail for '%s': (%d) %s", filename, err->code, err->message);
+		as_log_debug("Lua Validation Fail for '%s': (%d) %s", filename, err->code, err->message);
 	}
 	
 	if ( l != NULL ) {
@@ -1091,14 +1091,14 @@ static int apply_record(as_module * m, as_udf_context * udf_ctx, const char * fi
 
 	strncpy(citem.key, filename, CACHE_ENTRY_KEY_MAX);
 	
-	as_logger_trace(mod_lua.logger, "apply_record: BEGIN");
+	as_log_trace("apply_record: BEGIN");
 
 	// lease a state
-	as_logger_trace(mod_lua.logger, "apply_record: poll state");
+	as_log_trace("apply_record: poll state");
 	rc = poll_state(ctx, &citem);
 
 	if ( rc != 0 ) {
-		as_logger_trace(mod_lua.logger, "apply_record: Unable to poll a state");
+		as_log_trace("apply_record: Unable to poll a state");
 		return rc;
 	}
 
@@ -1109,40 +1109,40 @@ static int apply_record(as_module * m, as_udf_context * udf_ctx, const char * fi
 	// int err = lua_gettop(l);
 	
 	// push aerospike into the global scope
-	as_logger_trace(mod_lua.logger, "apply_record: push aerospike into the global scope");
+	as_log_trace("apply_record: push aerospike into the global scope");
 	mod_lua_pushaerospike(l, as);
 	lua_setglobal(l, "aerospike");
 	
 	// push apply_record() onto the stack
-	as_logger_trace(mod_lua.logger, "apply_record: push apply_record() onto the stack");
+	as_log_trace("apply_record: push apply_record() onto the stack");
 	lua_getglobal(l, "apply_record");
 	
 	// push function onto the stack
-	as_logger_trace(mod_lua.logger, "apply_record: push function onto the stack");
+	as_log_trace("apply_record: push function onto the stack");
 	lua_getglobal(l, function);
 
 	// push the record onto the stack
-	as_logger_trace(mod_lua.logger, "apply_record: push the record onto the stack");
+	as_log_trace("apply_record: push the record onto the stack");
 	mod_lua_pushrecord(l, r);
 
 	// push each argument onto the stack
-	as_logger_trace(mod_lua.logger, "apply_record: push each argument onto the stack");
+	as_log_trace("apply_record: push each argument onto the stack");
 	argc = pushargs(l, args);
 
 	// function + record + arglist
 	argc = argc + 2;
 	
 	// apply the function
-	as_logger_trace(mod_lua.logger, "apply_record: apply the function");
+	as_log_trace("apply_record: apply the function");
 	rc = apply(l, udf_ctx, err, argc, res, false);
 
 	// return the state
 	pthread_rwlock_rdlock(ctx->lock);
-	as_logger_trace(mod_lua.logger, "apply_record: offer state");
+	as_log_trace("apply_record: offer state");
 	offer_state(ctx, &citem);
 	pthread_rwlock_unlock(ctx->lock);
 	
-	as_logger_trace(mod_lua.logger, "apply_record: END");
+	as_log_trace("apply_record: END");
 	return rc;
 }
 
@@ -1181,14 +1181,14 @@ static int apply_stream(as_module * m, as_udf_context *udf_ctx, const char * fil
 
 	strncpy(citem.key, filename, CACHE_ENTRY_KEY_MAX);
 
-	as_logger_trace(mod_lua.logger, "apply_stream: BEGIN");
+	as_log_trace("apply_stream: BEGIN");
 
 	// lease a state
-	as_logger_trace(mod_lua.logger, "apply_stream: poll state");
+	as_log_trace("apply_stream: poll state");
 	rc = poll_state(ctx, &citem);
 
 	if ( rc != 0 ) {
-		as_logger_trace(mod_lua.logger, "apply_stream: Unable to poll a state");
+		as_log_trace("apply_stream: Unable to poll a state");
 		return rc;
 	}
 
@@ -1199,48 +1199,48 @@ static int apply_stream(as_module * m, as_udf_context *udf_ctx, const char * fil
 	err = lua_gettop(l);
 	
 	// push aerospike into the global scope
-	as_logger_trace(mod_lua.logger, "apply_stream: push aerospike into the global scope");
+	as_log_trace("apply_stream: push aerospike into the global scope");
 	mod_lua_pushaerospike(l, as);
 	lua_setglobal(l, "aerospike");
 
 	// push apply_stream() onto the stack
-	as_logger_trace(mod_lua.logger, "apply_stream: push apply_stream() onto the stack");
+	as_log_trace("apply_stream: push apply_stream() onto the stack");
 	lua_getglobal(l, "apply_stream");
 	
 	// push function onto the stack
-	as_logger_trace(mod_lua.logger, "apply_stream: push function onto the stack");
+	as_log_trace("apply_stream: push function onto the stack");
 	lua_getglobal(l, function);
 
 	// push the stream onto the stack
 	// if server_mode == true then SCOPE_SERVER(1) else SCOPE_CLIENT(2)
-	as_logger_trace(mod_lua.logger, "apply_stream: push scope onto the stack");
+	as_log_trace("apply_stream: push scope onto the stack");
 	lua_pushinteger(l, ctx->config.server_mode ? 1 : 2);
 
 	// push the stream onto the stack
-	as_logger_trace(mod_lua.logger, "apply_stream: push istream onto the stack");
+	as_log_trace("apply_stream: push istream onto the stack");
 	mod_lua_pushstream(l, istream);
 
-	as_logger_trace(mod_lua.logger, "apply_stream: push ostream onto the stack");
+	as_log_trace("apply_stream: push ostream onto the stack");
 	mod_lua_pushstream(l, ostream);
 
 	// push each argument onto the stack
-	as_logger_trace(mod_lua.logger, "apply_stream: push each argument onto the stack");
+	as_log_trace("apply_stream: push each argument onto the stack");
 	argc = pushargs(l, args); 
 
 	// function + scope + istream + ostream + arglist
 	argc = 4 + argc;
 	
 	// call apply_stream(f, s, ...)
-	as_logger_trace(mod_lua.logger, "apply_stream: apply the function");
+	as_log_trace("apply_stream: apply the function");
 	rc = apply(l, udf_ctx, err, argc, res, true);
 
 	// release the context
 	pthread_rwlock_rdlock(ctx->lock);
-	as_logger_trace(mod_lua.logger, "apply_stream: lose the context");
+	as_log_trace("apply_stream: lose the context");
 	offer_state(ctx, &citem);
 	pthread_rwlock_unlock(ctx->lock);
 
-	as_logger_trace(mod_lua.logger, "apply_stream: END");
+	as_log_trace("apply_stream: END");
 	return rc;
 }
 
@@ -1286,6 +1286,5 @@ static const as_module_hooks mod_lua_hooks = {
  */
 as_module mod_lua = {
 	.source         = &mod_lua_source,
-	.logger         = NULL,
 	.hooks          = &mod_lua_hooks
 };
