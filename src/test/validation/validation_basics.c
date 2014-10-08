@@ -152,10 +152,8 @@ static bool before(atf_suite * suite) {
     	return false;
     }
 
-	if ( mod_lua.logger == NULL ) {
-		mod_lua.logger = test_logger_new();
-	}
-		
+	as_lua_log_init();
+
 	int rc = as_module_configure(&mod_lua, &config);
 
 	if ( rc != 0 ) {
