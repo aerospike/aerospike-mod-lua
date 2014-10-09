@@ -64,6 +64,8 @@ pthread_rwlock_t g_cache_lock = PTHREAD_RWLOCK_INITIALIZER;
 #define CACHE_ENTRY_STATE_MAX 128
 #define CACHE_ENTRY_STATE_MIN 10
 
+#define LUA_PARAM_COUNT_THRESHOLD 20 // warn if a function call exceeds this
+
 #define MOD_LUA_CONFIG_SYSPATH "/opt/aerospike/sys/udf/lua"
 #define MOD_LUA_CONFIG_USRPATH "/opt/aerospike/usr/udf/lua"
 
@@ -1129,6 +1131,10 @@ static int apply_record(as_module * m, as_udf_context * udf_ctx, const char * fi
 	as_logger_trace(mod_lua.logger, "apply_record: push each argument onto the stack");
 	argc = pushargs(l, args);
 
+	if (argc > LUA_PARAM_COUNT_THRESHOLD) {
+		as_logger_warn(mod_lua.logger, "large number of Lua function arguments (%d)", argc);
+	}
+
 	// function + record + arglist
 	argc = argc + 2;
 	
@@ -1226,6 +1232,10 @@ static int apply_stream(as_module * m, as_udf_context *udf_ctx, const char * fil
 	// push each argument onto the stack
 	as_logger_trace(mod_lua.logger, "apply_stream: push each argument onto the stack");
 	argc = pushargs(l, args); 
+
+	if (argc > LUA_PARAM_COUNT_THRESHOLD) {
+		as_logger_warn(mod_lua.logger, "large number of Lua function arguments (%d)", argc);
+	}
 
 	// function + scope + istream + ostream + arglist
 	argc = 4 + argc;
