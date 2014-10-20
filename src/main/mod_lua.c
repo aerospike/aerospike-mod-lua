@@ -1132,7 +1132,7 @@ static int apply_record(as_module * m, as_udf_context * udf_ctx, const char * fi
 	argc = pushargs(l, args);
 
 	if (argc > LUA_PARAM_COUNT_THRESHOLD) {
-		as_logger_warn(mod_lua.logger, "large number of Lua function arguments (%d)", argc);
+		as_log_error("large number of Lua function arguments (%d)", argc);
 	}
 
 	// function + record + arglist
@@ -1234,7 +1234,7 @@ static int apply_stream(as_module * m, as_udf_context *udf_ctx, const char * fil
 	argc = pushargs(l, args); 
 
 	if (argc > LUA_PARAM_COUNT_THRESHOLD) {
-		as_logger_warn(mod_lua.logger, "large number of Lua function arguments (%d)", argc);
+		as_log_error("large number of Lua function arguments (%d)", argc);
 	}
 
 	// function + scope + istream + ostream + arglist
