@@ -1,11 +1,7 @@
 #include "test.h"
-#include "util/test_logger.h"
 
 PLAN( mod_lua_test )
 {
-
-    test_logger.level = AS_LOGGER_LEVEL_INFO;
-    
     /**
      * record - record tests
      */
