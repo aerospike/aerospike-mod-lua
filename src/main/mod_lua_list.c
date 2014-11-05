@@ -191,6 +191,24 @@ static int mod_lua_list_size(lua_State * l) {
 }
 
 static int mod_lua_list_new(lua_State * l) {
+	int n = lua_gettop(l);
+	if (n < 1 || n > 2) {
+		return 0;
+	}
+	lua_Integer capacity = luaL_optinteger(l, 1, -1);
+	if (capacity < 0) {
+		return 0;
+	}
+	lua_Integer capacity_step = luaL_optinteger(l, 2, 10);
+	if (capacity_step < 0) {
+		return 0;
+	}
+	as_list * ll = (as_list *) as_arraylist_new((uint32_t)capacity, (uint32_t)capacity_step);
+	mod_lua_pushlist(l, ll);
+	return 1;
+}
+
+static int mod_lua_list_cons(lua_State * l) {
 	as_list * ll = (as_list *) as_arraylist_new(5,10);
 	int n = lua_gettop(l);
 	if ( n == 2 && lua_type(l, 2) == LUA_TTABLE) {
@@ -328,6 +346,7 @@ static int mod_lua_list_iterator(lua_State * l) {
  *****************************************************************************/
 
 static const luaL_reg object_table[] = {
+	{"new",             mod_lua_list_new},
 	{"insert",          mod_lua_list_insert},
 	{"append",          mod_lua_list_append},
 	{"prepend",         mod_lua_list_prepend},
@@ -343,7 +362,7 @@ static const luaL_reg object_table[] = {
 };
 
 static const luaL_reg object_metatable[] = {
-	{"__call",          mod_lua_list_new},
+	{"__call",          mod_lua_list_cons},
 	{0, 0}
 };
 
