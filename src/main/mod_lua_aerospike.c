@@ -210,6 +210,22 @@ static int mod_lua_aerospike_get_current_time(lua_State * l) {
     return 1;
 }
 
+/**
+ * Hook to set execution context information 
+ */
+static int mod_lua_aerospike_set_context(lua_State * l) {
+    as_aerospike *  a   = mod_lua_checkaerospike(l, 1);
+    
+    as_rec *        r   = mod_lua_torecord(l, 2);
+
+	// Get the 2nd arg off the stack -- and process as context
+    uint32_t  context   = (uint32_t)luaL_optinteger(l, 3, 0);
+
+	as_aerospike_set_context(a, r, context);
+    return 0;
+}
+
+
 /******************************************************************************
  * CLASS TABLE
  *****************************************************************************/
@@ -226,6 +242,7 @@ static const luaL_reg class_table[] = {
     {"open_subrec",      mod_lua_aerospike_subrec_open},
     {"log",              mod_lua_aerospike_log},
     {"get_current_time", mod_lua_aerospike_get_current_time},
+    {"set_context",      mod_lua_aerospike_set_context},
     {0, 0}
 };
 
