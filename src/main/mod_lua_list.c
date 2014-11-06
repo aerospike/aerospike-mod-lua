@@ -99,13 +99,13 @@ static int mod_lua_list_prepend(lua_State * l) {
 	return 0;
 }
 
-static int mod_lua_list_delete(lua_State * l) {
+static int mod_lua_list_remove(lua_State * l) {
 	as_list * list = mod_lua_checklist(l, 1);
 	if (list) {
 		lua_Integer idx = luaL_optinteger(l, 2, 0);
 		// Lua index is 1-based.
 		if (idx > 0) {
-			as_list_delete(list, (uint32_t)idx - 1);
+			as_list_remove(list, (uint32_t)idx - 1);
 		}
 	}
 	return 0;
@@ -350,7 +350,7 @@ static const luaL_reg object_table[] = {
 	{"insert",          mod_lua_list_insert},
 	{"append",          mod_lua_list_append},
 	{"prepend",         mod_lua_list_prepend},
-	{"delete",          mod_lua_list_delete},
+	{"remove",          mod_lua_list_remove},
 	{"concat",          mod_lua_list_concat},
 	{"trim",            mod_lua_list_trim},
 	{"take",            mod_lua_list_take},
