@@ -91,6 +91,26 @@ static int mod_lua_record_gen(lua_State * l) {
 }
 
 /**
+ * Get a record key:
+ *      record.key(r)
+ */
+static int mod_lua_record_key(lua_State * l) {
+    as_rec * rec = (as_rec *) mod_lua_checkrecord(l, 1);
+    mod_lua_pushval(l, as_rec_key(rec));
+    return 1;
+}
+
+/**
+ * Get a set name:
+ *      record.setname(r)
+ */
+static int mod_lua_record_setname(lua_State * l) {
+    as_rec * rec = (as_rec *) mod_lua_checkrecord(l, 1);
+    lua_pushstring(l, as_rec_setname(rec));
+    return 1;
+}
+
+/**
  * Get a record digest:
  *      record.digest(r)
  */
@@ -259,6 +279,8 @@ static int mod_lua_record_newindex(lua_State * l) {
 static const luaL_reg object_table[] = {
     {"ttl",        mod_lua_record_ttl},
     {"gen",        mod_lua_record_gen},
+    {"key",        mod_lua_record_key},
+    {"setname",    mod_lua_record_setname},
     {"digest",     mod_lua_record_digest},
     {"numbins",    mod_lua_record_numbins},
     {"set_flags",  mod_lua_record_set_flags},
