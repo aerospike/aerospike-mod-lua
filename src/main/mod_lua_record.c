@@ -96,8 +96,16 @@ static int mod_lua_record_gen(lua_State * l) {
  */
 static int mod_lua_record_key(lua_State * l) {
     as_rec * rec = (as_rec *) mod_lua_checkrecord(l, 1);
-    mod_lua_pushval(l, as_rec_key(rec));
-    return 1;
+    as_val * value  = (as_val *) as_rec_key(rec);
+    if ( value != NULL ) {
+        mod_lua_pushval(l, value);
+        as_val_destroy(value);
+        return 1;
+    }
+    else {
+        lua_pushnil(l);
+        return 1;
+    }
 }
 
 /**
