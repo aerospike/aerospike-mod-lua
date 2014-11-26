@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2008-2014 Aerospike, Inc.
  *
  * Portions may be licensed to Aerospike, Inc. under one or more contributor
@@ -85,8 +85,8 @@ struct cache_entry_s {
 	char            gen[CACHE_ENTRY_GEN_MAX];
 	uint32_t        max_cache_size;
 	cf_queue      * lua_state_q;
-	cf_atomic32     cache_miss;
-	cf_atomic32     total;
+	cf_atomic64     cache_miss;
+	cf_atomic64     total;
 };
 
 struct cache_item_s {
@@ -148,7 +148,7 @@ static int offer_state(context *, cache_item *);
  ******************************************************************************/
 
 // Raj (todo) fix stupid hash function
-uint32_t filename_hash_fn(void *filename, uint32_t len) {   
+uint32_t filename_hash_fn(void *filename, uint32_t len) {
 	char *b = filename;
 	uint32_t acc = 0;
 	for (int i=0;i<len;i++) {
@@ -211,9 +211,9 @@ int cache_init(context * ctx, const char *key, const char * gen) {
 	cache_entry     * centry = NULL;
 	WRLOCK;
 	if (CF_RCHASH_OK != cf_rchash_get(centry_hash, (void *)key, (uint32_t)strlen(key), (void *)&centry)) {
-		centry = cf_rc_alloc(sizeof(cache_entry)); 
-		cf_atomic32_set(&centry->total, 0);
-		cf_atomic32_set(&centry->cache_miss, 0);
+		centry = cf_rc_alloc(sizeof(cache_entry));
+		cf_atomic64_set(&centry->total, 0);
+		cf_atomic64_set(&centry->cache_miss, 0);
 		// Start Small and grow (as necessary) up to the max
 		centry->max_cache_size = CACHE_ENTRY_STATE_MIN;
 		centry->lua_state_q = cf_queue_create(sizeof(lua_State *), true);
@@ -228,7 +228,7 @@ int cache_init(context * ctx, const char *key, const char * gen) {
 		} else {
 			as_log_trace("[CACHE] Added [%s:%p]", key, centry);
 		}
-	} else { 
+	} else {
 		UNLOCK;
 		cache_entry_init(ctx, centry, key, gen);
 		cf_rc_releaseandfree(centry);
@@ -287,7 +287,7 @@ static int cache_scan_dir(context * ctx, const char * directory) {
 	struct dirent * dentry  = NULL;
 
 	dir = opendir(directory);
-	
+
 	if ( dir == 0 ) return -1;
 
 	while ( (dentry = readdir(dir)) && dentry->d_name ) {
@@ -321,7 +321,7 @@ static int cache_scan_dir(context * ctx, const char * directory) {
 }
 
 /**
- * Module Configurator. 
+ * Module Configurator.
  * This configures and reconfigures the module. This can be called an
  * arbitrary number of times during the lifetime of the server.
  *
@@ -330,7 +330,7 @@ static int cache_scan_dir(context * ctx, const char * directory) {
  * @sychronization: Caller should have a write lock
  */
 static int update(as_module * m, as_module_event * e) {
-	
+
 	context * ctx = (context *) (m ? m->source : NULL);
 
 	if ( ctx == NULL ) return 1;
@@ -374,7 +374,7 @@ static int update(as_module * m, as_module_event * e) {
 				}
 #endif
 			}
-			
+
 			// Attempt to open the directory.
 			// If it opens, then set the ctx value.
 			// Otherwise, we alert the user of the error when a UDF is called. (for now)
@@ -476,7 +476,7 @@ static void package_path_set(lua_State * l, char * system_path, char * user_path
 	lua_pushstring(l, system_path);
 	lua_pushstring(l, "/?.lua");
 	stack += 3;
-	
+
 	lua_pushstring(l, ";");
 	lua_pushstring(l, system_path);
 	lua_pushstring(l, "/external/?.lua");
@@ -486,7 +486,7 @@ static void package_path_set(lua_State * l, char * system_path, char * user_path
 	lua_pushstring(l, user_path);
 	lua_pushstring(l, "/?.lua");
 	stack += 3;
-	
+
 	lua_concat(l, stack);
 
 	lua_setfield(l, -2, "path");
@@ -509,12 +509,12 @@ static void package_cpath_set(lua_State * l, char * system_path, char * user_pat
 	lua_pushstring(l, system_path);
 	lua_pushstring(l, "/external/?.so");
 	stack += 3;
-	
+
 	lua_pushstring(l, ";");
 	lua_pushstring(l, user_path);
 	lua_pushstring(l, "/?.so");
 	stack += 3;
-	
+
 	lua_concat(l, stack);
 
 	lua_setfield(l, -2, "cpath");
@@ -589,13 +589,13 @@ static lua_State * create_state(context * ctx, const char * filename) {
 		lua_close(l);
 		return NULL;
 	}
-	as_log_debug("Size of the lua state created for the file %s in KB %d", 
+	as_log_debug("Size of the lua state created for the file %s in KB %d",
 			filename, lua_gc(l, LUA_GCCOUNT,0));
 	return l;
 }
 
 /**
- * Leases a context (lua_State). This will attempt to reuse an 
+ * Leases a context (lua_State). This will attempt to reuse an
  * existing context or create a new one as needed.
  *
  * @param ctx mod lua context.
@@ -604,31 +604,31 @@ static lua_State * create_state(context * ctx, const char * filename) {
  * @return 0 on success, otherwise 1
  */
 static int poll_state(context * ctx, cache_item * citem) {
-	uint32_t miss = 0;
-	uint32_t total = 1;
+	uint64_t miss = 0;
+	uint64_t total = 1;
 	if ( ctx->config.cache_enabled == true ) {
 		cache_entry     * centry = NULL;
 		RDLOCK;
 		int retval = cf_rchash_get(centry_hash, (void *)citem->key, (uint32_t)strlen(citem->key), (void *)&centry);
 		UNLOCK;
-		if (CF_RCHASH_OK == retval ) {
+		if ( CF_RCHASH_OK == retval ) {
 			if (cf_queue_pop(centry->lua_state_q, &citem->state, CF_QUEUE_NOWAIT) != CF_QUEUE_EMPTY) {
 				strncpy(citem->key, centry->key, CACHE_ENTRY_KEY_MAX);
 				strncpy(citem->gen, centry->gen, CACHE_ENTRY_GEN_MAX);
 				as_log_trace("[CACHE] took state: %s (%d)", citem->key, centry->max_cache_size);
 			} else {
-				miss = cf_atomic32_incr(&centry->cache_miss);
+				miss = cf_atomic64_incr(&centry->cache_miss);
 				citem->state = NULL;
 			}
-			total = cf_atomic32_incr(&centry->total);
-			if (((miss * 100 / total) > 1) &&  (total > 100000)) {
+			total = cf_atomic64_incr(&centry->total);
+			if ( (total > 100000) && ((miss * 100 / total) > 1) ) {
 				centry->max_cache_size++;
 				if (centry->max_cache_size > CACHE_ENTRY_STATE_MAX)
-					centry->max_cache_size = CACHE_ENTRY_STATE_MAX; 
+					centry->max_cache_size = CACHE_ENTRY_STATE_MAX;
 			}
 			cf_rc_releaseandfree(centry);
 			centry = 0;
-			as_log_trace("[CACHE] Miss %d : Total %d", miss, total);
+			as_log_trace("[CACHE] Miss %lu : Total %lu", miss, total);
 		} else {
 			centry = NULL;
 		}
@@ -645,7 +645,7 @@ static int poll_state(context * ctx, cache_item * citem) {
 		if (!citem->state) {
 			as_log_trace("[CACHE] state create failed: %s", citem->key);
 			return 1;
-		} else { 
+		} else {
 			as_log_trace("[CACHE] state created: %s", citem->key);
 		}
 	}
@@ -688,7 +688,7 @@ static int poll_state(context * ctx, cache_item * citem) {
 // safety of full GC when we need it. (May 9, 2014 tjl)
 
 /**
- * Release the context. 
+ * Release the context.
  *
  * @param m the module from which the context was leased from.
  * @param filename name of the udf file
@@ -728,7 +728,7 @@ static int offer_state(context * ctx, cache_item * citem) {
 		if (CF_RCHASH_OK == cf_rchash_get(centry_hash, (void *)citem->key, (uint32_t)strlen(citem->key), (void *)&centry) ) {
 			UNLOCK;
 			as_log_trace("[CACHE] found entry: %s (%d)", citem->key, centry->max_cache_size);
-			if (( CF_Q_SZ(centry->lua_state_q) < centry->max_cache_size ) 
+			if (( CF_Q_SZ(centry->lua_state_q) < centry->max_cache_size )
 				&& ( !strncmp(centry->gen, citem->gen, CACHE_ENTRY_GEN_MAX) )) {
 				cf_queue_push(centry->lua_state_q, &citem->state);
 				as_log_trace("[CACHE] returning state: %s (%d)", citem->key, centry->max_cache_size);
@@ -745,7 +745,7 @@ static int offer_state(context * ctx, cache_item * citem) {
 	else {
 		as_log_trace("[CACHE] is disabled.");
 	}
-	
+
 	// l is not NULL
 	// This means that it was not returned to the cache.
 	// So, we free it up.
@@ -801,7 +801,7 @@ static int apply(lua_State * l, as_udf_context *udf_ctx, int err, int argc, as_r
 
 	as_log_trace("apply");
 
-#ifndef LUA_DEBUG_HOOK 
+#ifndef LUA_DEBUG_HOOK
 	as_timer *timer = udf_ctx->timer;
 
 	void hook(lua_State *L, lua_Debug *ar)
@@ -809,14 +809,14 @@ static int apply(lua_State * l, as_udf_context *udf_ctx, int err, int argc, as_r
 		if (ar->event == LUA_HOOKCOUNT) {
 			if (as_timer_timedout(timer)) {
 				luaL_error(L, "UDF Execution Timeout");
-			} 
+			}
 		}
 	}
 
 	if (timer) {
-		lua_sethook(l, &hook, LUA_MASKCOUNT, as_timer_timeslice(timer)); 
+		lua_sethook(l, &hook, LUA_MASKCOUNT, as_timer_timeslice(timer));
 	}
-#endif 
+#endif
 	// call apply_record(f, r, ...)
 	as_log_trace("call function");
 	int rc = lua_pcall(l, argc, 1, err);
@@ -854,13 +854,13 @@ static int apply(lua_State * l, as_udf_context *udf_ctx, int err, int argc, as_r
 char * as_module_err_string(int err_no) {
 	char *rs;
 	switch(err_no) {
-		case -1: 
+		case -1:
 			rs = cf_strdup("UDF: Mod-Lua system path not found");
 			break;
 		case -2:
 			rs = cf_strdup("UDF: Mod-Lua user path not found");
 			break;
-		case -3: 
+		case -3:
 			rs = cf_strdup("UDF: Mod-Lua system and user path not found");
 			break;
 		default:
@@ -983,7 +983,7 @@ static void populate_error(lua_State * l, const char * filename, int rc, as_modu
  * Validates a UDF module
  */
 static int validate(as_module * m, as_aerospike * as, const char * filename, const char * content, uint32_t size, as_module_error * err) {
-	
+
 	int rc = 0;
 
 	err->scope = 0;
@@ -995,7 +995,7 @@ static int validate(as_module * m, as_aerospike * as, const char * filename, con
 
 	context * ctx = (context *) m->source;
 	lua_State * l = NULL;
-	
+
 	l = lua_open();
 
 	if ( l == NULL ) {
@@ -1052,7 +1052,7 @@ Cleanup:
 	else {
 		as_log_debug("Lua Validation Fail for '%s': (%d) %s", filename, err->code, err->message);
 	}
-	
+
 	if ( l != NULL ) {
 		lua_close(l);
 	}
@@ -1072,7 +1072,7 @@ Cleanup:
  * @param udf_ctx udf execution context
  * @param function fully-qualified name of the function to invoke.
  * @param r record to apply to the function.
- * @param args list of arguments for the function represented as vals 
+ * @param args list of arguments for the function represented as vals
  * @param res pointer to an as_result that will be populated with the result.
  * @return 0 on success, otherwise 1
  */
@@ -1083,8 +1083,8 @@ static int apply_record(as_module * m, as_udf_context * udf_ctx, const char * fi
 	lua_State * l       = (lua_State *) NULL;       // Lua State
 	int         argc    = 0;                        // Number of arguments pushed onto the stack
 	int         err     = 0;                        // Error handler
-	as_aerospike *as    = udf_ctx->as;              // aerospike object 
-	
+	as_aerospike *as    = udf_ctx->as;              // aerospike object
+
 	cache_item  citem   = {
 		.key    = "",
 		.gen    = "",
@@ -1092,7 +1092,7 @@ static int apply_record(as_module * m, as_udf_context * udf_ctx, const char * fi
 	};
 
 	strncpy(citem.key, filename, CACHE_ENTRY_KEY_MAX);
-	
+
 	as_log_trace("apply_record: BEGIN");
 
 	// lease a state
@@ -1109,16 +1109,16 @@ static int apply_record(as_module * m, as_udf_context * udf_ctx, const char * fi
 	// push error handler
 	// lua_pushcfunction(l, handle_error);
 	// int err = lua_gettop(l);
-	
+
 	// push aerospike into the global scope
 	as_log_trace("apply_record: push aerospike into the global scope");
 	mod_lua_pushaerospike(l, as);
 	lua_setglobal(l, "aerospike");
-	
+
 	// push apply_record() onto the stack
 	as_log_trace("apply_record: push apply_record() onto the stack");
 	lua_getglobal(l, "apply_record");
-	
+
 	// push function onto the stack
 	as_log_trace("apply_record: push function onto the stack");
 	lua_getglobal(l, function);
@@ -1137,7 +1137,7 @@ static int apply_record(as_module * m, as_udf_context * udf_ctx, const char * fi
 
 	// function + record + arglist
 	argc = argc + 2;
-	
+
 	// apply the function
 	as_log_trace("apply_record: apply the function");
 	rc = apply(l, udf_ctx, err, argc, res, false);
@@ -1147,7 +1147,7 @@ static int apply_record(as_module * m, as_udf_context * udf_ctx, const char * fi
 	as_log_trace("apply_record: offer state");
 	offer_state(ctx, &citem);
 	pthread_rwlock_unlock(ctx->lock);
-	
+
 	as_log_trace("apply_record: END");
 	return rc;
 }
@@ -1165,7 +1165,7 @@ static int apply_record(as_module * m, as_udf_context * udf_ctx, const char * fi
  * @param udf_ctx udf execution context
  * @param function fully-qualified name of the function to invoke.
  * @param istream stream to apply to the function.
- * @param args list of arguments for the function represented as vals 
+ * @param args list of arguments for the function represented as vals
  * @param ostream output stream which will be populated by applying the function.
  * @param res pointer to an as_result that will be populated with the result.
  * @return 0 on success, otherwise 1
@@ -1177,8 +1177,8 @@ static int apply_stream(as_module * m, as_udf_context *udf_ctx, const char * fil
 	lua_State * l       = (lua_State *) NULL;   // Lua State
 	int         argc    = 0;                    // Number of arguments pushed onto the stack
 	int         err     = 0;                    // Error handler
-	as_aerospike *as    = udf_ctx->as;          // aerospike object 
-	
+	as_aerospike *as    = udf_ctx->as;          // aerospike object
+
 	cache_item  citem   = {
 		.key    = "",
 		.gen    = "",
@@ -1203,7 +1203,7 @@ static int apply_stream(as_module * m, as_udf_context *udf_ctx, const char * fil
 	// push error handler
 	lua_pushcfunction(l, handle_error);
 	err = lua_gettop(l);
-	
+
 	// push aerospike into the global scope
 	as_log_trace("apply_stream: push aerospike into the global scope");
 	mod_lua_pushaerospike(l, as);
@@ -1212,7 +1212,7 @@ static int apply_stream(as_module * m, as_udf_context *udf_ctx, const char * fil
 	// push apply_stream() onto the stack
 	as_log_trace("apply_stream: push apply_stream() onto the stack");
 	lua_getglobal(l, "apply_stream");
-	
+
 	// push function onto the stack
 	as_log_trace("apply_stream: push function onto the stack");
 	lua_getglobal(l, function);
@@ -1231,7 +1231,7 @@ static int apply_stream(as_module * m, as_udf_context *udf_ctx, const char * fil
 
 	// push each argument onto the stack
 	as_log_trace("apply_stream: push each argument onto the stack");
-	argc = pushargs(l, args); 
+	argc = pushargs(l, args);
 
 	if (argc > LUA_PARAM_COUNT_THRESHOLD) {
 		as_log_error("large number of Lua function arguments (%d)", argc);
@@ -1239,7 +1239,7 @@ static int apply_stream(as_module * m, as_udf_context *udf_ctx, const char * fil
 
 	// function + scope + istream + ostream + arglist
 	argc = 4 + argc;
-	
+
 	// call apply_stream(f, s, ...)
 	as_log_trace("apply_stream: apply the function");
 	rc = apply(l, udf_ctx, err, argc, res, true);
