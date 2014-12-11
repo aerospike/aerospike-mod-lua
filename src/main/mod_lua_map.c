@@ -24,6 +24,8 @@
 #include <aerospike/mod_lua_map.h>
 #include <aerospike/mod_lua_iterator.h>
 #include <aerospike/mod_lua_reg.h>
+#include <aerospike/as_msgpack.h>
+#include <aerospike/as_serializer.h>
 
 #include "internal.h"
 
@@ -64,6 +66,19 @@ static int mod_lua_map_size(lua_State * l) {
 	as_map *    map     = mod_lua_checkmap(l, 1);
 	uint32_t    size    = as_map_size(map);
 	lua_pushinteger(l, size);
+	return 1;
+}
+
+static int mod_lua_map_nbytes(lua_State * l) {
+	as_map *    map     = mod_lua_checkmap(l, 1);
+	uint32_t    nbytes  = 0;
+	if ( map ) {
+		as_serializer s;
+		as_msgpack_init(&s);
+		nbytes = as_serializer_serialize_getsize(&s, (as_val *) map);
+		as_serializer_destroy(&s);
+	}
+	lua_pushinteger(l, nbytes);
 	return 1;
 }
 
@@ -304,6 +319,7 @@ static const luaL_reg object_table[] = {
 	{"values",          mod_lua_map_values},
 	{"remove",          mod_lua_map_remove},
 	{"size",            mod_lua_map_size},
+	{"nbytes",          mod_lua_map_nbytes},
 	{"tostring",        mod_lua_map_tostring},
 	{0, 0}
 };
