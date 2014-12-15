@@ -320,6 +320,11 @@ static int cache_scan_dir(context * ctx, const char * directory) {
 	return 0;
 }
 
+static int cache_reduce_delete_fn(void *key, uint32_t keylen, void *object, void *udata)
+{
+	return CF_RCHASH_REDUCE_DELETE;
+}
+
 /**
  * Module Configurator.
  * This configures and reconfigures the module. This can be called an
@@ -458,6 +463,12 @@ static int update(as_module * m, as_module_event * e) {
 		case AS_MODULE_EVENT_FILE_REMOVE: {
 			if ( e->data.filename == NULL ) return 2;
 			if ( ctx->config.cache_enabled ) cache_remove_file(ctx, e->data.filename);
+			break;
+		}
+		case AS_MODULE_EVENT_CLEAR_CACHE: {
+			if (ctx->config.cache_enabled) {
+				cf_rchash_reduce(centry_hash, cache_reduce_delete_fn, NULL);
+			}
 			break;
 		}
 	}
