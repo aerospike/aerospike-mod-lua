@@ -657,7 +657,7 @@ static int poll_state(context * ctx, cache_item * citem) {
 // who actually knew what they were doing could make adjustments.
 // Experimentation showed that at least 40 steps were needed to clean up after
 // a simple UDF (in our system), so for us, that is the "light threshold". (tjl)
-#define LUA_KMEM_GC_THRESHOLD 200 // Perform GC if we've used over 200kb
+#define LUA_KMEM_GC_THRESHOLD  1024*10 // Perform GC if we've used over 10Mb
 #define LUA_GC_STEP_THRESHOLD  40 // Perform 40 "iterations" of STEP GC
 
 // NB: When it comes to Lua garbage collection, it appears to be more art than
