@@ -221,8 +221,10 @@ static int mod_lua_aerospike_set_context(lua_State * l) {
 	// Get the 2nd arg off the stack -- and process as context
     uint32_t  context   = (uint32_t)luaL_optinteger(l, 3, 0);
 
-	as_aerospike_set_context(a, r, context);
-    return 0;
+	int ret = as_aerospike_set_context(a, r, context);
+	
+	lua_pushinteger(l, ret);
+    return 1;
 }
 
 
