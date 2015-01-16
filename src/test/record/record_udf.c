@@ -6,7 +6,6 @@
 #include <stdlib.h>
 
 #include <aerospike/as_module.h>
-#include <aerospike/as_arraylist.h>
 #include <aerospike/mod_lua.h>
 #include <aerospike/mod_lua_config.h>
 
@@ -30,15 +29,13 @@ TEST( record_udf_1, "echo bin a of {a = 123, b = 456 }" )
     as_rec * rec = map_rec_new();
     as_rec_set(rec, "a", (as_val *) as_integer_new(123));
 
-    as_arraylist arglist_array;
-    as_arraylist_inita(&arglist_array, 1);
-
-    as_list *arglist = (as_list *) &arglist_array;
-    as_list_append_str(arglist, "a");
+    as_arraylist arglist;
+    as_arraylist_inita(&arglist, 1);
+    as_arraylist_append_str(&arglist, "a");
 
     as_result * res = as_success_new(NULL);
 
-    int rc = as_module_apply_record(&mod_lua, &ctx, "records", "getbin", rec, arglist, res);
+    int rc = as_module_apply_record(&mod_lua, &ctx, "records", "getbin", rec, (as_list *) &arglist, res);
 
     assert_int_eq( rc, 0 );
     assert_true( res->is_success );
@@ -46,7 +43,7 @@ TEST( record_udf_1, "echo bin a of {a = 123, b = 456 }" )
     assert_int_eq( as_integer_toint((as_integer *) res->value), 123 );
 
     as_rec_destroy(rec);
-    as_list_destroy(arglist);
+    as_arraylist_destroy(&arglist);
     as_result_destroy(res);
 }
 
@@ -56,16 +53,14 @@ TEST( record_udf_2, "concat bins a and b of {a = 'abc', b = 'def' }" )
     as_rec_set(rec, "a", (as_val *) as_string_new("abc",false));
     as_rec_set(rec, "b", (as_val *) as_string_new("def",false));
 
-    as_arraylist arglist_array;
-    as_arraylist_inita(&arglist_array, 2);
-
-    as_list *arglist = (as_list *) &arglist_array;
-    as_list_append_str(arglist, "a");
-    as_list_append_str(arglist, "b");
+    as_arraylist arglist;
+    as_arraylist_inita(&arglist, 2);
+    as_arraylist_append_str(&arglist, "a");
+    as_arraylist_append_str(&arglist, "b");
 
     as_result * res = as_success_new(NULL);
 
-    int rc = as_module_apply_record(&mod_lua, &ctx, "records", "cat", rec, arglist, res);
+    int rc = as_module_apply_record(&mod_lua, &ctx, "records", "cat", rec, (as_list *) &arglist, res);
 
     assert_int_eq( rc, 0);
     assert_true( res->is_success );
@@ -73,7 +68,7 @@ TEST( record_udf_2, "concat bins a and b of {a = 'abc', b = 'def' }" )
     assert_string_eq( as_string_tostring((as_string *)res->value), "abcdef");
 
     as_rec_destroy(rec);
-    as_list_destroy(arglist);
+    as_arraylist_destroy(&arglist);
     as_result_destroy(res);
 }
 
