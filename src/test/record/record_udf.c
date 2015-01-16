@@ -6,6 +6,7 @@
 #include <stdlib.h>
 
 #include <aerospike/as_module.h>
+#include <aerospike/as_arraylist.h>
 #include <aerospike/mod_lua.h>
 #include <aerospike/mod_lua_config.h>
 
@@ -26,11 +27,13 @@ static as_udf_context ctx;
 
 TEST( record_udf_1, "echo bin a of {a = 123, b = 456 }" )
 {
-
     as_rec * rec = map_rec_new();
     as_rec_set(rec, "a", (as_val *) as_integer_new(123));
 
-    as_list * arglist = (as_list *) as_arraylist_new(1,0);
+    as_arraylist arglist_array;
+    as_arraylist_inita(&arglist_array, 1);
+
+    as_list *arglist = (as_list *) &arglist_array;
     as_list_append_str(arglist, "a");
 
     as_result * res = as_success_new(NULL);
@@ -49,12 +52,14 @@ TEST( record_udf_1, "echo bin a of {a = 123, b = 456 }" )
 
 TEST( record_udf_2, "concat bins a and b of {a = 'abc', b = 'def' }" )
 {
-
     as_rec * rec = map_rec_new();
     as_rec_set(rec, "a", (as_val *) as_string_new("abc",false));
     as_rec_set(rec, "b", (as_val *) as_string_new("def",false));
 
-    as_list * arglist = (as_list *) as_arraylist_new(2,0);
+    as_arraylist arglist_array;
+    as_arraylist_inita(&arglist_array, 2);
+
+    as_list *arglist = (as_list *) &arglist_array;
     as_list_append_str(arglist, "a");
     as_list_append_str(arglist, "b");
 
