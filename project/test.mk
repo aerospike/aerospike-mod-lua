@@ -8,10 +8,11 @@ TEST_CFLAGS =
 TEST_CFLAGS += -I$(TARGET_INCL)
 TEST_CFLAGS += -I$(COMMON)/$(TARGET_INCL)
 
+TEST_LDFLAGS = -lssl -lcrypto $(LIB_LUA) -lpthread -lm
 ifeq ($(OS),Darwin)
-TEST_LDFLAGS = -L/usr/local/lib -lssl -lcrypto -llua -lpthread -lm
+  TEST_LDFLAGS += -pagezero_size 10000 -image_base 100000000
 else
-TEST_LDFLAGS = -lssl -lcrypto -llua$(LUA_SUFFIX) -lpthread -lm -lrt
+  TEST_LDFLAGS += -lrt -ldl
 endif
 
 TEST_DEPS =

@@ -7,6 +7,10 @@ include project/settings.mk
 COMMON 	:= $(COMMON)
 MODULES := COMMON
 
+ifeq ($(USE_LUAJIT),1)
+  MODULES += LUAJIT
+endif
+
 # Override optimizations via: make O=n
 O = 3
 
@@ -24,28 +28,28 @@ ifeq ($(PREPRO),1)
 endif
 
 ifeq ($(OS),Darwin)
-CC_FLAGS += -D_DARWIN_UNLIMITED_SELECT
-CC_FLAGS += -DLUA_DEBUG_HOOK
+  CC_FLAGS += -D_DARWIN_UNLIMITED_SELECT
+  CC_FLAGS += -DLUA_DEBUG_HOOK
 else
-CC_FLAGS += -rdynamic
+  CC_FLAGS += -rdynamic
 endif
 
 ifneq ($(CF), )
-CC_FLAGS += -I$(CF)/include
+  CC_FLAGS += -I$(CF)/include
 endif
 
 # Linker flags
 LD_FLAGS = $(LDFLAGS)
 
 ifeq ($(OS),Darwin)
-LD_FLAGS += -undefined dynamic_lookup
+  LD_FLAGS += -undefined dynamic_lookup
 endif
 
 # DEBUG Settings
 ifdef DEBUG
-O=0
-CC_FLAGS += -pg -fprofile-arcs -ftest-coverage -g2
-LD_FLAGS += -pg -fprofile-arcs -lgcov
+  O = 0
+  CC_FLAGS += -pg -fprofile-arcs -ftest-coverage -g2
+  LD_FLAGS += -pg -fprofile-arcs -lgcov
 endif
 
 # Make-tree Compiler Flags
@@ -59,10 +63,6 @@ CFLAGS = -O$(O)
 
 # Include Paths
 INC_PATH += $(COMMON)/$(TARGET_INCL)
-
-INC_PATH += $(or \
-    $(wildcard /usr/include/lua-5.1), \
-    $(wildcard /usr/include/lua5.1))
 
 # Library Paths
 # LIB_PATH +=

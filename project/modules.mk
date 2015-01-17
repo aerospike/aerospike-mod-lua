@@ -23,7 +23,6 @@ $(warning ***************************************************************)
 $(error )
 endif
 
-
 .PHONY: COMMON-build
 COMMON-build: $(COMMON)/$(TARGET_LIB)/libaerospike-common.a
 
@@ -33,8 +32,6 @@ COMMON-clean:
 
 $(COMMON)/$(TARGET_LIB)/libaerospike-common.a:
 	$(MAKE) -e -C $(COMMON) libaerospike-common.a
-
-
 
 COMMON-HEADERS := $(wildcard $(COMMON)/$(TARGET_INCL)/aerospike/*.h) $(wildcard $(COMMON)/$(TARGET_INCL)/citrusleaf/*.h)
 
@@ -51,3 +48,54 @@ $(TARGET_INCL)/aerospike/%.h: $(COMMON)/$(TARGET_INCL)/aerospike/%.h | $(TARGET_
 
 $(TARGET_INCL)/citrusleaf/%.h: $(COMMON)/$(TARGET_INCL)/citrusleaf/%.h | $(TARGET_INCL)/citrusleaf
 	 cp $^ $@
+
+###############################################################################
+##  LUA JIT MODULE                                                           ##
+###############################################################################
+
+ifeq ($(USE_LUAJIT),1)
+  ifeq ($(wildcard $(LUAJIT)/Makefile),)
+    $(warning ***************************************************************)
+    $(warning *)
+    $(warning *  LUAJIT is '$(LUAJIT)')
+    $(warning *  LUAJIT doesn't contain 'Makefile'. )
+    $(warning *  LUAJIT should be set to a valid path. )
+    $(warning *)
+    $(warning ***************************************************************)
+    $(error )
+  endif
+
+  ifeq ($(wildcard $(LUAJIT)/Makefile),)
+    $(warning ***************************************************************)
+    $(warning *)
+    $(warning *  LUAJIT is '$(LUAJIT)')
+    $(warning *  LUAJIT doesn't contain 'Makefile'. )
+    $(warning *  LUAJIT should be set to a valid path. )
+    $(warning *)
+    $(warning ***************************************************************)
+    $(error )
+  endif
+endif
+
+.PHONY: LUAJIT-build
+LUAJIT-build:	$(LUAJIT)/src/lilbluajit.a
+
+$(LUAJIT)/src/lilbluajit.a:	$(LUAJIT)/src/luaconf.h
+ifeq ($(USE_LUAJIT),1)
+	$(MAKE) -C $(LUAJIT) Q= TARGET_SONAME=libluajit.so CFLAGS= LDFLAGS=
+endif
+
+$(LUAJIT)/src/luaconf.h:	$(LUAJIT)/src/luaconf.h.orig
+ifeq ($(USE_LUAJIT),1)
+	(cd $(LUAJIT)/src; ln -s $(notdir $<) $(notdir $@))
+endif
+
+.PHONY: LUAJIT-clean
+LUAJIT-clean:	$(LUAJIT)/src/luaconf.h
+ifeq ($(USE_LUAJIT),1)
+	$(MAKE) -e -C $(LUAJIT) clean
+	(cd $(LUAJIT)/src; $(RM) $(LUAJIT)/src/luaconf.h $(LUAJIT)/src/lilbluajit.a)
+endif
+
+.PHONY: LUAJIT-prepare
+LUAJIT-prepare:	$(LUAJIT)/src/luaconf.h

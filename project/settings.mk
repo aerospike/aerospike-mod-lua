@@ -56,12 +56,20 @@ SOURCE_TEST = $(SOURCE_PATH)/test
 VPATH = $(SOURCE_MAIN) $(SOURCE_INCL)
 
 LIB_PATH = 
-INC_PATH = $(SOURCE_INCL) /usr/local/include
+INC_PATH = $(SOURCE_INCL)
 
-INCLUDE_LUA_5_1 = /usr/include/lua5.1
-ifneq ($(wildcard $(INCLUDE_LUA_5_1)),)
-  INC_PATH += $(INCLUDE_LUA_5_1)
-  LUA_SUFFIX=5.1
+ifeq ($(USE_LUAJIT),1)
+  INC_PATH += $(LUAJIT)/src
+  LIB_LUA = $(LUAJIT)/src/libluajit.a
+else
+  INC_PATH += $(or \
+    $(wildcard /usr/include/lua-5.1), \
+    $(wildcard /usr/include/lua5.1))
+  INCLUDE_LUA_5_1 = /usr/include/lua5.1
+  ifneq ($(wildcard $(INCLUDE_LUA_5_1)),)
+    LUA_SUFFIX=5.1
+  endif
+  LIB_LUA = -llua$(LUA_SUFFIX)
 endif
 
 ###############################################################################
@@ -69,35 +77,35 @@ endif
 ###############################################################################
 
 ifeq ($(shell test -e $(PROJECT)/target.$(DISTRO_NAME)-$(DISTRO_VERS)-$(ARCH).makefile && echo 1), 1)
-PLATFORM = $(DISTRO_NAME)-$(DISTRO_VERS)-$(ARCH)
-include $(PROJECT)/target.$(PLATFORM).makefile
+  PLATFORM = $(DISTRO_NAME)-$(DISTRO_VERS)-$(ARCH)
+  include $(PROJECT)/target.$(PLATFORM).makefile
 else
-ifeq ($(shell test -e $(PROJECT)/target.$(DISTRO_NAME)-$(ARCH).makefile && echo 1), 1)
-PLATFORM = $(DISTRO_NAME)-$(ARCH)
-include $(PROJECT)/target.$(PLATFORM).makefile
-else
-ifeq ($(shell test -e $(PROJECT)/target.$(OS)-$(ARCH).makefile && echo 1), 1)
-PLATFORM = $(OS)-$(ARCH)
-include $(PROJECT)/target.$(PLATFORM).makefile
-else
-ifeq ($(shell test -e project/target.$(OS)-noarch.makefile && echo 1), 1)
-PLATFORM = $(OS)-noarch
-include $(PROJECT)/target.$(PLATFORM).makefile
-else
-PLATFORM = $(OS)-$(ARCH)
-endif
-endif
-endif
+  ifeq ($(shell test -e $(PROJECT)/target.$(DISTRO_NAME)-$(ARCH).makefile && echo 1), 1)
+    PLATFORM = $(DISTRO_NAME)-$(ARCH)
+    include $(PROJECT)/target.$(PLATFORM).makefile
+  else
+    ifeq ($(shell test -e $(PROJECT)/target.$(OS)-$(ARCH).makefile && echo 1), 1)
+      PLATFORM = $(OS)-$(ARCH)
+      include $(PROJECT)/target.$(PLATFORM).makefile
+    else
+      ifeq ($(shell test -e project/target.$(OS)-noarch.makefile && echo 1), 1)
+        PLATFORM = $(OS)-noarch
+        include $(PROJECT)/target.$(PLATFORM).makefile
+      else
+        PLATFORM = $(OS)-$(ARCH)
+      endif
+    endif
+  endif
 endif
 
 TARGET_PATH = $(TARGET)
 TARGET_BASE = $(TARGET_PATH)/$(PLATFORM)
-TARGET_BIN 	= $(TARGET_BASE)/bin
-TARGET_DOC 	= $(TARGET_BASE)/doc
-TARGET_LIB 	= $(TARGET_BASE)/lib
-TARGET_OBJ 	= $(TARGET_BASE)/obj
-TARGET_M4	= $(TARGET_BASE)/m4
-TARGET_SRC 	= $(TARGET_BASE)/src
+TARGET_BIN  = $(TARGET_BASE)/bin
+TARGET_DOC  = $(TARGET_BASE)/doc
+TARGET_LIB  = $(TARGET_BASE)/lib
+TARGET_OBJ  = $(TARGET_BASE)/obj
+TARGET_M4   = $(TARGET_BASE)/m4
+TARGET_SRC  = $(TARGET_BASE)/src
 TARGET_INCL = $(TARGET_BASE)/include
 
 ###############################################################################
