@@ -58,6 +58,10 @@ VPATH = $(SOURCE_MAIN) $(SOURCE_INCL)
 LIB_PATH = 
 INC_PATH = $(SOURCE_INCL)
 
+ifeq ($(OS),Darwin)
+INC_PATH += /usr/local/include
+endif
+
 ifeq ($(USE_LUAJIT),1)
   INC_PATH += $(LUAJIT)/src
   LIB_LUA = $(LUAJIT)/src/libluajit.a
