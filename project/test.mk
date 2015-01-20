@@ -8,11 +8,6 @@ TEST_CFLAGS =
 TEST_CFLAGS += -I$(TARGET_INCL)
 TEST_CFLAGS += -I$(COMMON)/$(TARGET_INCL)
 
-TEST_LDFLAGS =
-ifeq ($(OS),Darwin)
-TEST_LDFLAGS += -L/usr/local/lib
-endif
-
 TEST_LDFLAGS += -lssl -lcrypto $(LIB_LUA) -lpthread -lm
 
 ifeq ($(OS),Darwin)

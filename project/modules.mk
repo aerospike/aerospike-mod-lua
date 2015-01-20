@@ -82,7 +82,7 @@ LUAJIT-build:	$(LUAJIT)/src/lilbluajit.a
 
 $(LUAJIT)/src/lilbluajit.a:	$(LUAJIT)/src/luaconf.h
 ifeq ($(USE_LUAJIT),1)
-	$(MAKE) -C $(LUAJIT) Q= TARGET_SONAME=libluajit.so CFLAGS= LDFLAGS=
+	$(MAKE) -C $(LUAJIT) Q= TARGET_SONAME=libluajit.so CCDEBUG=-g CFLAGS= LDFLAGS=
 endif
 
 $(LUAJIT)/src/luaconf.h:	$(LUAJIT)/src/luaconf.h.orig
