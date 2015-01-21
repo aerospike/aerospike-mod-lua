@@ -1,5 +1,5 @@
 ###############################################################################
-##  TEST FLAGS                                                       		 ##
+##  TEST FLAGS                                                               ##
 ###############################################################################
 
 TEST_VALGRIND = --tool=memcheck --leak-check=yes --show-reachable=yes --num-callers=20 --track-fds=yes -v
@@ -11,7 +11,9 @@ TEST_CFLAGS += -I$(COMMON)/$(TARGET_INCL)
 TEST_LDFLAGS += -lssl -lcrypto $(LIB_LUA) -lpthread -lm
 
 ifeq ($(OS),Darwin)
-  TEST_LDFLAGS += -pagezero_size 10000 -image_base 100000000
+  ifeq ($(USE_LUAJIT),1)
+    TEST_LDFLAGS += -pagezero_size 10000 -image_base 100000000
+  endif
 else
   TEST_LDFLAGS += -lrt -ldl
 endif
@@ -20,7 +22,7 @@ TEST_DEPS =
 TEST_DEPS += $(COMMON)/$(TARGET_LIB)/libaerospike-common.a 
 
 ###############################################################################
-##  TEST OBJECTS                                                       		 ##
+##  TEST OBJECTS                                                             ##
 ###############################################################################
 
 TEST_PLANS = 
@@ -41,7 +43,7 @@ TEST_MOD_LUA += $(TEST_UTIL)
 TEST_MOD_LUA += $(TEST_PLANS)
 
 ###############################################################################
-##  TEST TARGETS                                                      		 ##
+##  TEST TARGETS                                                             ##
 ###############################################################################
 
 .PHONY: test

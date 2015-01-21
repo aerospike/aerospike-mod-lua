@@ -58,28 +58,6 @@ VPATH = $(SOURCE_MAIN) $(SOURCE_INCL)
 LIB_PATH = 
 INC_PATH = $(SOURCE_INCL)
 
-ifeq ($(USE_LUAJIT),1)
-  INC_PATH += $(LUAJIT)/src
-  LIB_LUA = $(LUAJIT)/src/libluajit.a
-else
-  INC_PATH += $(or \
-    $(wildcard /usr/include/lua-5.1), \
-    $(wildcard /usr/include/lua5.1))
-  INCLUDE_LUA_5_1 = /usr/include/lua5.1
-  ifneq ($(wildcard $(INCLUDE_LUA_5_1)),)
-    LUA_SUFFIX=5.1
-  endif
-  ifeq ($(OS),Darwin)
-    ifneq ($(wildcard /usr/local/include),)
-      INC_PATH += /usr/local/include
-    endif
-    ifneq ($(wildcard /usr/local/lib),)
-      LIB_LUA = -L/usr/local/lib
-    endif
-  endif
-  LIB_LUA += -llua$(LUA_SUFFIX)
-endif
-
 ###############################################################################
 ##  TARGET PATHS                                                             ##
 ###############################################################################
