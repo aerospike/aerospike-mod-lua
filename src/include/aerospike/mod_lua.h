@@ -16,8 +16,6 @@
  */
 #pragma once
 
-#include <lua.h>
-
 #include <aerospike/as_module.h>
 
 /**
