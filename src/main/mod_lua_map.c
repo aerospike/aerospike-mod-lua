@@ -153,6 +153,7 @@ static int mod_lua_map_newindex(lua_State * l) {
 		}
 		else if ( !val ) {
 			as_map_remove(map, key);
+			as_val_destroy(key);
 		}
 		else {
 			as_map_set(map, key, val);
@@ -167,6 +168,7 @@ static int mod_lua_map_remove(lua_State * l) {
 		as_val * key = mod_lua_takeval(l, 2);
 		if ( key ) {
 			as_map_remove(map, key);
+			as_val_destroy(key);
 		}
 	}
 	return 0;
