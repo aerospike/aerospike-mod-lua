@@ -54,11 +54,10 @@ $(TARGET_INCL)/citrusleaf/%.h: $(COMMON)/$(TARGET_INCL)/citrusleaf/%.h | $(TARGE
 ###############################################################################
 
 ifeq ($(USE_LUAJIT),1)
-  ifeq ($(wildcard $(LUAJIT)/Makefile),)
+  ifndef LUAJIT
     $(warning ***************************************************************)
     $(warning *)
-    $(warning *  LUAJIT is '$(LUAJIT)')
-    $(warning *  LUAJIT doesn't contain 'Makefile'. )
+    $(warning *  LUAJIT is not defined. )
     $(warning *  LUAJIT should be set to a valid path. )
     $(warning *)
     $(warning ***************************************************************)
@@ -78,9 +77,9 @@ ifeq ($(USE_LUAJIT),1)
 endif
 
 .PHONY: LUAJIT-build
-LUAJIT-build:	$(LUAJIT)/src/lilbluajit.a
+LUAJIT-build:	$(LUAJIT)/src/libluajit.a
 
-$(LUAJIT)/src/lilbluajit.a:	$(LUAJIT)/src/luaconf.h
+$(LUAJIT)/src/libluajit.a:	$(LUAJIT)/src/luaconf.h
 ifeq ($(USE_LUAJIT),1)
 	$(MAKE) -C $(LUAJIT) Q= TARGET_SONAME=libluajit.so CCDEBUG=-g CFLAGS= LDFLAGS=
 endif
@@ -94,7 +93,7 @@ endif
 LUAJIT-clean:	$(LUAJIT)/src/luaconf.h
 ifeq ($(USE_LUAJIT),1)
 	$(MAKE) -e -C $(LUAJIT) clean
-	(cd $(LUAJIT)/src; $(RM) $(LUAJIT)/src/luaconf.h $(LUAJIT)/src/lilbluajit.a)
+	(cd $(LUAJIT)/src; $(RM) $(LUAJIT)/src/luaconf.h $(LUAJIT)/src/libluajit.a)
 endif
 
 .PHONY: LUAJIT-prepare
