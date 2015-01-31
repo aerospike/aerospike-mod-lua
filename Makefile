@@ -7,8 +7,27 @@ include project/settings.mk
 COMMON 	:= $(COMMON)
 MODULES := COMMON
 
+# Use the Lua submodule?  [By default, no.]
+USE_LUAMOD = 0
+
+# Use LuaJIT instead of Lua?  [By default, no.]
+USE_LUAJIT = 0
+
+# Permit easy overriding of the default.
 ifeq ($(USE_LUAJIT),1)
-  MODULES += LUAJIT
+  USE_LUAMOD = 0
+endif
+
+ifeq ($(and $(USE_LUAMOD:0=),$(USE_LUAJIT:0=)),1)
+  $(error Only at most one of USE_LUAMOD or USE_LUAJIT may be enabled (i.e., set to 1.))
+else
+  ifeq ($(USE_LUAMOD),1)
+    MODULES += LUAMOD
+  else
+    ifeq ($(USE_LUAJIT),1)
+      MODULES += LUAJIT
+    endif
+  endif
 endif
 
 # Override optimizations via: make O=n
@@ -30,8 +49,10 @@ endif
 ifeq ($(OS),Darwin)
   CC_FLAGS += -D_DARWIN_UNLIMITED_SELECT
   CC_FLAGS += -DLUA_DEBUG_HOOK
+  LUA_PLATFORM = macosx
 else
   CC_FLAGS += -rdynamic
+  LUA_PLATFORM = linux
 endif
 
 ifneq ($(CF), )
@@ -71,22 +92,28 @@ ifeq ($(USE_LUAJIT),1)
   INC_PATH += $(LUAJIT)/src
   LIB_LUA = $(LUAJIT)/src/libluajit.a
 else
-  INC_PATH += $(or \
-    $(wildcard /usr/include/lua-5.1), \
-    $(wildcard /usr/include/lua5.1))
-  INCLUDE_LUA_5_1 = /usr/include/lua5.1
-  ifneq ($(wildcard $(INCLUDE_LUA_5_1)),)
-    LUA_SUFFIX=5.1
-  endif
-  ifeq ($(OS),Darwin)
-    ifneq ($(wildcard /usr/local/include),)
-      INC_PATH += /usr/local/include
+  ifeq ($(USE_LUAMOD),1)
+    INC_PATH += $(LUAMOD)/src
+    LIB_LUA = -L$(LUAMOD)/src -llua
+  else
+    # Find where the Lua development package is installed in the build environment.
+    INC_PATH += $(or \
+      $(wildcard /usr/include/lua-5.1), \
+      $(wildcard /usr/include/lua5.1))
+    INCLUDE_LUA_5_1 = /usr/include/lua5.1
+    ifneq ($(wildcard $(INCLUDE_LUA_5_1)),)
+      LUA_SUFFIX=5.1
     endif
-    ifneq ($(wildcard /usr/local/lib),)
-      LIB_LUA = -L/usr/local/lib
+    ifeq ($(OS),Darwin)
+      ifneq ($(wildcard /usr/local/include),)
+	INC_PATH += /usr/local/include
+      endif
+      ifneq ($(wildcard /usr/local/lib),)
+	LIB_LUA = -L/usr/local/lib
+      endif
     endif
+    LIB_LUA += -llua$(LUA_SUFFIX)
   endif
-  LIB_LUA += -llua$(LUA_SUFFIX)
 endif
 
 ###############################################################################

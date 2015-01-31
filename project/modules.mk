@@ -50,6 +50,56 @@ $(TARGET_INCL)/citrusleaf/%.h: $(COMMON)/$(TARGET_INCL)/citrusleaf/%.h | $(TARGE
 	 cp -p $^ $@
 
 ###############################################################################
+##  LUA MODULE                                                               ##
+###############################################################################
+
+ifeq ($(USE_LUAMOD),1)
+  ifndef LUAMOD
+    $(warning ***************************************************************)
+    $(warning *)
+    $(warning *  LUAMOD is not defined. )
+    $(warning *  LUAMOD should be set to a valid path. )
+    $(warning *)
+    $(warning ***************************************************************)
+    $(error )
+  endif
+
+  ifeq ($(wildcard $(LUAMOD)/Makefile),)
+    $(warning ***************************************************************)
+    $(warning *)
+    $(warning *  LUAMOD is '$(LUAMOD)')
+    $(warning *  LUAMOD doesn't contain 'Makefile'. )
+    $(warning *  LUAMOD should be set to a valid path. )
+    $(warning *)
+    $(warning ***************************************************************)
+    $(error )
+  endif
+endif
+
+.PHONY: LUAMOD-build
+LUAMOD-build:	$(LUAMOD)/src/liblua.a
+
+$(LUAMOD)/src/liblua.a:	$(LUAMOD)/src/luaconf.h
+ifeq ($(USE_LUAMOD),1)
+	$(MAKE) -C $(LUAMOD) $(LUA_PLATFORM)
+endif
+
+$(LUAMOD)/src/luaconf.h:	$(LUAMOD)/src/luaconf.h.orig
+ifeq ($(USE_LUAMOD),1)
+	(cd $(LUAMOD)/src; ln -s $(notdir $<) $(notdir $@))
+endif
+
+.PHONY: LUAMOD-clean
+LUAMOD-clean:
+ifeq ($(USE_LUAMOD),1)
+	$(MAKE) -e -C $(LUAMOD) clean
+	(cd $(LUAMOD)/src; $(RM) $(LUAMOD)/src/luaconf.h)
+endif
+
+.PHONY: LUAMOD-prepare
+LUAMOD-prepare:	$(LUAMOD)/src/luaconf.h
+
+###############################################################################
 ##  LUA JIT MODULE                                                           ##
 ###############################################################################
 
