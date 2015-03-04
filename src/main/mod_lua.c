@@ -808,26 +808,45 @@ static int handle_error(lua_State * l) {
 	return 1;
 }
 
+
+#ifndef LUA_DEBUG_HOOK
+static as_timer g_timer = {
+	    .is_malloc = false,
+	    .source = NULL,
+	    .hooks = NULL
+};
+
+/**
+ * Lua debug hook to check for a timeout.
+ */
+static void check_timer(lua_State *L, lua_Debug *ar)
+{
+	as_log_trace("%s %p", __func__, &g_timer);
+
+	if (ar->event == LUA_HOOKCOUNT) {
+		if (as_timer_timedout(&g_timer)) {
+			luaL_error(L, "UDF Execution Timeout");
+		}
+	}
+}
+#endif
+
 static int apply(lua_State * l, as_udf_context *udf_ctx, int err, int argc, as_result * res, bool is_stream) {
 
 	as_log_trace("apply");
 
 #ifndef LUA_DEBUG_HOOK
-	as_timer *timer = udf_ctx->timer;
-
-	void hook(lua_State *L, lua_Debug *ar)
-	{
-		if (ar->event == LUA_HOOKCOUNT) {
-			if (as_timer_timedout(timer)) {
-				luaL_error(L, "UDF Execution Timeout");
-			}
-		}
+	if ( !g_timer.hooks && udf_ctx->timer ) {
+		g_timer.hooks = udf_ctx->timer->hooks;
 	}
 
-	if (timer) {
-		lua_sethook(l, &hook, LUA_MASKCOUNT, as_timer_timeslice(timer));
+	if ( udf_ctx->timer ) {
+		uint64_t slice = as_timer_timeslice(udf_ctx->timer);
+		as_log_trace("setting lua_debug hook (%p), count = %lu, thread ID = %lu", &check_timer, slice, pthread_self());
+		lua_sethook(l, &check_timer, LUA_MASKCOUNT, slice);
 	}
 #endif
+
 	// call apply_record(f, r, ...)
 	as_log_trace("call function");
 	int rc = lua_pcall(l, argc, 1, err);
@@ -849,6 +868,13 @@ static int apply(lua_State * l, as_udf_context *udf_ctx, int err, int argc, as_r
 			as_result_setfailure(res, rv);
 		}
 	}
+
+#ifndef LUA_DEBUG_HOOK
+	// Disable the hook.
+	if ( udf_ctx->timer ) {
+		lua_sethook(l, &check_timer, 0, 0);
+	}
+#endif
 
 	// Pop the return value off the stack
 	as_log_trace("pop return value from the stack");
@@ -1150,7 +1176,7 @@ static int apply_record(as_module * m, as_udf_context * udf_ctx, const char * fi
 	argc = argc + 2;
 
 	// apply the function
-	as_log_trace("apply_record: apply the function");
+	as_log_trace("apply_record: apply the function %s.%s", filename, function);
 	rc = apply(l, udf_ctx, err, argc, res, false);
 
 	// return the state
@@ -1252,7 +1278,7 @@ static int apply_stream(as_module * m, as_udf_context *udf_ctx, const char * fil
 	argc = 4 + argc;
 
 	// call apply_stream(f, s, ...)
-	as_log_trace("apply_stream: apply the function");
+	as_log_trace("apply_stream: apply the function %s.%s", filename, function);
 	rc = apply(l, udf_ctx, err, argc, res, true);
 
 	// release the context
