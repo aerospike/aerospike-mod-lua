@@ -314,7 +314,8 @@ static int mod_lua_map_values(lua_State * l) {
  *****************************************************************************/
 
 static const luaL_reg object_table[] = {
-	{"new",             mod_lua_map_new},
+	{"new",             mod_lua_map_new},    // Only supported in C.
+	{"create",          mod_lua_map_new},    // Supported in all languages.
 	{"iterator",        mod_lua_map_pairs},
 	{"pairs",           mod_lua_map_pairs},
 	{"keys",            mod_lua_map_keys},

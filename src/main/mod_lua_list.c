@@ -362,7 +362,8 @@ static int mod_lua_list_iterator(lua_State * l) {
  *****************************************************************************/
 
 static const luaL_reg object_table[] = {
-	{"new",             mod_lua_list_new},
+	{"new",             mod_lua_list_new},  // Only supported in C.
+	{"create",          mod_lua_list_new},  // Supported in all languages.
 	{"insert",          mod_lua_list_insert},
 	{"append",          mod_lua_list_append},
 	{"prepend",         mod_lua_list_prepend},
