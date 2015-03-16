@@ -227,6 +227,19 @@ static int mod_lua_aerospike_set_context(lua_State * l) {
     return 1;
 }
 
+/**
+ * hook to fetch config information from server. 
+ */
+static int mod_lua_aerospike_get_config(lua_State * l) {
+    as_aerospike * a    = mod_lua_checkaerospike(l, 1);
+    as_rec *       r    = mod_lua_torecord(l, 2);
+    const char *   name = luaL_optstring(l, 3, NULL);
+
+    int ret = as_aerospike_get_config(a, r, name); 
+
+    lua_pushinteger(l, ret);
+    return 0;
+} // end mod_lua_aerospike_get_config()
 
 /******************************************************************************
  * CLASS TABLE
@@ -245,6 +258,7 @@ static const luaL_reg class_table[] = {
     {"log",              mod_lua_aerospike_log},
     {"get_current_time", mod_lua_aerospike_get_current_time},
     {"set_context",      mod_lua_aerospike_set_context},
+    {"get_config",       mod_lua_aerospike_get_config},
     {0, 0}
 };
 
