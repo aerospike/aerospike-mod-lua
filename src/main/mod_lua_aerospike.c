@@ -236,9 +236,8 @@ static int mod_lua_aerospike_get_config(lua_State * l) {
     const char *   name = luaL_optstring(l, 3, NULL);
 
     int ret = as_aerospike_get_config(a, r, name); 
-
     lua_pushinteger(l, ret);
-    return 0;
+    return 1;
 } // end mod_lua_aerospike_get_config()
 
 /******************************************************************************
