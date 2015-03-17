@@ -262,11 +262,13 @@ static int mod_lua_bytes_set_type(lua_State * l)
 	// check preconditions:
 	//	- b != NULL
 	if ( !b || !t ) {
-		return 0;
+		lua_pushboolean(l, false);
+		return 1;
 	}
 
 	as_bytes_set_type(b, (as_bytes_type)t);
-	return 0;
+	lua_pushboolean(l, true);
+	return 1;
 }
 
 
