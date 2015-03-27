@@ -26,8 +26,9 @@ TEST_DEPS += $(COMMON)/$(TARGET_LIB)/libaerospike-common.a
 ###############################################################################
 
 TEST_PLANS = 
-TEST_PLANS += stream/stream_udf
+TEST_PLANS += list/list_udf
 TEST_PLANS += record/record_udf
+TEST_PLANS += stream/stream_udf
 TEST_PLANS += validation/validation_basics
 
 TEST_UTIL = 
