@@ -144,7 +144,7 @@ TEST( list_udf_4, "insert an element into a list" )
 	as_arraylist_init(&list, 4, 5);
 	as_arraylist_append_int64(&list, 1);
 	as_arraylist_append_int64(&list, 2);
-    as_arraylist_append_str(&list, "text");
+	as_arraylist_append_str(&list, "text");
 	as_arraylist_append_int64(&list, 4);
 
 	as_rec * rec = map_rec_new();
@@ -367,7 +367,7 @@ TEST( list_udf_10, "trim a list" )
 	as_arraylist_append_int64(&list, 1);
 	as_arraylist_append_int64(&list, 2);
 	as_arraylist_append_int64(&list, 3);
-    as_arraylist_append_str(&list, "text");
+	as_arraylist_append_str(&list, "text");
 	as_arraylist_append_int64(&list, 4);
 
 	as_rec * rec = map_rec_new();
@@ -537,48 +537,48 @@ TEST( list_udf_13, "merge two lists" )
 static bool before(atf_suite * suite)
 {
 
-    test_aerospike_init(&as);
+	test_aerospike_init(&as);
 	ctx.as = &as;
 
-    mod_lua_config config = {
-        .server_mode    = true,
-        .cache_enabled  = false,
-        .system_path    = {'\0'},
-        .user_path      = "src/test/lua"
-    };
+	mod_lua_config config = {
+		.server_mode    = true,
+		.cache_enabled  = false,
+		.system_path    = {'\0'},
+		.user_path      = "src/test/lua"
+	};
 
-    char * system_path = getenv("AS_SYSTEM_LUA");
-    if ( system_path != NULL ) {
-	    strncpy(config.system_path, system_path, 255);
-	    config.system_path[255] = '\0';
-    }
-    else {
-    	error("environment variable 'AS_SYSTEM_LUA' should be set to point to the directory containing system lua files.")
-    	return false;
-    }
+	char * system_path = getenv("AS_SYSTEM_LUA");
+	if ( system_path != NULL ) {
+		strncpy(config.system_path, system_path, 255);
+		config.system_path[255] = '\0';
+	}
+	else {
+		error("environment variable 'AS_SYSTEM_LUA' should be set to point to the directory containing system lua files.")
+		return false;
+	}
 
 	as_lua_log_init();
-    
-    int rc = as_module_configure(&mod_lua, &config);
 
-    if ( rc != 0 ) {
-        error("as_module_configure failed: %d", rc);
-        return false;
-    }
+	int rc = as_module_configure(&mod_lua, &config);
+
+	if ( rc != 0 ) {
+		error("as_module_configure failed: %d", rc);
+		return false;
+	}
  
-    return true;
+	return true;
 }
 
 static bool after(atf_suite * suite)
 {
-    return true;
+	return true;
 }
 
 SUITE( list_udf, "list udf tests" )
 {
 	suite_before( before );
  	suite_after( after );
-    
+
 	suite_add( list_udf_1 );
 	suite_add( list_udf_2 );
 	suite_add( list_udf_3 );
