@@ -72,6 +72,14 @@ static int mod_lua_stream_read(lua_State * l) {
     if ( stream ) {
         as_val * val = as_stream_read(stream);
         mod_lua_pushval(l, val );
+
+// Client aggregation queries read data from server nodes and populate this stream.  After that,
+// the client has no use for this value.  Therefore, destroy value after reading from this stream.
+// Enable on client build only.
+#ifdef AS_MOD_LUA_CLIENT
+		as_val_destroy(val);
+#endif
+
         return 1;
     }
     else {
