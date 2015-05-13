@@ -17,6 +17,7 @@
 
 #include <string.h>
 #include <stdio.h>
+#include <assert.h>
 
 #include <lua.h>
 #include <lauxlib.h>
@@ -52,7 +53,8 @@ as_val * mod_lua_retval(lua_State * l) {
 as_val * mod_lua_toval(lua_State * l, int i) {
     switch( lua_type(l, i) ) {
         case LUA_TNUMBER : {
-            return (as_val *) as_integer_new((long) lua_tonumber(l, i));
+            assert(sizeof(int64_t) == sizeof(lua_Integer));
+            return (as_val *) as_integer_new((int64_t) lua_tointeger(l, i));
         }
         case LUA_TBOOLEAN : {
             return (as_val *) as_boolean_new(lua_toboolean(l, i));
@@ -116,6 +118,7 @@ int mod_lua_pushval(lua_State * l, const as_val * v) {
             return 1;
         }
         case AS_INTEGER: {
+            assert(sizeof(int64_t) == sizeof(lua_Integer));
             lua_pushinteger(l, as_integer_toint((as_integer *) v) );
             return 1;
         }
