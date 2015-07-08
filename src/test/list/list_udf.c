@@ -197,7 +197,7 @@ TEST( list_udf_5, "append an element to a list" )
 	as_arraylist arglist;
 	as_arraylist_inita(&arglist, 2);
 	as_arraylist_append_str(&arglist, "listbin");
-	as_arraylist_append_int64(&arglist, 7);
+	as_arraylist_append_double(&arglist, 7.1);
 
 	as_result * res = as_success_new(NULL);
 
@@ -212,7 +212,7 @@ TEST( list_udf_5, "append an element to a list" )
 	assert_int_eq( as_list_get_int64(rlist,1), 2 );
 	assert_int_eq( as_list_get_int64(rlist,2), 3 );
 	assert_int_eq( as_list_get_int64(rlist,3), 4 );
-	assert_int_eq( as_list_get_int64(rlist,4), 7 );
+	assert_double_eq( as_list_get_double(rlist,4), 7.1 );
 
 	as_rec_destroy(rec);
 	as_arraylist_destroy(&list);
@@ -235,7 +235,7 @@ TEST( list_udf_6, "prepend an element to a list" )
 	as_arraylist arglist;
 	as_arraylist_inita(&arglist, 2);
 	as_arraylist_append_str(&arglist, "listbin");
-	as_arraylist_append_int64(&arglist, 7);
+	as_arraylist_append_double(&arglist, -7.1);
 
 	as_result * res = as_success_new(NULL);
 
@@ -246,7 +246,7 @@ TEST( list_udf_6, "prepend an element to a list" )
 	assert_not_null( res->value );
 	as_list * rlist = (as_list *) res->value;
 	assert_int_eq( as_list_size(rlist), 5 );
-	assert_int_eq( as_list_get_int64(rlist,0), 7 );
+	assert_double_eq( as_list_get_double(rlist,0), -7.1 );
 	assert_int_eq( as_list_get_int64(rlist,1), 1 );
 	assert_int_eq( as_list_get_int64(rlist,2), 2 );
 	assert_int_eq( as_list_get_int64(rlist,3), 3 );
@@ -263,7 +263,7 @@ TEST( list_udf_7, "select the first 2 elements of a list" )
 	as_arraylist list;
 	as_arraylist_init(&list, 4, 5);
 	as_arraylist_append_int64(&list, 1);
-	as_arraylist_append_int64(&list, 2);
+	as_arraylist_append_double(&list, 2.2);
 	as_arraylist_append_int64(&list, 3);
 	as_arraylist_append_int64(&list, 4);
 
@@ -285,7 +285,7 @@ TEST( list_udf_7, "select the first 2 elements of a list" )
 	as_list * rlist = (as_list *) res->value;
 	assert_int_eq( as_list_size(rlist), 2 );
 	assert_int_eq( as_list_get_int64(rlist,0), 1 );
-	assert_int_eq( as_list_get_int64(rlist,1), 2 );
+	assert_double_eq( as_list_get_double(rlist,1), 2.2 );
 
 	as_rec_destroy(rec);
 	as_arraylist_destroy(&list);
@@ -407,7 +407,7 @@ TEST( list_udf_11, "clone a list" )
 	as_arraylist_init(&list, 4, 5);
 	as_arraylist_append_int64(&list, 1);
 	as_arraylist_append_int64(&list, 2);
-	as_arraylist_append_int64(&list, 3);
+	as_arraylist_append_double(&list, 3.3);
 	as_arraylist_append_int64(&list, 4);
 
 	as_rec * rec = map_rec_new();
@@ -428,7 +428,7 @@ TEST( list_udf_11, "clone a list" )
 	assert_int_eq( as_list_size(rlist), 4 );
 	assert_int_eq( as_list_get_int64(rlist,0), 1 );
 	assert_int_eq( as_list_get_int64(rlist,1), 2 );
-	assert_int_eq( as_list_get_int64(rlist,2), 3 );
+	assert_double_eq( as_list_get_double(rlist,2), 3.3 );
 	assert_int_eq( as_list_get_int64(rlist,3), 4 );
 
 	as_rec_destroy(rec);
@@ -497,7 +497,7 @@ TEST( list_udf_13, "merge two lists" )
 	as_arraylist_init(&list2, 4, 5);
 	as_arraylist_append_int64(&list2, 6);
 	as_arraylist_append_int64(&list2, 7);
-	as_arraylist_append_int64(&list2, 8);
+	as_arraylist_append_double(&list2, 8.8);
 	as_arraylist_append_int64(&list2, 9);
 
 	as_rec * rec = map_rec_new();
@@ -523,7 +523,7 @@ TEST( list_udf_13, "merge two lists" )
 	assert_int_eq( as_list_get_int64(rlist,2), 3 );
 	assert_int_eq( as_list_get_int64(rlist,3), 6 );
 	assert_int_eq( as_list_get_int64(rlist,4), 7 );
-	assert_int_eq( as_list_get_int64(rlist,5), 8 );
+	assert_double_eq( as_list_get_double(rlist,5), 8.8 );
 	assert_int_eq( as_list_get_int64(rlist,6), 9 );
 
 	as_rec_destroy(rec);
