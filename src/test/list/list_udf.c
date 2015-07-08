@@ -46,11 +46,12 @@ TEST( list_udf_1, "create a list" )
 	as_rec * rec = map_rec_new();
 
 	as_arraylist arglist;
-	as_arraylist_inita(&arglist, 4);
+	as_arraylist_inita(&arglist, 5);
 	as_arraylist_append_int64(&arglist, 1);
 	as_arraylist_append_int64(&arglist, 2);
 	as_arraylist_append_int64(&arglist, 3);
 	as_arraylist_append_int64(&arglist, 4);
+	as_arraylist_append_double(&arglist, 5.55);
 
 	as_result * res = as_success_new(NULL);
 
@@ -60,11 +61,12 @@ TEST( list_udf_1, "create a list" )
 	assert_true( res->is_success );
 	assert_not_null( res->value );
 	as_list * rlist = (as_list *) res->value;
-	assert_int_eq( as_list_size(rlist), 4 );
+	assert_int_eq( as_list_size(rlist), 5 );
 	assert_int_eq( as_list_get_int64(rlist,0), 1 );
 	assert_int_eq( as_list_get_int64(rlist,1), 2 );
 	assert_int_eq( as_list_get_int64(rlist,2), 3 );
 	assert_int_eq( as_list_get_int64(rlist,3), 4 );
+	assert_double_eq( as_list_get_double(rlist,4), 5.55 );
 
 	as_rec_destroy(rec);
 	as_arraylist_destroy(&arglist);
@@ -74,11 +76,12 @@ TEST( list_udf_1, "create a list" )
 TEST( list_udf_2, "get the size of a list" )
 {
 	as_arraylist list;
-	as_arraylist_init(&list, 4, 5);
+	as_arraylist_init(&list, 5, 5);
 	as_arraylist_append_int64(&list, 1);
 	as_arraylist_append_int64(&list, 2);
 	as_arraylist_append_int64(&list, 3);
 	as_arraylist_append_int64(&list, 4);
+	as_arraylist_append_double(&list, 5.55);
 
 	as_rec * rec = map_rec_new();
 	as_rec_set(rec, "listbin", (as_val *) &list);
@@ -94,7 +97,7 @@ TEST( list_udf_2, "get the size of a list" )
 	assert_int_eq( rc, 0);
 	assert_true( res->is_success );
 	assert_not_null( res->value );
-	assert_int_eq( as_integer_toint((as_integer *) res->value), 4 );
+	assert_int_eq( as_integer_toint((as_integer *) res->value), 5 );
 
 	as_rec_destroy(rec);
 	as_arraylist_destroy(&list);
@@ -105,11 +108,12 @@ TEST( list_udf_2, "get the size of a list" )
 TEST( list_udf_3, "iterate over a list" )
 {
 	as_arraylist list;
-	as_arraylist_init(&list, 4, 5);
+	as_arraylist_init(&list, 5, 5);
 	as_arraylist_append_int64(&list, 1);
 	as_arraylist_append_int64(&list, 2);
 	as_arraylist_append_int64(&list, 3);
 	as_arraylist_append_int64(&list, 4);
+	as_arraylist_append_double(&list, 5.55);
 
 	as_rec * rec = map_rec_new();
 	as_rec_set(rec, "listbin", (as_val *) &list);
@@ -126,11 +130,12 @@ TEST( list_udf_3, "iterate over a list" )
 	assert_true( res->is_success );
 	assert_not_null( res->value );
 	as_list * rlist = (as_list *) res->value; // returned list should look just like the input one
-	assert_int_eq( as_list_size(rlist), 4 );
+	assert_int_eq( as_list_size(rlist), 5 );
 	assert_int_eq( as_list_get_int64(rlist,0), 1 );
 	assert_int_eq( as_list_get_int64(rlist,1), 2 );
 	assert_int_eq( as_list_get_int64(rlist,2), 3 );
 	assert_int_eq( as_list_get_int64(rlist,3), 4 );
+	assert_double_eq( as_list_get_double(rlist,4), 5.55 );
 
 	as_rec_destroy(rec);
 	as_arraylist_destroy(&list);

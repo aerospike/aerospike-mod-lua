@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		BF255C011B4C9EF600816CCC /* list_udf.c in Sources */ = {isa = PBXBuildFile; fileRef = BF255C001B4C9EF600816CCC /* list_udf.c */; };
 		BFC7B29E18C90BEE0047DA3C /* mod_lua_test.c in Sources */ = {isa = PBXBuildFile; fileRef = BFC7B29B18C90BEE0047DA3C /* mod_lua_test.c */; };
 		BFC7B29F18C90BEE0047DA3C /* test.c in Sources */ = {isa = PBXBuildFile; fileRef = BFC7B29C18C90BEE0047DA3C /* test.c */; };
 		BFC7B2A118C90C040047DA3C /* record_udf.c in Sources */ = {isa = PBXBuildFile; fileRef = BFC7B2A018C90C040047DA3C /* record_udf.c */; };
@@ -66,6 +67,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		BF255C001B4C9EF600816CCC /* list_udf.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = list_udf.c; path = ../src/test/list/list_udf.c; sourceTree = "<group>"; };
 		BF2D799E18D39D8B008947A5 /* aerospike-common.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = "aerospike-common.xcodeproj"; path = "project/aerospike-common.xcodeproj"; sourceTree = AerospikeCommon; };
 		BFC7B28918C90A0A0047DA3C /* aerospike-mod-lua-test */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "aerospike-mod-lua-test"; sourceTree = BUILT_PRODUCTS_DIR; };
 		BFC7B29518C90A2B0047DA3C /* aerospike-mod-lua.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = "aerospike-mod-lua.xcodeproj"; sourceTree = "<group>"; };
@@ -117,6 +119,7 @@
 			isa = PBXGroup;
 			children = (
 				BF2D799E18D39D8B008947A5 /* aerospike-common.xcodeproj */,
+				BF255C001B4C9EF600816CCC /* list_udf.c */,
 				BFC7B2C118C91A4D0047DA3C /* liblua.a */,
 				BFC7B2AE18C90C5D0047DA3C /* validation_basics.c */,
 				BFC7B2A418C90C4C0047DA3C /* consumer_stream.c */,
@@ -231,6 +234,7 @@
 				BFC7B29E18C90BEE0047DA3C /* mod_lua_test.c in Sources */,
 				BFC7B2A318C90C240047DA3C /* stream_udf.c in Sources */,
 				BFC7B2A918C90C4C0047DA3C /* consumer_stream.c in Sources */,
+				BF255C011B4C9EF600816CCC /* list_udf.c in Sources */,
 				BFC7B2AA18C90C4C0047DA3C /* map_rec.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

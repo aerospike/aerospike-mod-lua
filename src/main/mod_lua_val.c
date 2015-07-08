@@ -52,7 +52,15 @@ as_val * mod_lua_retval(lua_State * l) {
 as_val * mod_lua_toval(lua_State * l, int i) {
     switch( lua_type(l, i) ) {
         case LUA_TNUMBER : {
-            return (as_val *) as_integer_new((long) lua_tonumber(l, i));
+			double d = lua_tonumber(l, i);
+			int64_t i = (int64_t)d;
+			
+			if (d == i) {
+				return (as_val*) as_integer_new(i);
+			}
+			else {
+				return (as_val*) as_double_new(d);
+			}
         }
         case LUA_TBOOLEAN : {
             return (as_val *) as_boolean_new(lua_toboolean(l, i));
@@ -65,7 +73,8 @@ as_val * mod_lua_toval(lua_State * l, int i) {
             if ( box && box->value ) {
                 switch( as_val_type(box->value) ) {
                     case AS_BOOLEAN: 
-                    case AS_INTEGER: 
+                    case AS_INTEGER:
+					case AS_DOUBLE:
                     case AS_STRING: 
                     case AS_BYTES:
                     case AS_LIST:
@@ -117,6 +126,10 @@ int mod_lua_pushval(lua_State * l, const as_val * v) {
         }
         case AS_INTEGER: {
             lua_pushinteger(l, as_integer_toint((as_integer *) v) );
+            return 1;
+        }
+        case AS_DOUBLE: {
+            lua_pushnumber(l, as_double_get((as_double*)v));
             return 1;
         }
         case AS_STRING: {

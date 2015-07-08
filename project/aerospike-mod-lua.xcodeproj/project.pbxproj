@@ -108,7 +108,7 @@
 		BFBB7F4918C0105A0080851E /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
-				LastUpgradeCheck = 0500;
+				LastUpgradeCheck = 0510;
 				ORGANIZATIONNAME = Aerospike;
 			};
 			buildConfigurationList = BFBB7F4C18C0105A0080851E /* Build configuration list for PBXProject "aerospike-mod-lua" */;
@@ -235,7 +235,7 @@
 					"-DLUA_DEBUG_HOOK",
 				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = macosx10.8;
+				SDKROOT = macosx;
 			};
 			name = Debug;
 		};
@@ -256,7 +256,7 @@
 					"-DLUA_DEBUG_HOOK",
 				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = macosx10.8;
+				SDKROOT = macosx;
 			};
 			name = Release;
 		};
