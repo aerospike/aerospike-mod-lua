@@ -39,6 +39,10 @@ CC_FLAGS += -fno-common -fno-strict-aliasing -finline-functions
 CC_FLAGS += -march=nocona -DMARCH_$(ARCH)
 CC_FLAGS += -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_GNU_SOURCE $(EXT_CFLAGS)
 
+ifeq ($(TARGET_SERVER), )
+  CC_FLAGS += -DAS_MOD_LUA_CLIENT
+endif
+
 PREPRO_SUFFIX = .cpp
 ifeq ($(PREPRO),1)
   SUFFIX = $(PREPRO_SUFFIX)

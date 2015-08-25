@@ -250,6 +250,7 @@ TEST( stream_udf_5, "campaign rollup w/ map & reduce" )
     assert_int_eq(as_integer_get((as_integer *) as_map_get(result5, (as_val *) as_integer_init(&i, 9))), 5260);
 
 
+	as_list_destroy(arglist);
     as_map_destroy(result5);
     as_stream_destroy(istream);
     as_stream_destroy(ostream);
@@ -287,6 +288,7 @@ TEST( stream_udf_6, "campaign rollup w/ aggregate" )
     assert_int_eq(as_integer_get((as_integer *) as_map_get(result5, (as_val *) as_integer_init(&i, 8))), 5070);
     assert_int_eq(as_integer_get((as_integer *) as_map_get(result5, (as_val *) as_integer_init(&i, 9))), 5260);
 
+	as_list_destroy(arglist);
     as_map_destroy(result5);
     as_stream_destroy(istream);
     as_stream_destroy(ostream);

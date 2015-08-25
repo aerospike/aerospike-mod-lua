@@ -45,6 +45,10 @@ TEST( record_udf_1, "echo bin a of {a = 123, b = 456 }" )
     as_rec * rec = map_rec_new();
     as_rec_set(rec, "a", (as_val *) as_integer_new(123));
 
+	// as_module_apply_record() will decrement ref count and attempt to free,
+	// so add extra reserve and free later.
+	as_val_reserve(rec);
+
     as_arraylist arglist;
     as_arraylist_inita(&arglist, 1);
     as_arraylist_append_str(&arglist, "a");
@@ -68,6 +72,10 @@ TEST( record_udf_2, "concat bins a and b of {a = 'abc', b = 'def' }" )
     as_rec * rec = map_rec_new();
     as_rec_set(rec, "a", (as_val *) as_string_new("abc",false));
     as_rec_set(rec, "b", (as_val *) as_string_new("def",false));
+
+	// as_module_apply_record() will decrement ref count and attempt to free,
+	// so add extra reserve and free later.
+	as_val_reserve(rec);
 
     as_arraylist arglist;
     as_arraylist_inita(&arglist, 2);

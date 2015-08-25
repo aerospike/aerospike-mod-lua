@@ -123,7 +123,8 @@ TEST( validation_basics_1, "validation: src/test/lua/validate_*.lua" )
 		assert(rc == 0);
 
 		rc = as_module_validate(&mod_lua, &as, entry->filename, buff, size, &err);
-
+		cf_free(buff);
+		
 		if ( rc != 0 && entry->is_valid ) {
 			info("error = {");
 			info("  scope   = %d", err.scope);
@@ -139,9 +140,7 @@ TEST( validation_basics_1, "validation: src/test/lua/validate_*.lua" )
 		if ( rc == 0 && !entry->is_valid ) {
 			assert(rc != 0 && !entry->is_valid);
 		}
-
 	}
-
 }
 
 /******************************************************************************

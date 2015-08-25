@@ -44,6 +44,10 @@ static as_udf_context ctx;
 TEST( list_udf_1, "create a list" )
 {
 	as_rec * rec = map_rec_new();
+	
+	// as_module_apply_record() will decrement ref count and attempt to free,
+	// so add extra reserve and free later.
+	as_val_reserve(rec);
 
 	as_arraylist arglist;
 	as_arraylist_inita(&arglist, 5);
@@ -85,6 +89,10 @@ TEST( list_udf_2, "get the size of a list" )
 
 	as_rec * rec = map_rec_new();
 	as_rec_set(rec, "listbin", (as_val *) &list);
+	
+	// as_module_apply_record() will decrement ref count and attempt to free,
+	// so add extra reserve and free later.
+	as_val_reserve(rec);
 
 	as_arraylist arglist;
 	as_arraylist_inita(&arglist, 1);
@@ -117,6 +125,10 @@ TEST( list_udf_3, "iterate over a list" )
 
 	as_rec * rec = map_rec_new();
 	as_rec_set(rec, "listbin", (as_val *) &list);
+
+	// as_module_apply_record() will decrement ref count and attempt to free,
+	// so add extra reserve and free later.
+	as_val_reserve(rec);
 
 	as_arraylist arglist;
 	as_arraylist_inita(&arglist, 1);
@@ -154,6 +166,10 @@ TEST( list_udf_4, "insert an element into a list" )
 
 	as_rec * rec = map_rec_new();
 	as_rec_set(rec, "listbin", (as_val *) &list);
+
+	// as_module_apply_record() will decrement ref count and attempt to free,
+	// so add extra reserve and free later.
+	as_val_reserve(rec);
 
 	as_arraylist arglist;
 	as_arraylist_inita(&arglist, 3);
@@ -194,6 +210,10 @@ TEST( list_udf_5, "append an element to a list" )
 	as_rec * rec = map_rec_new();
 	as_rec_set(rec, "listbin", (as_val *) &list);
 
+	// as_module_apply_record() will decrement ref count and attempt to free,
+	// so add extra reserve and free later.
+	as_val_reserve(rec);
+
 	as_arraylist arglist;
 	as_arraylist_inita(&arglist, 2);
 	as_arraylist_append_str(&arglist, "listbin");
@@ -231,6 +251,10 @@ TEST( list_udf_6, "prepend an element to a list" )
 
 	as_rec * rec = map_rec_new();
 	as_rec_set(rec, "listbin", (as_val *) &list);
+
+	// as_module_apply_record() will decrement ref count and attempt to free,
+	// so add extra reserve and free later.
+	as_val_reserve(rec);
 
 	as_arraylist arglist;
 	as_arraylist_inita(&arglist, 2);
@@ -270,6 +294,10 @@ TEST( list_udf_7, "select the first 2 elements of a list" )
 	as_rec * rec = map_rec_new();
 	as_rec_set(rec, "listbin", (as_val *) &list);
 
+	// as_module_apply_record() will decrement ref count and attempt to free,
+	// so add extra reserve and free later.
+	as_val_reserve(rec);
+
 	as_arraylist arglist;
 	as_arraylist_inita(&arglist, 2);
 	as_arraylist_append_str(&arglist, "listbin");
@@ -304,6 +332,10 @@ TEST( list_udf_8, "remove an element from a list" )
 
 	as_rec * rec = map_rec_new();
 	as_rec_set(rec, "listbin", (as_val *) &list);
+
+	// as_module_apply_record() will decrement ref count and attempt to free,
+	// so add extra reserve and free later.
+	as_val_reserve(rec);
 
 	as_arraylist arglist;
 	as_arraylist_inita(&arglist, 2);
@@ -342,6 +374,10 @@ TEST( list_udf_9, "drop the first 3 elements of a list" )
 	as_rec * rec = map_rec_new();
 	as_rec_set(rec, "listbin", (as_val *) &list);
 
+	// as_module_apply_record() will decrement ref count and attempt to free,
+	// so add extra reserve and free later.
+	as_val_reserve(rec);
+
 	as_arraylist arglist;
 	as_arraylist_inita(&arglist, 2);
 	as_arraylist_append_str(&arglist, "listbin");
@@ -378,6 +414,10 @@ TEST( list_udf_10, "trim a list" )
 	as_rec * rec = map_rec_new();
 	as_rec_set(rec, "listbin", (as_val *) &list);
 
+	// as_module_apply_record() will decrement ref count and attempt to free,
+	// so add extra reserve and free later.
+	as_val_reserve(rec);
+
 	as_arraylist arglist;
 	as_arraylist_inita(&arglist, 2);
 	as_arraylist_append_str(&arglist, "listbin");
@@ -412,6 +452,10 @@ TEST( list_udf_11, "clone a list" )
 
 	as_rec * rec = map_rec_new();
 	as_rec_set(rec, "listbin", (as_val *) &list);
+
+	// as_module_apply_record() will decrement ref count and attempt to free,
+	// so add extra reserve and free later.
+	as_val_reserve(rec);
 
 	as_arraylist arglist;
 	as_arraylist_inita(&arglist, 1);
@@ -455,6 +499,10 @@ TEST( list_udf_12, "concatenate two lists" )
 	as_rec * rec = map_rec_new();
 	as_rec_set(rec, "list1bin", (as_val *) &list1);
 	as_rec_set(rec, "list2bin", (as_val *) &list2);
+
+	// as_module_apply_record() will decrement ref count and attempt to free,
+	// so add extra reserve and free later.
+	as_val_reserve(rec);
 
 	as_arraylist arglist;
 	as_arraylist_inita(&arglist, 2);
@@ -503,6 +551,10 @@ TEST( list_udf_13, "merge two lists" )
 	as_rec * rec = map_rec_new();
 	as_rec_set(rec, "list1bin", (as_val *) &list1);
 	as_rec_set(rec, "list2bin", (as_val *) &list2);
+
+	// as_module_apply_record() will decrement ref count and attempt to free,
+	// so add extra reserve and free later.
+	as_val_reserve(rec);
 
 	as_arraylist arglist;
 	as_arraylist_inita(&arglist, 2);
