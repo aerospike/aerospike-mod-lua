@@ -1,7 +1,7 @@
-include project/settings.mk
 ###############################################################################
 ##  SETTINGS                                                                 ##
 ###############################################################################
+include project/settings.mk
 
 # Modules
 COMMON 	:= $(COMMON)
@@ -80,17 +80,8 @@ endif
 # Make-tree Compiler Flags
 CFLAGS = -O$(O) 
 
-# Make-tree Linker Flags
-# LDFLAGS = 
-
-# Make-tree Linker Flags
-# LDFLAGS = 
-
 # Include Paths
 INC_PATH += $(COMMON)/$(TARGET_INCL)
-
-# Library Paths
-# LIB_PATH +=
 
 ifeq ($(USE_LUAJIT),1)
   INC_PATH += $(LUAJIT)/src
@@ -110,10 +101,10 @@ else
     endif
     ifeq ($(OS),Darwin)
       ifneq ($(wildcard /usr/local/include),)
-	INC_PATH += /usr/local/include
+        INC_PATH += /usr/local/include
       endif
       ifneq ($(wildcard /usr/local/lib),)
-	LIB_LUA = -L/usr/local/lib
+        LIB_LUA = -L/usr/local/lib
       endif
     endif
     LIB_LUA += -llua$(LUA_SUFFIX)
@@ -142,16 +133,15 @@ MOD_LUA += mod_lua_val.o
 
 all: build prepare
 
-.PHONY: prepare
-prepare: $(TARGET_INCL)/aerospike/*.h
-
 .PHONY: build 
 build: libmod_lua
 
-.PHONY: build-clean
-build-clean:
-	@rm -rf $(TARGET_BIN)
-	@rm -rf $(TARGET_LIB)
+.PHONY: prepare
+prepare: $(TARGET_INCL)/aerospike/*.h
+
+.PHONY: clean
+clean:	modules-clean
+	@rm -rf $(TARGET)
 
 .PHONY: libmod_lua libmod_lua.a libmod_lua.$(DYNAMIC_SUFFIX)
 libmod_lua: libmod_lua.a libmod_lua.$(DYNAMIC_SUFFIX)
@@ -172,10 +162,6 @@ $(TARGET_INCL)/aerospike: | $(TARGET_INCL)
 
 $(TARGET_INCL)/aerospike/%.h:: $(SOURCE_INCL)/aerospike/%.h | $(TARGET_INCL)/aerospike
 	cp -p $^ $(TARGET_INCL)/aerospike
-
-# .PHONY: test
-# test: 
-# 	@echo "No tests"
 
 ###############################################################################
 include project/modules.mk project/test.mk project/rules.mk
