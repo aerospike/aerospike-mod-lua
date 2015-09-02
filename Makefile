@@ -155,7 +155,11 @@ libmod_lua.$(DYNAMIC_SUFFIX): $(TARGET_LIB)/libmod_lua.$(DYNAMIC_SUFFIX)
 $(TARGET_OBJ)/%.o: $(SOURCE_MAIN)/%.c | modules-prepare
 	$(object)
 
-$(TARGET_LIB)/libmod_lua.a $(TARGET_LIB)/libmod_lua.$(DYNAMIC_SUFFIX): $(MOD_LUA:%=$(TARGET_OBJ)/%) | $(COMMON)/$(TARGET_INCL)/aerospike
+$(TARGET_LIB)/libmod_lua.$(DYNAMIC_SUFFIX): $(MOD_LUA:%=$(TARGET_OBJ)/%) | $(COMMON)/$(TARGET_INCL)/aerospike
+	$(library)
+
+$(TARGET_LIB)/libmod_lua.a: $(MOD_LUA:%=$(TARGET_OBJ)/%) | $(COMMON)/$(TARGET_INCL)/aerospike
+	$(archive)
 
 $(TARGET_INCL)/aerospike: | $(TARGET_INCL)
 	mkdir $@
