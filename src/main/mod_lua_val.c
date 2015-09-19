@@ -30,6 +30,7 @@
 #include <aerospike/mod_lua_map.h>
 #include <aerospike/mod_lua_record.h>
 #include <aerospike/mod_lua_bytes.h>
+#include <aerospike/mod_lua_geojson.h>
 
 #include "internal.h"
 
@@ -80,6 +81,7 @@ as_val * mod_lua_toval(lua_State * l, int i) {
                     case AS_LIST:
                     case AS_MAP:
                     case AS_REC:
+                    case AS_GEOJSON:
                         switch (box->scope) {
                             case MOD_LUA_SCOPE_LUA:
                                 as_val_reserve(box->value);
@@ -161,6 +163,11 @@ int mod_lua_pushval(lua_State * l, const as_val * v) {
             *p = *((as_pair *)v);
             return 1;   
         }
+        case AS_GEOJSON: {
+            as_val_reserve(v);
+            mod_lua_pushgeojson(l, (as_geojson *) v);
+            return 1;   
+        }
         default: {
             lua_pushnil(l);
             return 1;
@@ -210,4 +217,3 @@ int mod_lua_freebox(lua_State * l, int index, const char * type) {
 void * mod_lua_box_value(mod_lua_box * box) {
     return box ? box->value : NULL;
 }
-
