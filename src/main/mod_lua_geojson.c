@@ -73,10 +73,13 @@ static int mod_lua_geojson_new(lua_State * l)
 		return 0;
 	}
 
-	const char * geostr = luaL_optstring(l, 2, 0);
-	as_geojson * geo = as_geojson_new(cf_strdup(geostr), true);
+	const char * geostr = luaL_optstring(l, 2, NULL);
+	if (geostr == NULL) {
+		return 0;
+	}
 
-	if ( !geo ) {
+	as_geojson * geo = as_geojson_new(cf_strdup(geostr), true);
+	if (geo == NULL) {
 		return 0;
 	}
 
