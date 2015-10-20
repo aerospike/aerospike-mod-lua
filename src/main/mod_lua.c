@@ -42,6 +42,7 @@
 #include <aerospike/mod_lua_config.h>
 #include <aerospike/mod_lua_aerospike.h>
 #include <aerospike/mod_lua_record.h>
+#include <aerospike/mod_lua_geojson.h>
 #include <aerospike/mod_lua_iterator.h>
 #include <aerospike/mod_lua_stream.h>
 #include <aerospike/mod_lua_list.h>
@@ -577,6 +578,7 @@ static lua_State * create_state(context * ctx, const char * filename) {
 	mod_lua_list_register(l);
 	mod_lua_map_register(l);
 	mod_lua_bytes_register(l);
+	mod_lua_geojson_register(l);
 
 	lua_getglobal(l, "require");
 	lua_pushstring(l, "aerospike");
@@ -1054,6 +1056,7 @@ static int validate(as_module * m, as_aerospike * as, const char * filename, con
 	mod_lua_list_register(l);
 	mod_lua_map_register(l);
 	mod_lua_bytes_register(l);
+	mod_lua_geojson_register(l);
 
 	lua_getglobal(l, "require");
 	lua_pushstring(l, "aerospike");
