@@ -66,6 +66,24 @@ static int mod_lua_geojson_gc(lua_State * l) {
  * FUNCTIONS
  ******************************************************************************/
 
+static int mod_lua_geojson_new(lua_State * l)
+{
+	int argc = lua_gettop(l);
+	if (argc != 2) {
+		return 0;
+	}
+
+	const char * geostr = luaL_optstring(l, 2, 0);
+	as_geojson * geo = as_geojson_new(cf_strdup(geostr), true);
+
+	if ( !geo ) {
+		return 0;
+	}
+
+	mod_lua_pushgeojson(l, geo);
+	return 1;
+}
+
 static int mod_lua_geojson_tostring(lua_State * l)
 {
 	// we expect 1 arg
@@ -102,6 +120,7 @@ static const luaL_reg geojson_object_table[] = {
 };
 
 static const luaL_reg geojson_object_metatable[] = {
+	{"__call",          mod_lua_geojson_new},
 	{0, 0}
 };
 
