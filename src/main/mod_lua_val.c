@@ -54,10 +54,10 @@ as_val * mod_lua_toval(lua_State * l, int i) {
     switch( lua_type(l, i) ) {
         case LUA_TNUMBER : {
 			double d = lua_tonumber(l, i);
-			int64_t i = (int64_t)d;
+			int64_t i64 = (int64_t)d;
 			
-			if (d == i) {
-				return (as_val*) as_integer_new(i);
+			if (d == i64) {
+				return (as_val*) as_integer_new(i64);
 			}
 			else {
 				return (as_val*) as_double_new(d);
