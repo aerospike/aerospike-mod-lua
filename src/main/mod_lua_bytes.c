@@ -1652,6 +1652,7 @@ static int mod_lua_bytes_get_string(lua_State * l)
 	val[len] = '\0';
 	
 	lua_pushlstring(l, val, len);
+	free(val);
 	return 1;
 }
 
