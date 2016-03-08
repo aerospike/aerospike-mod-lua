@@ -18,6 +18,7 @@
 		BFBB7F6B18C011A10080851E /* mod_lua_val.c in Sources */ = {isa = PBXBuildFile; fileRef = BFBB7F6118C011A10080851E /* mod_lua_val.c */; };
 		BFBB7F6C18C011A10080851E /* mod_lua.c in Sources */ = {isa = PBXBuildFile; fileRef = BFBB7F6218C011A10080851E /* mod_lua.c */; };
 		BFBB7F6E18C011BC0080851E /* internal.c in Sources */ = {isa = PBXBuildFile; fileRef = BFBB7F6D18C011BC0080851E /* internal.c */; };
+		BFC65AF91C8F77540079DF5A /* mod_lua_geojson.c in Sources */ = {isa = PBXBuildFile; fileRef = BFC65AF81C8F77540079DF5A /* mod_lua_geojson.c */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -33,6 +34,7 @@
 		BFBB7F6118C011A10080851E /* mod_lua_val.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = mod_lua_val.c; path = ../src/main/mod_lua_val.c; sourceTree = "<group>"; };
 		BFBB7F6218C011A10080851E /* mod_lua.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = mod_lua.c; path = ../src/main/mod_lua.c; sourceTree = "<group>"; };
 		BFBB7F6D18C011BC0080851E /* internal.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = internal.c; path = ../src/main/internal.c; sourceTree = "<group>"; };
+		BFC65AF81C8F77540079DF5A /* mod_lua_geojson.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = mod_lua_geojson.c; path = ../src/main/mod_lua_geojson.c; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -50,6 +52,7 @@
 			isa = PBXGroup;
 			children = (
 				BFBB7F6D18C011BC0080851E /* internal.c */,
+				BFC65AF81C8F77540079DF5A /* mod_lua_geojson.c */,
 				BFBB7F5918C011A00080851E /* mod_lua_aerospike.c */,
 				BFBB7F5A18C011A00080851E /* mod_lua_bytes.c */,
 				BFBB7F5B18C011A10080851E /* mod_lua_iterator.c */,
@@ -144,6 +147,7 @@
 				BFBB7F6718C011A10080851E /* mod_lua_map.c in Sources */,
 				BFBB7F6B18C011A10080851E /* mod_lua_val.c in Sources */,
 				BFBB7F6618C011A10080851E /* mod_lua_list.c in Sources */,
+				BFC65AF91C8F77540079DF5A /* mod_lua_geojson.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

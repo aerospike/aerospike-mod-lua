@@ -239,8 +239,8 @@ int cache_init(context * ctx, const char *key, const char * gen) {
 }
 
 static int cache_remove_file(context * ctx, const char * filename) {
-	char    key[CACHE_ENTRY_KEY_MAX]    = "";
-	memcpy(key, filename, CACHE_ENTRY_KEY_MAX);
+	char key[CACHE_ENTRY_KEY_MAX];
+	as_strncpy(key, filename, sizeof(key));
 	if( rindex(key, '.') ) {
 		*(rindex(key, '.')) = '\0';
 	}
@@ -249,9 +249,8 @@ static int cache_remove_file(context * ctx, const char * filename) {
 }
 
 static int cache_add_file(context * ctx, const char * filename) {
-	char    key[CACHE_ENTRY_KEY_MAX]    = "";
-	char    gen[CACHE_ENTRY_GEN_MAX]    = "";
-	memcpy(key, filename, CACHE_ENTRY_KEY_MAX);
+	char key[CACHE_ENTRY_KEY_MAX];
+	as_strncpy(key, filename, sizeof(key));
 	char *tmp_char = rindex(key, '.');
 	if (  !tmp_char             // Filename without extension
 	   || key == tmp_char       // '.' as first character
@@ -261,6 +260,10 @@ static int cache_add_file(context * ctx, const char * filename) {
 		return -1;
 	}
 	*tmp_char = '\0';
+	
+	char gen[CACHE_ENTRY_GEN_MAX];
+	gen[0] = 0;
+	
 	cache_init(ctx, key, gen);
 	return 0;
 }
@@ -293,10 +296,11 @@ static int cache_scan_dir(context * ctx, const char * directory) {
 
 	while ( (dentry = readdir(dir)) && dentry->d_name ) {
 
-		char    key[CACHE_ENTRY_KEY_MAX]    = "";
-		char    gen[CACHE_ENTRY_GEN_MAX]    = "";
-
-		memcpy(key, dentry->d_name, CACHE_ENTRY_KEY_MAX);
+		char key[CACHE_ENTRY_KEY_MAX];
+		as_strncpy(key, dentry->d_name, sizeof(key));
+		
+		char gen[CACHE_ENTRY_GEN_MAX];
+		gen[0] = 0;
 
 		char *  base    = NULL;
 		size_t  len     = strlen(key);
