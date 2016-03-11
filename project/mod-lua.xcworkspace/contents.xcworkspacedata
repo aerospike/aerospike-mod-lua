@@ -2,9 +2,9 @@
 <Workspace
    version = "1.0">
    <FileRef
-      location = "group:aerospike-mod-lua-test.xcodeproj">
+      location = "group:aerospike-mod-lua.xcodeproj">
    </FileRef>
    <FileRef
-      location = "group:aerospike-mod-lua/../../src">
+      location = "group:aerospike-mod-lua-test.xcodeproj">
    </FileRef>
 </Workspace>

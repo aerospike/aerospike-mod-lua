@@ -115,24 +115,80 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
-		BFC7B28018C90A0A0047DA3C = {
+		BFC65EA31C9378DF0079DF5A /* libs */ = {
 			isa = PBXGroup;
 			children = (
 				BF2D799E18D39D8B008947A5 /* aerospike-common.xcodeproj */,
-				BF255C001B4C9EF600816CCC /* list_udf.c */,
+				BFC7B29518C90A2B0047DA3C /* aerospike-mod-lua.xcodeproj */,
 				BFC7B2C118C91A4D0047DA3C /* liblua.a */,
+			);
+			name = libs;
+			sourceTree = "<group>";
+		};
+		BFC65EA41C9379130079DF5A /* src */ = {
+			isa = PBXGroup;
+			children = (
+				BFC65EA91C9379F90079DF5A /* list */,
+				BFC65EA81C9379C80079DF5A /* record */,
+				BFC65EA71C9379BA0079DF5A /* stream */,
+				BFC65EA61C93796F0079DF5A /* util */,
+				BFC65EA51C9379560079DF5A /* validation */,
+				BFC7B29B18C90BEE0047DA3C /* mod_lua_test.c */,
+				BFC7B29C18C90BEE0047DA3C /* test.c */,
+				BFC7B29D18C90BEE0047DA3C /* test.h */,
+			);
+			name = src;
+			sourceTree = "<group>";
+		};
+		BFC65EA51C9379560079DF5A /* validation */ = {
+			isa = PBXGroup;
+			children = (
 				BFC7B2AE18C90C5D0047DA3C /* validation_basics.c */,
+			);
+			name = validation;
+			sourceTree = "<group>";
+		};
+		BFC65EA61C93796F0079DF5A /* util */ = {
+			isa = PBXGroup;
+			children = (
 				BFC7B2A418C90C4C0047DA3C /* consumer_stream.c */,
 				BFC7B2A518C90C4C0047DA3C /* map_rec.c */,
 				BFC7B2A618C90C4C0047DA3C /* producer_stream.c */,
 				BFC7B2A718C90C4C0047DA3C /* test_aerospike.c */,
 				BFC7B2A818C90C4C0047DA3C /* test_logger.c */,
+			);
+			name = util;
+			sourceTree = "<group>";
+		};
+		BFC65EA71C9379BA0079DF5A /* stream */ = {
+			isa = PBXGroup;
+			children = (
 				BFC7B2A218C90C240047DA3C /* stream_udf.c */,
+			);
+			name = stream;
+			sourceTree = "<group>";
+		};
+		BFC65EA81C9379C80079DF5A /* record */ = {
+			isa = PBXGroup;
+			children = (
 				BFC7B2A018C90C040047DA3C /* record_udf.c */,
-				BFC7B29B18C90BEE0047DA3C /* mod_lua_test.c */,
-				BFC7B29C18C90BEE0047DA3C /* test.c */,
-				BFC7B29D18C90BEE0047DA3C /* test.h */,
-				BFC7B29518C90A2B0047DA3C /* aerospike-mod-lua.xcodeproj */,
+			);
+			name = record;
+			sourceTree = "<group>";
+		};
+		BFC65EA91C9379F90079DF5A /* list */ = {
+			isa = PBXGroup;
+			children = (
+				BF255C001B4C9EF600816CCC /* list_udf.c */,
+			);
+			name = list;
+			sourceTree = "<group>";
+		};
+		BFC7B28018C90A0A0047DA3C = {
+			isa = PBXGroup;
+			children = (
+				BFC65EA41C9379130079DF5A /* src */,
+				BFC65EA31C9378DF0079DF5A /* libs */,
 				BFC7B28A18C90A0A0047DA3C /* Products */,
 			);
 			sourceTree = "<group>";
