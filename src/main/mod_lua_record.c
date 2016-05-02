@@ -81,6 +81,16 @@ static int mod_lua_record_ttl(lua_State * l) {
 }
 
 /**
+ * Get a record's last update time:
+ *      record.last_update_time(r)
+ */
+static int mod_lua_record_last_update_time(lua_State * l) {
+    as_rec * rec = (as_rec *) mod_lua_checkrecord(l, 1);
+    lua_pushinteger(l, as_rec_last_update_time(rec));
+    return 1;
+}
+
+/**
  * Get a record generation:
  *      record.gen(r)
  */
@@ -286,6 +296,7 @@ static int mod_lua_record_newindex(lua_State * l) {
 
 static const luaL_reg object_table[] = {
     {"ttl",        mod_lua_record_ttl},
+    {"last_update_time", mod_lua_record_last_update_time},
     {"gen",        mod_lua_record_gen},
     {"key",        mod_lua_record_key},
     {"setname",    mod_lua_record_setname},
