@@ -270,7 +270,7 @@ static int cache_add_file(context * ctx, const char * filename) {
 
 static char * dropext(char * name, size_t name_len, const char * ext, size_t ext_len) {
 	char * p = (name + name_len - ext_len);
-	if ( strncmp(p, ext, ext_len) == 0 ) {
+	if (ext_len < name_len && strncmp(p, ext, ext_len) == 0) {
 		*p = '\0';
 		return name;
 	}
@@ -279,7 +279,7 @@ static char * dropext(char * name, size_t name_len, const char * ext, size_t ext
 
 static bool hasext(const char * name, size_t name_len, const char * ext, size_t ext_len) {
 	const char * p = (name + name_len - ext_len);
-	if ( strncmp(p, ext, ext_len) == 0 ) {
+	if (ext_len < name_len && strncmp(p, ext, ext_len) == 0) {
 		return true;
 	}
 	return false;
