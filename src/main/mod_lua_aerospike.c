@@ -189,7 +189,14 @@ static int mod_lua_aerospike_log(lua_State * l) {
     int             lvl = luaL_optint(l, 2, 0);
     const char *    msg = luaL_optstring(l, 3, NULL);
 
+    // With LuaJIT, stack level 1 is where we find the Lua function that made
+    // the logging call.  With the regular Lua lib it's at level 2.
+#ifdef USE_LUAJIT
+    lua_getstack(l, 1, &ar);
+#else
     lua_getstack(l, 2, &ar);
+#endif
+
     lua_getinfo(l, "nSl", &ar);
     
     as_aerospike_log(a, ++ar.source, ar.currentline, lvl, msg);

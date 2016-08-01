@@ -38,6 +38,10 @@ CC_FLAGS = -std=gnu99 -g -fPIC -O$(O)
 CC_FLAGS += -fno-common -fno-strict-aliasing
 CC_FLAGS += -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_GNU_SOURCE $(EXT_CFLAGS)
 
+ifeq ($(USE_LUAJIT),1)
+  CC_FLAGS += -DUSE_LUAJIT
+endif
+
 ifneq ($(ARCH),$(filter $(ARCH),ppc64 ppc64le))
 CC_FLAGS += -march=nocona
 endif
