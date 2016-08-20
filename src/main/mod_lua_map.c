@@ -97,9 +97,13 @@ static int mod_lua_map_new(lua_State * l) {
 }
 
 static int mod_lua_map_cons(lua_State * l) {
-	as_map * map = (as_map *) as_hashmap_new(32);
+	lua_Integer capacity = luaL_optinteger(l, 3, 32);
+	if (capacity < 1) {
+		capacity = 32;
+	}
+	as_map * map = (as_map *) as_hashmap_new((uint32_t)capacity);
 	int n = lua_gettop(l);
-	if ( n == 2 && lua_type(l, 2) == LUA_TTABLE) {
+	if ( (n == 2 || n == 3) && lua_type(l, 2) == LUA_TTABLE ) {
 		lua_pushnil(l);
 		while ( lua_next(l, 2) != 0 ) {
 			// this will leak or crash if these are not as_val, or k is and v isn't
