@@ -917,6 +917,7 @@ char * as_module_err_string(int err_no) {
 static void populate_error(lua_State * l, const char * filename, int rc, as_module_error * err) {
 
 	const char * message = lua_tostring(l, -1);
+	size_t len = 0;
 
 	err->scope = 2; // UDF Module
 
@@ -965,8 +966,12 @@ static void populate_error(lua_State * l, const char * filename, int rc, as_modu
 							memcpy(line, lineL, lineR-lineL);
 							err->line = atoi(line);
 							lineR += 2;
-							memcpy(err->message, lineR, 1024);
-							err->message[1023] = '\0';
+							len = strlen(lineR);
+							if ( len > 1024 ) {
+								len = 1024;
+							}
+							memcpy(err->message, lineR, len);
+							err->message[len] = '\0';
 						}
 					}
 				}
@@ -981,7 +986,6 @@ static void populate_error(lua_State * l, const char * filename, int rc, as_modu
 				// Unrecognized error message. Just return the first line, up
 				// to 256 chars.
 				c = strchr(message, '\n');
-				size_t len;
 				if ( c ) {
 					len = c - message;
 				}
@@ -1012,8 +1016,12 @@ static void populate_error(lua_State * l, const char * filename, int rc, as_modu
 		printf("## lastlinedefined = %d\n", ar.lastlinedefined);
 		printf("## short_src = %s\n", ar.short_src);
 
-		memcpy(err->message, message, 1024);
-		err->message[1023] = '\0';
+		len = strlen(message);
+		if ( len > 1024 ) {
+			len = 1024;
+		}
+		memcpy(err->message, message, len);
+		err->message[len] = '\0';
 		memcpy(err->file, filename, 256);
 		err->file[255] = '\0';
 		err->line = ar.currentline;
