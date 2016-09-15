@@ -362,27 +362,21 @@ static int update(as_module * m, as_module_event * e) {
 
 			if ( ctx->lock == NULL ) {
 				ctx->lock = &lock;
-#ifdef __linux__
-				pthread_rwlockattr_t rwattr;
-				if (0 != pthread_rwlockattr_init(&rwattr)) {
-					return 3;
-				}
-				if (0 != pthread_rwlockattr_setkind_np(&rwattr, PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP)) {
-					return 3;
-				}
-				if (0 != pthread_rwlock_init(ctx->lock, &rwattr)) {
-					return 3;
-				}
-#else
+
 				pthread_rwlockattr_t rwattr;
 				if (0 != pthread_rwlockattr_init(&rwattr)) {
 					return 3;
 				}
 
-				if (0 != pthread_rwlock_init(ctx->lock, &rwattr)) {
+#if defined(__USE_UNIX98) || defined (__USE_XOPEN2K)
+				if (0 != pthread_rwlockattr_setkind_np(&rwattr, PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP)) {
 					return 3;
 				}
 #endif
+
+				if (0 != pthread_rwlock_init(ctx->lock, &rwattr)) {
+					return 3;
+				}
 			}
 
 			// Attempt to open the directory.
