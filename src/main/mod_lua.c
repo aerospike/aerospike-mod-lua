@@ -294,7 +294,7 @@ static int cache_scan_dir(context * ctx, const char * directory) {
 
 	if ( dir == 0 ) return -1;
 
-	while ( (dentry = readdir(dir)) && dentry->d_name ) {
+	while ( (dentry = readdir(dir)) && dentry->d_name[0] != 0) {
 
 		char key[CACHE_ENTRY_KEY_MAX];
 		as_strncpy(key, dentry->d_name, sizeof(key));
