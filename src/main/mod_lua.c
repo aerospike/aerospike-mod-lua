@@ -149,8 +149,8 @@ static int offer_state(context *, cache_item *);
  ******************************************************************************/
 
 // Raj (todo) fix stupid hash function
-uint32_t filename_hash_fn(void *filename, uint32_t len) {
-	char *b = filename;
+uint32_t filename_hash_fn(const void *filename, uint32_t len) {
+	const char *b = filename;
 	uint32_t acc = 0;
 	for (int i=0;i<len;i++) {
 		acc += *(b+i);
@@ -325,7 +325,7 @@ static int cache_scan_dir(context * ctx, const char * directory) {
 	return 0;
 }
 
-static int cache_reduce_delete_fn(void *key, uint32_t keylen, void *object, void *udata)
+static int cache_reduce_delete_fn(const void *key, uint32_t keylen, void *object, void *udata)
 {
 	return CF_RCHASH_REDUCE_DELETE;
 }
