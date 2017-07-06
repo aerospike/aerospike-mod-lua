@@ -116,71 +116,6 @@ static int mod_lua_aerospike_rec_remove(lua_State * l) {
 }
 
 /**
- * aerospike.create_subrec(record) => result<record>
- */
-static int mod_lua_aerospike_subrec_create(lua_State * l) {
-    as_aerospike *  a   = mod_lua_checkaerospike(l, 1);
-    as_rec *        r   = mod_lua_torecord(l, 2);
-    as_rec *       rc   = as_aerospike_crec_create(a, r);
-    if (!rc) return 0;
-    mod_lua_pushrecord(l, rc);
-    return 1;
-}
-
-/**
- * aerospike.update_subrec(record, record) => result<bool>
- */
-static int mod_lua_aerospike_subrec_update(lua_State * l) {
-    as_aerospike *  a   = mod_lua_checkaerospike(l, 1);
-    as_rec *        cr  = mod_lua_torecord(l, 2);
-    int             rc  = as_aerospike_crec_update(a, cr);
-    if (!rc) return 0;
-    lua_pushinteger(l, rc);
-    return 1;
-}
-
-/**
- * aerospike.remove_subrec(record, record) => result<int>
- */
-static int mod_lua_aerospike_subrec_remove(lua_State * l) {
-    as_aerospike *  a   = mod_lua_checkaerospike(l, 1);
-    as_rec *        cr  = mod_lua_torecord(l, 2);
-    int             rc  = as_aerospike_crec_remove(a, cr);
-    if (!rc) return 0;
-    lua_pushinteger(l, rc);
-    return 1;
-}
-
-
-/**
- * aerospike.open_subrec(record, record) => result<bool>
- */
-static int mod_lua_aerospike_subrec_open(lua_State * l) {
-    as_aerospike *  a   = mod_lua_checkaerospike(l, 1);
-    as_rec *        r   = mod_lua_torecord(l, 2);
-    char *        dig   = (char *)lua_tostring(l, 3);
-    as_rec *       rc   = as_aerospike_crec_open(a, r, dig);
-    if (!rc) return 0;
-    mod_lua_pushrecord(l, rc);
-    return 1;
-}
-
-/**
- * aerospike.update_subrec(record, record) => result<bool>
- */
-static int mod_lua_aerospike_subrec_close(lua_State * l) {
-    as_aerospike *  a   = mod_lua_checkaerospike(l, 1);
-//    as_rec *        r   = mod_lua_torecord(l, 2);
-    as_rec *        cr  = mod_lua_torecord(l, 2);
-    // We're no longer using TOP Rec parameter
-//    int             rc  = as_aerospike_crec_close(a, r, cr);
-    int             rc  = as_aerospike_crec_close(a, cr);
-    if (!rc) return 0;
-    lua_pushinteger(l, rc);
-    return 1;
-}
-
-/**
  * aerospike.log(level, message)
  */
 static int mod_lua_aerospike_log(lua_State * l) {
@@ -256,11 +191,6 @@ static const luaL_reg class_table[] = {
     {"update",           mod_lua_aerospike_rec_update},
     {"exists",           mod_lua_aerospike_rec_exists},
     {"remove",           mod_lua_aerospike_rec_remove},
-    {"create_subrec",    mod_lua_aerospike_subrec_create},
-    {"update_subrec",    mod_lua_aerospike_subrec_update},
-    {"remove_subrec",    mod_lua_aerospike_subrec_remove},
-    {"close_subrec",     mod_lua_aerospike_subrec_close},
-    {"open_subrec",      mod_lua_aerospike_subrec_open},
     {"log",              mod_lua_aerospike_log},
     {"get_current_time", mod_lua_aerospike_get_current_time},
     {"set_context",      mod_lua_aerospike_set_context},
