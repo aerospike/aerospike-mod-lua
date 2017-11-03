@@ -84,7 +84,6 @@ typedef struct cache_item_s cache_item;
 struct cache_entry_s {
 	char            key[CACHE_ENTRY_KEY_MAX];
 	char            gen[CACHE_ENTRY_GEN_MAX];
-	uint32_t        max_cache_size;
 	cf_queue      * lua_state_q;
 	cf_atomic64     cache_miss;
 	cf_atomic64     total;
@@ -216,7 +215,6 @@ int cache_init(context * ctx, const char *key, const char * gen) {
 		cf_atomic64_set(&centry->total, 0);
 		cf_atomic64_set(&centry->cache_miss, 0);
 		// Start Small and grow (as necessary) up to the max
-		centry->max_cache_size = CACHE_ENTRY_STATE_MIN;
 		centry->lua_state_q = cf_queue_create(sizeof(lua_State *), true);
 		cache_entry_init(ctx, centry, key, gen);
 		int retval = cf_rchash_put(centry_hash, (void *)key, (uint32_t)strlen(key), (void *)centry);
@@ -466,7 +464,9 @@ static int update(as_module * m, as_module_event * e) {
 		}
 		case AS_MODULE_EVENT_CLEAR_CACHE: {
 			if (ctx->config.cache_enabled) {
+				WRLOCK;
 				cf_rchash_reduce(centry_hash, cache_reduce_delete_fn, NULL);
+				UNLOCK;
 			}
 			break;
 		}
@@ -615,34 +615,30 @@ static lua_State * create_state(context * ctx, const char * filename) {
  * @return 0 on success, otherwise 1
  */
 static int poll_state(context * ctx, cache_item * citem) {
-	uint64_t miss = 0;
-	uint64_t total = 1;
 	if ( ctx->config.cache_enabled == true ) {
 		cache_entry     * centry = NULL;
 		RDLOCK;
 		int retval = cf_rchash_get(centry_hash, (void *)citem->key, (uint32_t)strlen(citem->key), (void *)&centry);
-		UNLOCK;
 		if ( CF_RCHASH_OK == retval ) {
+			uint64_t miss;
 			if (cf_queue_pop(centry->lua_state_q, &citem->state, CF_QUEUE_NOWAIT) != CF_QUEUE_EMPTY) {
 				strncpy(citem->key, centry->key, CACHE_ENTRY_KEY_MAX);
 				strncpy(citem->gen, centry->gen, CACHE_ENTRY_GEN_MAX);
-				as_log_trace("[CACHE] took state: %s (%d)", citem->key, centry->max_cache_size);
+				as_log_trace("[CACHE] took state: %s", citem->key);
+				miss = cf_atomic64_get(centry->cache_miss);
 			} else {
+				as_log_trace("[CACHE] miss state: %s", citem->key);
 				miss = cf_atomic64_incr(&centry->cache_miss);
 				citem->state = NULL;
 			}
-			total = cf_atomic64_incr(&centry->total);
-			if ( (total > 100000) && ((miss * 100 / total) > 1) ) {
-				centry->max_cache_size++;
-				if (centry->max_cache_size > CACHE_ENTRY_STATE_MAX)
-					centry->max_cache_size = CACHE_ENTRY_STATE_MAX;
-			}
+			uint64_t total = cf_atomic64_incr(&centry->total);
 			cf_rc_releaseandfree(centry);
 			centry = 0;
 			as_log_trace("[CACHE] Miss %lu : Total %lu", miss, total);
 		} else {
 			centry = NULL;
 		}
+		UNLOCK;
 	}
 	else {
 		as_log_trace("[CACHE] is disabled.");
@@ -737,21 +733,20 @@ static int offer_state(context * ctx, cache_item * citem) {
 		cache_entry *centry = NULL;
 		RDLOCK;
 		if (CF_RCHASH_OK == cf_rchash_get(centry_hash, (void *)citem->key, (uint32_t)strlen(citem->key), (void *)&centry) ) {
-			UNLOCK;
-			as_log_trace("[CACHE] found entry: %s (%d)", citem->key, centry->max_cache_size);
-			if (( CF_Q_SZ(centry->lua_state_q) < centry->max_cache_size )
+			as_log_trace("[CACHE] found entry: %s", citem->key);
+			if (( cf_queue_sz(centry->lua_state_q) < CACHE_ENTRY_STATE_MAX )
 				&& ( !strncmp(centry->gen, citem->gen, CACHE_ENTRY_GEN_MAX) )) {
 				cf_queue_push(centry->lua_state_q, &citem->state);
-				as_log_trace("[CACHE] returning state: %s (%d)", citem->key, centry->max_cache_size);
+				as_log_trace("[CACHE] returning state: %s", citem->key);
 				citem->state = NULL;
 			}
 			cf_rc_releaseandfree(centry);
 			centry = 0;
 		}
 		else {
-			UNLOCK;
 			as_log_trace("[CACHE] entry not found: %s", citem->key);
 		}
+		UNLOCK;
 	}
 	else {
 		as_log_trace("[CACHE] is disabled.");
