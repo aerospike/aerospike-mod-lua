@@ -16,10 +16,9 @@
  */
 #pragma once
 
-#include <lua.h>
-
 #include <aerospike/as_map.h>
 #include <aerospike/mod_lua_val.h>
+#include <lua.h>
 
 int mod_lua_map_register(lua_State *);
 

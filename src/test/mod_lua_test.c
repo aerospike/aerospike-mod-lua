@@ -14,28 +14,21 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-
+#include <citrusleaf/cf_clock.h>
 #include "test.h"
 
-PLAN( mod_lua_test )
+static bool
+before(atf_plan* plan)
 {
-    /**
-     * list tests
-     */
-    plan_add( list_udf );
+	return cf_clock_init();
+}
 
-    /**
-     * record tests
-     */
-    plan_add( record_udf );
+PLAN(mod_lua_test)
+{
+	plan_before(before);
 
-    /**
-     * stream tests
-     */
-    plan_add( stream_udf );
-
-    /**
-     * validation tests
-     */
-    plan_add( validation_basics );
+    plan_add(list_udf);
+	plan_add(record_udf);
+	plan_add(stream_udf);
+	plan_add(validation_basics);
 }

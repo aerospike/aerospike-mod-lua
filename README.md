@@ -35,6 +35,8 @@ If `apt-get` is your package manager, then you should be able to run the followi
 
 ## Build
 
+### Build Linux and MacOS
+
 To build the test app:
 
 	$ make test
@@ -46,6 +48,16 @@ To build a static archive `libmod_lua.a`:
 To build a dynamic library `libmod_lua.so`:
 
 	$ make libmod_lua.so
+
+### Build MacOS XCode
+
+- Double click xcode/aerospike-mod-lua.xcworkspace
+- Click Product -> Build
+
+### Build Windows Visual Studio 2015 (or greater)
+
+- Double click vs/aerospike-mod-lua.sln
+- Click Build -> Build Solution
 
 ## Install
 

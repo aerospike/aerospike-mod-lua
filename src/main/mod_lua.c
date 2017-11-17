@@ -14,31 +14,12 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-
-#include <dirent.h>
-#include <stdio.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <setjmp.h>         // needed for gracefully handling lua panics
-
-// #include <fault.h>
-
-#include <lua.h>
-#include <lauxlib.h>
-#include <lualib.h>
-#include <pthread.h>
-
-#include <citrusleaf/cf_queue.h>
-#include <citrusleaf/cf_rchash.h>
-
-#include <citrusleaf/alloc.h>
-
+#include <aerospike/mod_lua.h>
 #include <aerospike/as_aerospike.h>
+#include <aerospike/as_atomic.h>
+#include <aerospike/as_dir.h>
 #include <aerospike/as_log_macros.h>
 #include <aerospike/as_types.h>
-
-#include <aerospike/mod_lua.h>
 #include <aerospike/mod_lua_config.h>
 #include <aerospike/mod_lua_aerospike.h>
 #include <aerospike/mod_lua_record.h>
@@ -49,6 +30,19 @@
 #include <aerospike/mod_lua_map.h>
 #include <aerospike/mod_lua_bytes.h>
 #include <aerospike/mod_lua_val.h>
+#include <citrusleaf/cf_queue.h>
+#include <citrusleaf/cf_rchash.h>
+#include <citrusleaf/alloc.h>
+#include <lua.h>
+#include <lauxlib.h>
+#include <lualib.h>
+#include <pthread.h>
+#include <setjmp.h>         // needed for gracefully handling lua panics
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 #include "internal.h"
 
@@ -82,11 +76,11 @@ struct cache_item_s;
 typedef struct cache_item_s cache_item;
 
 struct cache_entry_s {
-	char            key[CACHE_ENTRY_KEY_MAX];
-	char            gen[CACHE_ENTRY_GEN_MAX];
-	cf_queue      * lua_state_q;
-	cf_atomic64     cache_miss;
-	cf_atomic64     total;
+	char key[CACHE_ENTRY_KEY_MAX];
+	char gen[CACHE_ENTRY_GEN_MAX];
+	uint64_t cache_miss;
+	uint64_t total;
+	cf_queue* lua_state_q;
 };
 
 struct cache_item_s {
@@ -151,7 +145,7 @@ static int offer_state(context *, cache_item *);
 uint32_t filename_hash_fn(const void *filename, uint32_t len) {
 	const char *b = filename;
 	uint32_t acc = 0;
-	for (int i=0;i<len;i++) {
+	for (uint32_t i=0;i<len;i++) {
 		acc += *(b+i);
 	}
 	return(acc);
@@ -212,8 +206,8 @@ int cache_init(context * ctx, const char *key, const char * gen) {
 	WRLOCK;
 	if (CF_RCHASH_OK != cf_rchash_get(centry_hash, (void *)key, (uint32_t)strlen(key), (void *)&centry)) {
 		centry = cf_rc_alloc(sizeof(cache_entry));
-		cf_atomic64_set(&centry->total, 0);
-		cf_atomic64_set(&centry->cache_miss, 0);
+		as_store_uint64(&centry->total, 0);
+		as_store_uint64(&centry->cache_miss, 0);
 		// Start Small and grow (as necessary) up to the max
 		centry->lua_state_q = cf_queue_create(sizeof(lua_State *), true);
 		cache_entry_init(ctx, centry, key, gen);
@@ -239,8 +233,11 @@ int cache_init(context * ctx, const char *key, const char * gen) {
 static int cache_remove_file(context * ctx, const char * filename) {
 	char key[CACHE_ENTRY_KEY_MAX];
 	as_strncpy(key, filename, sizeof(key));
-	if( rindex(key, '.') ) {
-		*(rindex(key, '.')) = '\0';
+
+	char* p = strrchr(key, '.');
+
+	if (p) {
+		*p = '\0';
 	}
 	cache_rm(ctx, key);
 	return 0;
@@ -249,7 +246,7 @@ static int cache_remove_file(context * ctx, const char * filename) {
 static int cache_add_file(context * ctx, const char * filename) {
 	char key[CACHE_ENTRY_KEY_MAX];
 	as_strncpy(key, filename, sizeof(key));
-	char *tmp_char = rindex(key, '.');
+	char *tmp_char = strrchr(key, '.');
 	if (  !tmp_char             // Filename without extension
 	   || key == tmp_char       // '.' as first character
 	   || strlen(tmp_char) <= 1) // '.' in filename , but no extension e.g. "abc."
@@ -285,17 +282,17 @@ static bool hasext(const char * name, size_t name_len, const char * ext, size_t 
 
 static int cache_scan_dir(context * ctx, const char * directory) {
 
-	DIR *           dir     = NULL;
-	struct dirent * dentry  = NULL;
+	as_dir dir;
+	const char* entry;
+	
+	if (!as_dir_open(&dir, directory)) {
+		return -1;
+	}
 
-	dir = opendir(directory);
-
-	if ( dir == 0 ) return -1;
-
-	while ( (dentry = readdir(dir)) && dentry->d_name[0] != 0) {
+	while ( (entry = as_dir_read(&dir)) ) {
 
 		char key[CACHE_ENTRY_KEY_MAX];
-		as_strncpy(key, dentry->d_name, sizeof(key));
+		as_strncpy(key, entry, sizeof(key));
 		
 		char gen[CACHE_ENTRY_GEN_MAX];
 		gen[0] = 0;
@@ -318,8 +315,7 @@ static int cache_scan_dir(context * ctx, const char * directory) {
 		}
 	}
 
-	closedir(dir);
-
+	as_dir_close(&dir);
 	return 0;
 }
 
@@ -361,6 +357,11 @@ static int update(as_module * m, as_module_event * e) {
 			if ( ctx->lock == NULL ) {
 				ctx->lock = &lock;
 
+#if defined(_MSC_VER)
+				if (0 != pthread_rwlock_init(ctx->lock, NULL)) {
+					return 3;
+				}
+#else
 				pthread_rwlockattr_t rwattr;
 				if (0 != pthread_rwlockattr_init(&rwattr)) {
 					return 3;
@@ -371,42 +372,36 @@ static int update(as_module * m, as_module_event * e) {
 					return 3;
 				}
 #endif
-
 				if (0 != pthread_rwlock_init(ctx->lock, &rwattr)) {
 					return 3;
 				}
+#endif
 			}
 
 			// Attempt to open the directory.
 			// If it opens, then set the ctx value.
 			// Otherwise, we alert the user of the error when a UDF is called. (for now)
 			if ( config->system_path[0] != '\0' ) {
-				DIR * dir = opendir(config->system_path);
-				if ( dir == 0 ) {
+				if (!as_dir_exists(config->system_path)) {
 					ctx->config.system_path[0] = '\0';
-					strncpy(ctx->config.system_path+1, config->system_path, 255);
+					strncpy(ctx->config.system_path + 1, config->system_path, 255);
 				}
 				else {
 					strncpy(ctx->config.system_path, config->system_path, 256);
-					closedir(dir);
 				}
-				dir = NULL;
 			}
 
 			// Attempt to open the directory.
 			// If it opens, then set the ctx value.
 			// Otherwise, we alert the user of the error when a UDF is called. (for now)
 			if ( config->user_path[0] != '\0' ) {
-				DIR * dir = opendir(config->user_path);
-				if ( dir == 0 ) {
+				if (!as_dir_exists(config->user_path)) {
 					ctx->config.user_path[0] = '\0';
 					strncpy(ctx->config.user_path+1, config->user_path, 255);
 				}
 				else {
 					strncpy(ctx->config.user_path, config->user_path, 256);
-					closedir(dir);
 				}
-				dir = NULL;
 			}
 
             if ( ctx->config.cache_enabled ) {
@@ -625,13 +620,13 @@ static int poll_state(context * ctx, cache_item * citem) {
 				strncpy(citem->key, centry->key, CACHE_ENTRY_KEY_MAX);
 				strncpy(citem->gen, centry->gen, CACHE_ENTRY_GEN_MAX);
 				as_log_trace("[CACHE] took state: %s", citem->key);
-				miss = cf_atomic64_get(centry->cache_miss);
+				miss = as_load_uint64(&centry->cache_miss);
 			} else {
 				as_log_trace("[CACHE] miss state: %s", citem->key);
-				miss = cf_atomic64_incr(&centry->cache_miss);
+				miss = as_aaf_uint64(&centry->cache_miss, 1);
 				citem->state = NULL;
 			}
-			uint64_t total = cf_atomic64_incr(&centry->total);
+			uint64_t total = as_aaf_uint64(&centry->total, 1);
 			cf_rc_releaseandfree(centry);
 			centry = 0;
 			as_log_trace("[CACHE] Miss %lu : Total %lu", miss, total);
@@ -718,16 +713,16 @@ static int offer_state(context * ctx, cache_item * citem) {
 			// g_config-related stat because g_config is not visible here.
 			// This comment is a placeholder that we need to add some sort
 			// of bridge beween the AS world and the mod-lua world.
-			// cf_atomic_int_incr(&g_config.stat_lua_gc_step);
+			// as_incr_uint64(&g_config.stat_lua_gc_step);
 			if ((rc = lua_gc(citem->state, LUA_GCSTEP, 40)) != 1) {
 				lua_gc(citem->state, LUA_GCCOLLECT, 200);
 				// We will want some sort of counter here, but can't use g_config
-				// cf_atomic_int_incr(&g_config.stat_lua_gc_full);
+				// as_incr_uint64(&g_config.stat_lua_gc_full);
 			}
 		}
 		// else {
 		// We will want some sort of counter here, but can't use g_config
-		// cf_atomic_int_incr(&g_config.stat_lua_gc_delay);
+		// as_incr_uint64(&g_config.stat_lua_gc_delay);
 		// }
 
 		cache_entry *centry = NULL;
@@ -838,7 +833,7 @@ static int apply(lua_State * l, as_udf_context *udf_ctx, int err, int argc, as_r
 	if ( udf_ctx->timer ) {
 		uint64_t slice = as_timer_timeslice(udf_ctx->timer);
 		as_log_trace("setting lua_debug hook (%p), count = %lu, thread ID = %lu", &check_timer, slice, pthread_self());
-		lua_sethook(l, &check_timer, LUA_MASKCOUNT, slice);
+		lua_sethook(l, &check_timer, LUA_MASKCOUNT, (int)slice);
 	}
 #endif
 

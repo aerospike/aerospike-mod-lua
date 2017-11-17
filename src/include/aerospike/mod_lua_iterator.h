@@ -16,9 +16,8 @@
  */
 #pragma once
 
-#include <lua.h>
-
 #include <aerospike/as_iterator.h>
+#include <lua.h>
 
 int mod_lua_iterator_register(lua_State *);
 

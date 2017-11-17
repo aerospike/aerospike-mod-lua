@@ -14,35 +14,22 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-
 #include "../test.h"
 #include <aerospike/as_stream.h>
 #include <aerospike/as_types.h>
 #include <limits.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <aerospike/as_module.h>
 #include <aerospike/mod_lua.h>
 #include <aerospike/mod_lua_config.h>
-
 
 #include "../util/test_aerospike.h"
 #include "../util/test_logger.h"
 #include "../util/map_rec.h"
 #include "../util/producer_stream.h"
 #include "../util/consumer_stream.h"
-
-/******************************************************************************
- * VARIABLES
- *****************************************************************************/
-
-static as_aerospike as;
-static as_udf_context auctx =
-{
-	.as = &as,
-	.timer = NULL,
-	.memtracker = NULL
-};
 
 /******************************************************************************
  * TEST CASES
@@ -54,7 +41,7 @@ static uint32_t consumed = 0;
 
 static as_val * produce1()
 {
-	if ( produced >= limit ) {
+	if (produced >= limit) {
 		return AS_STREAM_END;
 	}
 
@@ -65,7 +52,7 @@ static as_val * produce1()
 
 static as_stream_status consume1(as_val * v)
 {
-	if ( v != AS_STREAM_END ) {
+	if (v != AS_STREAM_END) {
 		consumed++;
 	}
 	
@@ -74,7 +61,7 @@ static as_stream_status consume1(as_val * v)
 	return AS_STREAM_OK;
 }
 
-TEST( stream_udf_1, "filter even numbers from range (1-10)" )
+TEST(stream_udf_1, "filter even numbers from range (1-10)")
 {
  
 	limit = 10;
@@ -85,17 +72,17 @@ TEST( stream_udf_1, "filter even numbers from range (1-10)" )
     as_stream * ostream = consumer_stream_new(consume1);
     as_list *   arglist = NULL;
 
-    int rc = as_module_apply_stream(&mod_lua, &auctx, "aggr", "even", istream, arglist, ostream,NULL);
+    int rc = as_module_apply_stream(&mod_lua, &ctx, "aggr", "even", istream, arglist, ostream,NULL);
 
-    assert_int_eq( rc, 0);
-    assert_int_eq( produced, limit);
-    assert_int_eq( consumed, produced / 2);
+    assert_int_eq(rc, 0);
+    assert_int_eq(produced, limit);
+    assert_int_eq(consumed, produced / 2);
 
     as_stream_destroy(istream);
     as_stream_destroy(ostream);
 }
 
-TEST( stream_udf_2, "increment range (1-10)" )
+TEST(stream_udf_2, "increment range (1-10)")
 {
 
 	limit = 10;
@@ -106,11 +93,11 @@ TEST( stream_udf_2, "increment range (1-10)" )
     as_stream * ostream = consumer_stream_new(consume1);
     as_list *   arglist = NULL;
 
-    int rc = as_module_apply_stream(&mod_lua, &auctx, "aggr", "increment", istream, arglist, ostream,NULL);
+    int rc = as_module_apply_stream(&mod_lua, &ctx, "aggr", "increment", istream, arglist, ostream,NULL);
 
-    assert_int_eq( rc, 0);
-    assert_int_eq( produced, limit);
-    assert_int_eq( consumed, produced);
+    assert_int_eq(rc, 0);
+    assert_int_eq(produced, limit);
+    assert_int_eq(consumed, produced);
 
     as_stream_destroy(istream);
     as_stream_destroy(ostream);
@@ -120,7 +107,7 @@ static as_integer * result3 = NULL;
 
 static as_val * produce3()
 {
-	if ( produced >= limit ) {
+	if (produced >= limit) {
 		return AS_STREAM_END;
 	}
 	
@@ -131,7 +118,7 @@ static as_val * produce3()
 
 static as_stream_status consume3(as_val * v) 
 {
-	if ( v != AS_STREAM_END ) {
+	if (v != AS_STREAM_END) {
 		consumed++;
 		result3 = (as_integer *) v;
 	}
@@ -139,7 +126,7 @@ static as_stream_status consume3(as_val * v)
 	return AS_STREAM_OK;
 }
 
-TEST( stream_udf_3, "sum range (1-1,000,000)" )
+TEST(stream_udf_3, "sum range (1-1,000,000)")
 {
 	limit = 1000 * 1000;
 	produced = 0;
@@ -151,21 +138,21 @@ TEST( stream_udf_3, "sum range (1-1,000,000)" )
     as_stream * ostream = consumer_stream_new(consume3);
     as_list *   arglist = NULL;
 
-    int rc = as_module_apply_stream(&mod_lua, &auctx, "aggr", "sum", istream, arglist, ostream,NULL);
+    int rc = as_module_apply_stream(&mod_lua, &ctx, "aggr", "sum", istream, arglist, ostream,NULL);
 
     uint64_t result = (uint64_t) as_integer_get(result3);
 
-    assert_int_eq( rc, 0);
-    assert_int_eq( produced, limit);
-    assert_int_eq( consumed, 1);
-    assert_int_eq( result, 500000500000);
+    assert_int_eq(rc, 0);
+    assert_int_eq(produced, limit);
+    assert_int_eq(consumed, 1);
+    assert_int_eq(result, 500000500000);
 
     as_integer_destroy(result3);
     as_stream_destroy(istream);
     as_stream_destroy(ostream);
 }
 
-TEST( stream_udf_4, "product range (1-10)" ) 
+TEST(stream_udf_4, "product range (1-10)") 
 {
  
 	limit = 10;
@@ -178,12 +165,12 @@ TEST( stream_udf_4, "product range (1-10)" )
     as_stream * ostream = consumer_stream_new(consume3);
     as_list *   arglist = NULL;
 
-    int rc = as_module_apply_stream(&mod_lua, &auctx, "aggr", "product", istream, arglist, ostream,NULL);
+    int rc = as_module_apply_stream(&mod_lua, &ctx, "aggr", "product", istream, arglist, ostream,NULL);
 
-    assert_int_eq( rc, 0);
-    assert_int_eq( produced, limit);
-    assert_int_eq( consumed, 1);
-    assert_int_eq( as_integer_get(result3), 3628800);
+    assert_int_eq(rc, 0);
+    assert_int_eq(produced, limit);
+    assert_int_eq(consumed, 1);
+    assert_int_eq(as_integer_get(result3), 3628800);
 
     as_integer_destroy(result3);
     as_stream_destroy(istream);
@@ -194,7 +181,7 @@ static as_map * result5 = NULL;
 
 static as_val * produce5()
 {
-	if ( produced >= limit ) {
+	if (produced >= limit) {
 		return AS_STREAM_END;
 	}
 
@@ -210,7 +197,7 @@ static as_val * produce5()
 
 static as_stream_status consume5(as_val * v)
 {
-	if ( v != AS_STREAM_END ) {
+	if (v != AS_STREAM_END) {
 		consumed++;
 		result5 = (as_map *) v;
 	}
@@ -218,7 +205,7 @@ static as_stream_status consume5(as_val * v)
 	return AS_STREAM_OK;
 }
 
-TEST( stream_udf_5, "campaign rollup w/ map & reduce" )
+TEST(stream_udf_5, "campaign rollup w/ map & reduce")
 {
 	limit = 100;
 	produced = 0;
@@ -230,11 +217,11 @@ TEST( stream_udf_5, "campaign rollup w/ map & reduce" )
     as_stream * ostream = consumer_stream_new(consume5);
     as_list *   arglist = (as_list *) as_arraylist_new(0,0);
 
-    int rc = as_module_apply_stream(&mod_lua, &auctx, "aggr", "rollup", istream, arglist, ostream,NULL);
+    int rc = as_module_apply_stream(&mod_lua, &ctx, "aggr", "rollup", istream, arglist, ostream,NULL);
 
-    assert_int_eq( rc, 0);
-    assert_int_eq( produced, limit);
-    assert_int_eq( consumed, 1);
+    assert_int_eq(rc, 0);
+    assert_int_eq(produced, limit);
+    assert_int_eq(consumed, 1);
 
     as_integer i;
 
@@ -249,15 +236,13 @@ TEST( stream_udf_5, "campaign rollup w/ map & reduce" )
     assert_int_eq(as_integer_get((as_integer *) as_map_get(result5, (as_val *) as_integer_init(&i, 8))), 5070);
     assert_int_eq(as_integer_get((as_integer *) as_map_get(result5, (as_val *) as_integer_init(&i, 9))), 5260);
 
-
 	as_list_destroy(arglist);
     as_map_destroy(result5);
     as_stream_destroy(istream);
     as_stream_destroy(ostream);
 }
 
-
-TEST( stream_udf_6, "campaign rollup w/ aggregate" )
+TEST(stream_udf_6, "campaign rollup w/ aggregate")
 {
     limit = 100;
     produced = 0;
@@ -269,11 +254,11 @@ TEST( stream_udf_6, "campaign rollup w/ aggregate" )
     as_stream * ostream = consumer_stream_new(consume5);
     as_list *   arglist = (as_list *) as_arraylist_new(0,0);
 
-    int rc = as_module_apply_stream(&mod_lua, &auctx, "aggr", "rollup2", istream, arglist, ostream,NULL);
+    int rc = as_module_apply_stream(&mod_lua, &ctx, "aggr", "rollup2", istream, arglist, ostream,NULL);
 
-    assert_int_eq( rc, 0);
-    assert_int_eq( produced, limit);
-    assert_int_eq( consumed, 1);
+    assert_int_eq(rc, 0);
+    assert_int_eq(produced, limit);
+    assert_int_eq(consumed, 1);
 
     as_integer i;
 
@@ -298,55 +283,15 @@ TEST( stream_udf_6, "campaign rollup w/ aggregate" )
  * TEST SUITE
  *****************************************************************************/
 
-
-static bool before(atf_suite * suite)
+SUITE(stream_udf, "stream udf tests")
 {
+    suite_before(test_suite_before);
+    suite_after(test_suite_after);
     
-    test_aerospike_init(&as);
-
-    mod_lua_config config = {
-        .server_mode    = true,
-        .cache_enabled  = false,
-        .system_path    = {'\0'},
-        .user_path      = "src/test/lua"
-    };
-
-    char * system_path = getenv("AS_SYSTEM_LUA");
-    if ( system_path != NULL ) {
-	    strncpy(config.system_path, system_path, 255);
-	    config.system_path[255] = '\0';
-    }
-    else {
-    	error("environment variable 'AS_SYSTEM_LUA' should be set to point to the directory containing system lua files.")
-    	return false;
-    }
-
-	as_lua_log_init();
-    
-    int rc = as_module_configure(&mod_lua, &config);
-
-    if ( rc != 0 ) {
-        error("as_module_configure failed: %d", rc);
-        return false;
-    }
- 
-    return true;
-}
-
-static bool after(atf_suite * suite)
-{
-    return true;
-}
-
-SUITE( stream_udf, "stream udf tests" )
-{
-    suite_before( before );
-    suite_after( after );
-    
-    suite_add( stream_udf_1 );
-    suite_add( stream_udf_2 );
-    suite_add( stream_udf_3 );
-    suite_add( stream_udf_4 );
-    suite_add( stream_udf_5 );
-    suite_add( stream_udf_6 );
+    suite_add(stream_udf_1);
+    suite_add(stream_udf_2);
+    suite_add(stream_udf_3);
+    suite_add(stream_udf_4);
+    suite_add(stream_udf_5);
+    suite_add(stream_udf_6);
 }

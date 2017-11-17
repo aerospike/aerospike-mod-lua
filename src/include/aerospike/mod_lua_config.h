@@ -16,7 +16,7 @@
  */
 #pragma once
 
-#include <stdbool.h>
+#include <aerospike/as_std.h>
 
 /*****************************************************************************
  * TYPES

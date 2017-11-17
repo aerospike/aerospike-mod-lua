@@ -14,17 +14,14 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-
+#include <aerospike/mod_lua_iterator.h>
+#include <aerospike/as_val.h>
+#include <aerospike/mod_lua_val.h>
+#include <aerospike/mod_lua_reg.h>
 #include <lua.h>
 #include <lauxlib.h>
 #include <lualib.h>
-
-#include <aerospike/as_iterator.h>
-#include <aerospike/as_val.h>
-
-#include <aerospike/mod_lua_val.h>
-#include <aerospike/mod_lua_reg.h>
-#include <aerospike/mod_lua_iterator.h>
+#include <string.h>
 
 #include "internal.h"
 

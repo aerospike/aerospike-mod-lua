@@ -14,18 +14,34 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-
 #pragma once
-
-/**
- * An as_aerospike for tests.
- */
 
 #include <aerospike/as_aerospike.h>
 
-/*****************************************************************************
+ /*****************************************************************************
+  * GLOBALS
+  *****************************************************************************/
+
+extern as_udf_context ctx;
+
+#if !defined(_MSC_VER)
+#define AS_START_DIR "./"
+#else
+#define AS_START_DIR "../../"
+#endif
+
+ /*****************************************************************************
  * FUNCTIONS
  *****************************************************************************/
 
-as_aerospike * test_aerospike_new();
-as_aerospike * test_aerospike_init(as_aerospike *);
+as_aerospike* 
+test_aerospike_new();
+
+as_aerospike*
+test_aerospike_init(as_aerospike *);
+
+bool
+test_suite_before(atf_suite* suite);
+
+bool
+test_suite_after(atf_suite* suite);

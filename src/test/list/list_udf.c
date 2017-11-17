@@ -14,16 +14,13 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdlib.h>
-#include <string.h>
-
 #include <aerospike/as_module.h>
 #include <aerospike/as_types.h>
 #include <aerospike/mod_lua.h>
 #include <aerospike/mod_lua_config.h>
+#include <stddef.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "../test.h"
 #include "../util/map_rec.h"
@@ -31,17 +28,10 @@
 #include "../util/test_logger.h"
 
 /******************************************************************************
- * VARIABLES
- *****************************************************************************/
-
-static as_aerospike as;
-static as_udf_context ctx;
-
-/******************************************************************************
  * TEST CASES
  *****************************************************************************/
 
-TEST( list_udf_1, "create a list" )
+TEST(list_udf_1, "create a list")
 {
 	as_rec * rec = map_rec_new();
 	
@@ -61,23 +51,23 @@ TEST( list_udf_1, "create a list" )
 
 	int rc = as_module_apply_record(&mod_lua, &ctx, "lists", "create", rec, (as_list *) &arglist, res);
 
-	assert_int_eq( rc, 0 );
-	assert_true( res->is_success );
-	assert_not_null( res->value );
+	assert_int_eq(rc, 0);
+	assert_true(res->is_success);
+	assert_not_null(res->value);
 	as_list * rlist = (as_list *) res->value;
-	assert_int_eq( as_list_size(rlist), 5 );
-	assert_int_eq( as_list_get_int64(rlist,0), 1 );
-	assert_int_eq( as_list_get_int64(rlist,1), 2 );
-	assert_int_eq( as_list_get_int64(rlist,2), 3 );
-	assert_int_eq( as_list_get_int64(rlist,3), 4 );
-	assert_double_eq( as_list_get_double(rlist,4), 5.55 );
+	assert_int_eq(as_list_size(rlist), 5);
+	assert_int_eq(as_list_get_int64(rlist,0), 1);
+	assert_int_eq(as_list_get_int64(rlist,1), 2);
+	assert_int_eq(as_list_get_int64(rlist,2), 3);
+	assert_int_eq(as_list_get_int64(rlist,3), 4);
+	assert_double_eq(as_list_get_double(rlist,4), 5.55);
 
 	as_rec_destroy(rec);
 	as_arraylist_destroy(&arglist);
 	as_result_destroy(res);
 }
 
-TEST( list_udf_2, "get the size of a list" )
+TEST(list_udf_2, "get the size of a list")
 {
 	as_arraylist list;
 	as_arraylist_init(&list, 5, 5);
@@ -102,10 +92,10 @@ TEST( list_udf_2, "get the size of a list" )
 
 	int rc = as_module_apply_record(&mod_lua, &ctx, "lists", "size", rec, (as_list *) &arglist, res);
 
-	assert_int_eq( rc, 0);
-	assert_true( res->is_success );
-	assert_not_null( res->value );
-	assert_int_eq( as_integer_toint((as_integer *) res->value), 5 );
+	assert_int_eq(rc, 0);
+	assert_true(res->is_success);
+	assert_not_null(res->value);
+	assert_int_eq(as_integer_toint((as_integer *) res->value), 5);
 
 	as_rec_destroy(rec);
 	as_arraylist_destroy(&list);
@@ -113,7 +103,7 @@ TEST( list_udf_2, "get the size of a list" )
 	as_result_destroy(res);
 }
 
-TEST( list_udf_3, "iterate over a list" )
+TEST(list_udf_3, "iterate over a list")
 {
 	as_arraylist list;
 	as_arraylist_init(&list, 5, 5);
@@ -138,16 +128,16 @@ TEST( list_udf_3, "iterate over a list" )
 
 	int rc = as_module_apply_record(&mod_lua, &ctx, "lists", "iterate", rec, (as_list *) &arglist, res);
 
-	assert_int_eq( rc, 0);
-	assert_true( res->is_success );
-	assert_not_null( res->value );
+	assert_int_eq(rc, 0);
+	assert_true(res->is_success);
+	assert_not_null(res->value);
 	as_list * rlist = (as_list *) res->value; // returned list should look just like the input one
-	assert_int_eq( as_list_size(rlist), 5 );
-	assert_int_eq( as_list_get_int64(rlist,0), 1 );
-	assert_int_eq( as_list_get_int64(rlist,1), 2 );
-	assert_int_eq( as_list_get_int64(rlist,2), 3 );
-	assert_int_eq( as_list_get_int64(rlist,3), 4 );
-	assert_double_eq( as_list_get_double(rlist,4), 5.55 );
+	assert_int_eq(as_list_size(rlist), 5);
+	assert_int_eq(as_list_get_int64(rlist,0), 1);
+	assert_int_eq(as_list_get_int64(rlist,1), 2);
+	assert_int_eq(as_list_get_int64(rlist,2), 3);
+	assert_int_eq(as_list_get_int64(rlist,3), 4);
+	assert_double_eq(as_list_get_double(rlist,4), 5.55);
 
 	as_rec_destroy(rec);
 	as_arraylist_destroy(&list);
@@ -155,7 +145,7 @@ TEST( list_udf_3, "iterate over a list" )
 	as_result_destroy(res);
 }
 
-TEST( list_udf_4, "insert an element into a list" )
+TEST(list_udf_4, "insert an element into a list")
 {
 	as_arraylist list;
 	as_arraylist_init(&list, 4, 5);
@@ -181,16 +171,16 @@ TEST( list_udf_4, "insert an element into a list" )
 
 	int rc = as_module_apply_record(&mod_lua, &ctx, "lists", "insert", rec, (as_list *) &arglist, res);
 
-	assert_int_eq( rc, 0);
-	assert_true( res->is_success );
-	assert_not_null( res->value );
+	assert_int_eq(rc, 0);
+	assert_true(res->is_success);
+	assert_not_null(res->value);
 	as_list * rlist = (as_list *) res->value;
-	assert_int_eq( as_list_size(rlist), 5 );
-	assert_int_eq( as_list_get_int64(rlist,0), 1 );
-	assert_int_eq( as_list_get_int64(rlist,1), 2 );
-	assert_int_eq( as_list_get_int64(rlist,2), 7 );
-	assert_string_eq( as_list_get_str(rlist,3), "text" );
-	assert_int_eq( as_list_get_int64(rlist,4), 4 );
+	assert_int_eq(as_list_size(rlist), 5);
+	assert_int_eq(as_list_get_int64(rlist,0), 1);
+	assert_int_eq(as_list_get_int64(rlist,1), 2);
+	assert_int_eq(as_list_get_int64(rlist,2), 7);
+	assert_string_eq(as_list_get_str(rlist,3), "text");
+	assert_int_eq(as_list_get_int64(rlist,4), 4);
 
 	as_rec_destroy(rec);
 	as_arraylist_destroy(&list);
@@ -198,7 +188,7 @@ TEST( list_udf_4, "insert an element into a list" )
 	as_result_destroy(res);
 }
 
-TEST( list_udf_5, "append an element to a list" )
+TEST(list_udf_5, "append an element to a list")
 {
 	as_arraylist list;
 	as_arraylist_init(&list, 4, 5);
@@ -223,16 +213,16 @@ TEST( list_udf_5, "append an element to a list" )
 
 	int rc = as_module_apply_record(&mod_lua, &ctx, "lists", "append", rec, (as_list *) &arglist, res);
 
-	assert_int_eq( rc, 0);
-	assert_true( res->is_success );
-	assert_not_null( res->value );
+	assert_int_eq(rc, 0);
+	assert_true(res->is_success);
+	assert_not_null(res->value);
 	as_list * rlist = (as_list *) res->value;
-	assert_int_eq( as_list_size(rlist), 5 );
-	assert_int_eq( as_list_get_int64(rlist,0), 1 );
-	assert_int_eq( as_list_get_int64(rlist,1), 2 );
-	assert_int_eq( as_list_get_int64(rlist,2), 3 );
-	assert_int_eq( as_list_get_int64(rlist,3), 4 );
-	assert_double_eq( as_list_get_double(rlist,4), 7.1 );
+	assert_int_eq(as_list_size(rlist), 5);
+	assert_int_eq(as_list_get_int64(rlist,0), 1);
+	assert_int_eq(as_list_get_int64(rlist,1), 2);
+	assert_int_eq(as_list_get_int64(rlist,2), 3);
+	assert_int_eq(as_list_get_int64(rlist,3), 4);
+	assert_double_eq(as_list_get_double(rlist,4), 7.1);
 
 	as_rec_destroy(rec);
 	as_arraylist_destroy(&list);
@@ -240,7 +230,7 @@ TEST( list_udf_5, "append an element to a list" )
 	as_result_destroy(res);
 }
 
-TEST( list_udf_6, "prepend an element to a list" )
+TEST(list_udf_6, "prepend an element to a list")
 {
 	as_arraylist list;
 	as_arraylist_init(&list, 4, 5);
@@ -265,16 +255,16 @@ TEST( list_udf_6, "prepend an element to a list" )
 
 	int rc = as_module_apply_record(&mod_lua, &ctx, "lists", "prepend", rec, (as_list *) &arglist, res);
 
-	assert_int_eq( rc, 0);
-	assert_true( res->is_success );
-	assert_not_null( res->value );
+	assert_int_eq(rc, 0);
+	assert_true(res->is_success);
+	assert_not_null(res->value);
 	as_list * rlist = (as_list *) res->value;
-	assert_int_eq( as_list_size(rlist), 5 );
-	assert_double_eq( as_list_get_double(rlist,0), -7.1 );
-	assert_int_eq( as_list_get_int64(rlist,1), 1 );
-	assert_int_eq( as_list_get_int64(rlist,2), 2 );
-	assert_int_eq( as_list_get_int64(rlist,3), 3 );
-	assert_int_eq( as_list_get_int64(rlist,4), 4 );
+	assert_int_eq(as_list_size(rlist), 5);
+	assert_double_eq(as_list_get_double(rlist,0), -7.1);
+	assert_int_eq(as_list_get_int64(rlist,1), 1);
+	assert_int_eq(as_list_get_int64(rlist,2), 2);
+	assert_int_eq(as_list_get_int64(rlist,3), 3);
+	assert_int_eq(as_list_get_int64(rlist,4), 4);
 
 	as_rec_destroy(rec);
 	as_arraylist_destroy(&list);
@@ -282,7 +272,7 @@ TEST( list_udf_6, "prepend an element to a list" )
 	as_result_destroy(res);
 }
 
-TEST( list_udf_7, "select the first 2 elements of a list" )
+TEST(list_udf_7, "select the first 2 elements of a list")
 {
 	as_arraylist list;
 	as_arraylist_init(&list, 4, 5);
@@ -307,13 +297,13 @@ TEST( list_udf_7, "select the first 2 elements of a list" )
 
 	int rc = as_module_apply_record(&mod_lua, &ctx, "lists", "take", rec, (as_list *) &arglist, res);
 
-	assert_int_eq( rc, 0);
-	assert_true( res->is_success );
-	assert_not_null( res->value );
+	assert_int_eq(rc, 0);
+	assert_true(res->is_success);
+	assert_not_null(res->value);
 	as_list * rlist = (as_list *) res->value;
-	assert_int_eq( as_list_size(rlist), 2 );
-	assert_int_eq( as_list_get_int64(rlist,0), 1 );
-	assert_double_eq( as_list_get_double(rlist,1), 2.2 );
+	assert_int_eq(as_list_size(rlist), 2);
+	assert_int_eq(as_list_get_int64(rlist,0), 1);
+	assert_double_eq(as_list_get_double(rlist,1), 2.2);
 
 	as_rec_destroy(rec);
 	as_arraylist_destroy(&list);
@@ -321,7 +311,7 @@ TEST( list_udf_7, "select the first 2 elements of a list" )
 	as_result_destroy(res);
 }
 
-TEST( list_udf_8, "remove an element from a list" )
+TEST(list_udf_8, "remove an element from a list")
 {
 	as_arraylist list;
 	as_arraylist_init(&list, 4, 5);
@@ -346,14 +336,14 @@ TEST( list_udf_8, "remove an element from a list" )
 
 	int rc = as_module_apply_record(&mod_lua, &ctx, "lists", "remove", rec, (as_list *) &arglist, res);
 
-	assert_int_eq( rc, 0);
-	assert_true( res->is_success );
-	assert_not_null( res->value );
+	assert_int_eq(rc, 0);
+	assert_true(res->is_success);
+	assert_not_null(res->value);
 	as_list * rlist = (as_list *) res->value;
-	assert_int_eq( as_list_size(rlist), 3 );
-	assert_int_eq( as_list_get_int64(rlist,0), 1 );
-	assert_int_eq( as_list_get_int64(rlist,1), 3 );
-	assert_int_eq( as_list_get_int64(rlist,2), 4 );
+	assert_int_eq(as_list_size(rlist), 3);
+	assert_int_eq(as_list_get_int64(rlist,0), 1);
+	assert_int_eq(as_list_get_int64(rlist,1), 3);
+	assert_int_eq(as_list_get_int64(rlist,2), 4);
 
 	as_rec_destroy(rec);
 	as_arraylist_destroy(&list);
@@ -361,7 +351,7 @@ TEST( list_udf_8, "remove an element from a list" )
 	as_result_destroy(res);
 }
 
-TEST( list_udf_9, "drop the first 3 elements of a list" )
+TEST(list_udf_9, "drop the first 3 elements of a list")
 {
 	as_arraylist list;
 	as_arraylist_init(&list, 4, 5);
@@ -387,13 +377,13 @@ TEST( list_udf_9, "drop the first 3 elements of a list" )
 
 	int rc = as_module_apply_record(&mod_lua, &ctx, "lists", "drop", rec, (as_list *) &arglist, res);
 
-	assert_int_eq( rc, 0);
-	assert_true( res->is_success );
-	assert_not_null( res->value );
+	assert_int_eq(rc, 0);
+	assert_true(res->is_success);
+	assert_not_null(res->value);
 	as_list * rlist = (as_list *) res->value;
-	assert_int_eq( as_list_size(rlist), 2 );
-	assert_int_eq( as_list_get_int64(rlist,0), 4 );
-	assert_int_eq( as_list_get_int64(rlist,1), 5 );
+	assert_int_eq(as_list_size(rlist), 2);
+	assert_int_eq(as_list_get_int64(rlist,0), 4);
+	assert_int_eq(as_list_get_int64(rlist,1), 5);
 
 	as_rec_destroy(rec);
 	as_arraylist_destroy(&list);
@@ -401,7 +391,7 @@ TEST( list_udf_9, "drop the first 3 elements of a list" )
 	as_result_destroy(res);
 }
 
-TEST( list_udf_10, "trim a list" )
+TEST(list_udf_10, "trim a list")
 {
 	as_arraylist list;
 	as_arraylist_init(&list, 4, 5);
@@ -427,13 +417,13 @@ TEST( list_udf_10, "trim a list" )
 
 	int rc = as_module_apply_record(&mod_lua, &ctx, "lists", "trim", rec, (as_list *) &arglist, res);
 
-	assert_int_eq( rc, 0);
-	assert_true( res->is_success );
-	assert_not_null( res->value );
+	assert_int_eq(rc, 0);
+	assert_true(res->is_success);
+	assert_not_null(res->value);
 	as_list * rlist = (as_list *) res->value;
-	assert_int_eq( as_list_size(rlist), 2 );
-	assert_int_eq( as_list_get_int64(rlist,0), 1 );
-	assert_int_eq( as_list_get_int64(rlist,1), 2 );
+	assert_int_eq(as_list_size(rlist), 2);
+	assert_int_eq(as_list_get_int64(rlist,0), 1);
+	assert_int_eq(as_list_get_int64(rlist,1), 2);
 
 	as_rec_destroy(rec);
 	as_arraylist_destroy(&list);
@@ -441,7 +431,7 @@ TEST( list_udf_10, "trim a list" )
 	as_result_destroy(res);
 }
 
-TEST( list_udf_11, "clone a list" )
+TEST(list_udf_11, "clone a list")
 {
 	as_arraylist list;
 	as_arraylist_init(&list, 4, 5);
@@ -465,15 +455,15 @@ TEST( list_udf_11, "clone a list" )
 
 	int rc = as_module_apply_record(&mod_lua, &ctx, "lists", "clone", rec, (as_list *) &arglist, res);
 
-	assert_int_eq( rc, 0);
-	assert_true( res->is_success );
-	assert_not_null( res->value );
+	assert_int_eq(rc, 0);
+	assert_true(res->is_success);
+	assert_not_null(res->value);
 	as_list * rlist = (as_list *) res->value;
-	assert_int_eq( as_list_size(rlist), 4 );
-	assert_int_eq( as_list_get_int64(rlist,0), 1 );
-	assert_int_eq( as_list_get_int64(rlist,1), 2 );
-	assert_double_eq( as_list_get_double(rlist,2), 3.3 );
-	assert_int_eq( as_list_get_int64(rlist,3), 4 );
+	assert_int_eq(as_list_size(rlist), 4);
+	assert_int_eq(as_list_get_int64(rlist,0), 1);
+	assert_int_eq(as_list_get_int64(rlist,1), 2);
+	assert_double_eq(as_list_get_double(rlist,2), 3.3);
+	assert_int_eq(as_list_get_int64(rlist,3), 4);
 
 	as_rec_destroy(rec);
 	as_arraylist_destroy(&list);
@@ -481,7 +471,7 @@ TEST( list_udf_11, "clone a list" )
 	as_result_destroy(res);
 }
 
-TEST( list_udf_12, "concatenate two lists" )
+TEST(list_udf_12, "concatenate two lists")
 {
 	as_arraylist list1;
 	as_arraylist_init(&list1, 4, 5);
@@ -513,18 +503,18 @@ TEST( list_udf_12, "concatenate two lists" )
 
 	int rc = as_module_apply_record(&mod_lua, &ctx, "lists", "concat", rec, (as_list *) &arglist, res);
 
-	assert_int_eq( rc, 0);
-	assert_true( res->is_success );
-	assert_not_null( res->value );
+	assert_int_eq(rc, 0);
+	assert_true(res->is_success);
+	assert_not_null(res->value);
 	as_list * rlist = (as_list *) res->value;
-	assert_int_eq( as_list_size(rlist), 7 );
-	assert_int_eq( as_list_get_int64(rlist,0), 1 );
-	assert_int_eq( as_list_get_int64(rlist,1), 2 );
-	assert_int_eq( as_list_get_int64(rlist,2), 3 );
-	assert_int_eq( as_list_get_int64(rlist,3), 4 );
-	assert_int_eq( as_list_get_int64(rlist,4), 7 );
-	assert_int_eq( as_list_get_int64(rlist,5), 8 );
-	assert_int_eq( as_list_get_int64(rlist,6), 9 );
+	assert_int_eq(as_list_size(rlist), 7);
+	assert_int_eq(as_list_get_int64(rlist,0), 1);
+	assert_int_eq(as_list_get_int64(rlist,1), 2);
+	assert_int_eq(as_list_get_int64(rlist,2), 3);
+	assert_int_eq(as_list_get_int64(rlist,3), 4);
+	assert_int_eq(as_list_get_int64(rlist,4), 7);
+	assert_int_eq(as_list_get_int64(rlist,5), 8);
+	assert_int_eq(as_list_get_int64(rlist,6), 9);
 
 	as_rec_destroy(rec);
 	as_arraylist_destroy(&list1);
@@ -533,7 +523,7 @@ TEST( list_udf_12, "concatenate two lists" )
 	as_result_destroy(res);
 }
 
-TEST( list_udf_13, "merge two lists" )
+TEST(list_udf_13, "merge two lists")
 {
 	as_arraylist list1;
 	as_arraylist_init(&list1, 4, 5);
@@ -565,18 +555,18 @@ TEST( list_udf_13, "merge two lists" )
 
 	int rc = as_module_apply_record(&mod_lua, &ctx, "lists", "merge", rec, (as_list *) &arglist, res);
 
-	assert_int_eq( rc, 0);
-	assert_true( res->is_success );
-	assert_not_null( res->value );
+	assert_int_eq(rc, 0);
+	assert_true(res->is_success);
+	assert_not_null(res->value);
 	as_list * rlist = (as_list *) res->value;
-	assert_int_eq( as_list_size(rlist), 7 );
-	assert_int_eq( as_list_get_int64(rlist,0), 1 );
-	assert_int_eq( as_list_get_int64(rlist,1), 2 );
-	assert_int_eq( as_list_get_int64(rlist,2), 3 );
-	assert_int_eq( as_list_get_int64(rlist,3), 6 );
-	assert_int_eq( as_list_get_int64(rlist,4), 7 );
-	assert_double_eq( as_list_get_double(rlist,5), 8.8 );
-	assert_int_eq( as_list_get_int64(rlist,6), 9 );
+	assert_int_eq(as_list_size(rlist), 7);
+	assert_int_eq(as_list_get_int64(rlist,0), 1);
+	assert_int_eq(as_list_get_int64(rlist,1), 2);
+	assert_int_eq(as_list_get_int64(rlist,2), 3);
+	assert_int_eq(as_list_get_int64(rlist,3), 6);
+	assert_int_eq(as_list_get_int64(rlist,4), 7);
+	assert_double_eq(as_list_get_double(rlist,5), 8.8);
+	assert_int_eq(as_list_get_int64(rlist,6), 9);
 
 	as_rec_destroy(rec);
 	as_arraylist_destroy(&list1);
@@ -585,68 +575,26 @@ TEST( list_udf_13, "merge two lists" )
 	as_result_destroy(res);
 }
 
-
-
 /******************************************************************************
  * TEST SUITE
  *****************************************************************************/
 
-static bool before(atf_suite * suite)
+SUITE(list_udf, "list udf tests")
 {
+	suite_before(test_suite_before);
+ 	suite_after(test_suite_after);
 
-	test_aerospike_init(&as);
-	ctx.as = &as;
-
-	mod_lua_config config = {
-		.server_mode    = true,
-		.cache_enabled  = false,
-		.system_path    = {'\0'},
-		.user_path      = "src/test/lua"
-	};
-
-	char * system_path = getenv("AS_SYSTEM_LUA");
-	if ( system_path != NULL ) {
-		strncpy(config.system_path, system_path, 255);
-		config.system_path[255] = '\0';
-	}
-	else {
-		error("environment variable 'AS_SYSTEM_LUA' should be set to point to the directory containing system lua files.")
-		return false;
-	}
-
-	as_lua_log_init();
-
-	int rc = as_module_configure(&mod_lua, &config);
-
-	if ( rc != 0 ) {
-		error("as_module_configure failed: %d", rc);
-		return false;
-	}
- 
-	return true;
-}
-
-static bool after(atf_suite * suite)
-{
-	return true;
-}
-
-SUITE( list_udf, "list udf tests" )
-{
-	suite_before( before );
- 	suite_after( after );
-
-	suite_add( list_udf_1 );
-	suite_add( list_udf_2 );
-	suite_add( list_udf_3 );
-	suite_add( list_udf_4 );
-	suite_add( list_udf_5 );
-	suite_add( list_udf_6 );
-	suite_add( list_udf_7 );
-	suite_add( list_udf_8 );
-	suite_add( list_udf_9 );
-	suite_add( list_udf_10 );
-	suite_add( list_udf_11 );
-	suite_add( list_udf_12 );
-	suite_add( list_udf_13 );
+	suite_add(list_udf_1);
+	suite_add(list_udf_2);
+	suite_add(list_udf_3);
+	suite_add(list_udf_4);
+	suite_add(list_udf_5);
+	suite_add(list_udf_6);
+	suite_add(list_udf_7);
+	suite_add(list_udf_8);
+	suite_add(list_udf_9);
+	suite_add(list_udf_10);
+	suite_add(list_udf_11);
+	suite_add(list_udf_12);
+	suite_add(list_udf_13);
 }

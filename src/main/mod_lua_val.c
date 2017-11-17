@@ -14,23 +14,20 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-
-#include <string.h>
-#include <stdio.h>
-
-#include <lua.h>
-#include <lauxlib.h>
-#include <lualib.h>
-
+#include <aerospike/mod_lua_val.h>
 #include <aerospike/as_nil.h>
 #include <aerospike/as_val.h>
-
-#include <aerospike/mod_lua_val.h>
 #include <aerospike/mod_lua_list.h>
 #include <aerospike/mod_lua_map.h>
 #include <aerospike/mod_lua_record.h>
 #include <aerospike/mod_lua_bytes.h>
 #include <aerospike/mod_lua_geojson.h>
+#include <citrusleaf/alloc.h>
+#include <lua.h>
+#include <lauxlib.h>
+#include <lualib.h>
+#include <stdio.h>
+#include <string.h>
 
 #include "internal.h"
 

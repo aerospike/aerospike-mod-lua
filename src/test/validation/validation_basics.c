@@ -14,11 +14,6 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-
-#include <errno.h>
-#include <limits.h>
-#include <stdlib.h>
-
 #include <aerospike/as_arraylist.h>
 #include <aerospike/as_list.h>
 #include <aerospike/as_integer.h>
@@ -30,7 +25,11 @@
 #include <aerospike/as_module.h>
 #include <aerospike/mod_lua.h>
 #include <aerospike/mod_lua_config.h>
-
+#include <citrusleaf/alloc.h>
+#include <errno.h>
+#include <limits.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "../test.h"
 #include "../util/test_aerospike.h"
@@ -49,8 +48,6 @@ typedef struct {
 
 #define SCRIPT_LEN_MAX 1048576
 
-static as_aerospike as;
-
 static int readfile(const char * filename, char ** content, uint32_t * size) {
 	
 	uint8_t * content_v = content ? (uint8_t *) *content : NULL;
@@ -58,29 +55,29 @@ static int readfile(const char * filename, char ** content, uint32_t * size) {
 
 	FILE * file = fopen(filename,"r"); 
 
-	if ( !file ) { 
+	if (!file) { 
 		error("cannot open script file %s : %s", filename, strerror(errno));  
 		return -1; 
 	} 
 
-	if ( content_v == NULL ) {
+	if (content_v == NULL) {
 		content_v = (uint8_t *) cf_malloc(SCRIPT_LEN_MAX);
-		if ( content_v == NULL ) { 
+		if (content_v == NULL) { 
 			error("cf_malloc failed");
 			fclose(file);
 			return -2;
 		}
 	}
 
-	int size_b = 0; 
+	uint32_t size_b = 0;
 
 	uint8_t * buff = content_v; 
 	int read = (int)fread(buff, 1, 512, file);
-	while ( read ) { 
+	while (read) { 
 		size_b += read; 
 		buff += read; 
 		read = (int)fread(buff, 1, 512, file);
-		if ( size_b >= size_v-1 ) {
+		if (size_b >= size_v-1) {
 			break;
 		}
 	}           
@@ -98,19 +95,19 @@ static int readfile(const char * filename, char ** content, uint32_t * size) {
  * TEST CASES
  *****************************************************************************/
 
-TEST( validation_basics_1, "validation: src/test/lua/validate_*.lua" )
+TEST(validation_basics_1, "validation: src/test/lua/validate_*.lua")
 {
 	validation_entry entries[] = {
-		{ "src/test/lua/validate_1.lua", "single file local variable", true },
-		{ "src/test/lua/validate_2.lua", "invalid function in module scope", false },
-		{ "src/test/lua/validate_3.lua", "invalid statement in function scope", false },
-		{ "src/test/lua/validate_4.lua", "index a global variable in module scope", false },
-		{ "src/test/lua/validate_5.lua", "index a global variable in function scope", true },
-		{ "src/test/lua/validate_6.lua", "create closure on a global variable in function scope", true },
+		{ AS_START_DIR "src/test/lua/validate_1.lua", "single file local variable", true },
+		{ AS_START_DIR "src/test/lua/validate_2.lua", "invalid function in module scope", false },
+		{ AS_START_DIR "src/test/lua/validate_3.lua", "invalid statement in function scope", false },
+		{ AS_START_DIR "src/test/lua/validate_4.lua", "index a global variable in module scope", false },
+		{ AS_START_DIR "src/test/lua/validate_5.lua", "index a global variable in function scope", true },
+		{ AS_START_DIR "src/test/lua/validate_6.lua", "create closure on a global variable in function scope", true },
 		{ NULL }
 	};
 
-	for( validation_entry * entry = entries; entry != NULL && entry->filename != NULL; entry++ ) {
+	for(validation_entry * entry = entries; entry != NULL && entry->filename != NULL; entry++) {
 
 		info("validating %s [%s] - %s", entry->filename, entry->is_valid ? "VALID" : "INVALID", entry->description);
 
@@ -123,10 +120,10 @@ TEST( validation_basics_1, "validation: src/test/lua/validate_*.lua" )
 		rc = readfile(entry->filename, &buff, &size);
 		assert(rc == 0);
 
-		rc = as_module_validate(&mod_lua, &as, entry->filename, buff, size, &err);
+		rc = as_module_validate(&mod_lua, ctx.as, entry->filename, buff, size, &err);
 		cf_free(buff);
 		
-		if ( rc != 0 && entry->is_valid ) {
+		if (rc != 0 && entry->is_valid) {
 			info("error = {");
 			info("  scope   = %d", err.scope);
 			info("  code    = %d", err.code);
@@ -138,7 +135,7 @@ TEST( validation_basics_1, "validation: src/test/lua/validate_*.lua" )
 			assert(rc == 0 && entry->is_valid);
 		}
 		
-		if ( rc == 0 && !entry->is_valid ) {
+		if (rc == 0 && !entry->is_valid) {
 			assert(rc != 0 && !entry->is_valid);
 		}
 	}
@@ -148,42 +145,9 @@ TEST( validation_basics_1, "validation: src/test/lua/validate_*.lua" )
  * TEST SUITE
  *****************************************************************************/
 
-static bool before(atf_suite * suite) {
-
-	test_aerospike_init(&as);
-
-    mod_lua_config config = {
-        .server_mode    = true,
-        .cache_enabled  = false,
-        .system_path    = {'\0'},
-        .user_path      = "src/test/lua"
-    };
-
-    char * system_path = getenv("AS_SYSTEM_LUA");
-    if ( system_path != NULL ) {
-	    strncpy(config.system_path, system_path, 255);
-	    config.system_path[255] = '\0';
-    }
-    else {
-    	error("environment variable 'AS_SYSTEM_LUA' should be set to point to the directory containing system lua files.")
-    	return false;
-    }
-
-	as_lua_log_init();
-
-	int rc = as_module_configure(&mod_lua, &config);
-
-	if ( rc != 0 ) {
-		error("as_module_configure failed: %d", rc);
-		return false;
-	}
- 
-	return true;
-}
-
-SUITE( validation_basics, "record basics" )
+SUITE(validation_basics, "record basics")
 {
-	suite_before( before );
+	suite_before(test_suite_before);
 	
-	suite_add( validation_basics_1 );
+	suite_add(validation_basics_1);
 }

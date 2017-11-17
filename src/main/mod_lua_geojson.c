@@ -14,20 +14,15 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-
-#include <stddef.h>
-#include <stdint.h>
-#include <stdbool.h>
-
-#include <citrusleaf/cf_byte_order.h>
+#include <aerospike/mod_lua_geojson.h>
 #include <aerospike/as_val.h>
 #include <aerospike/mod_lua_val.h>
-#include <aerospike/mod_lua_geojson.h>
 #include <aerospike/mod_lua_reg.h>
+#include <citrusleaf/alloc.h>
+#include <citrusleaf/cf_byte_order.h>
+#include <stddef.h>
 
 #include "internal.h"
-
-
 
 /*******************************************************************************
  * MACROS

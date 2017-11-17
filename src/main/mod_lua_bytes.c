@@ -14,21 +14,17 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-
-#include <stddef.h>
-#include <stdint.h>
-#include <stdbool.h>
-
-#include <citrusleaf/cf_byte_order.h>
+#include <aerospike/mod_lua_bytes.h>
 #include <aerospike/as_val.h>
 #include <aerospike/mod_lua_val.h>
-#include <aerospike/mod_lua_bytes.h>
 #include <aerospike/mod_lua_iterator.h>
 #include <aerospike/mod_lua_reg.h>
+#include <citrusleaf/alloc.h>
+#include <citrusleaf/cf_byte_order.h>
+#include <stddef.h>
+#include <string.h>
 
 #include "internal.h"
-
-
 
 /*******************************************************************************
  * MACROS
@@ -315,7 +311,7 @@ static int mod_lua_bytes_append_byte(lua_State * l)
 	// ensure we have capacity, if not, then resize
 	if ( as_bytes_ensure(b, pos + size, true) == true ) {
 		// write the bytes
-		res	= as_bytes_append_byte(b, v);
+		res	= as_bytes_append_byte(b, (uint8_t)v);
 	}
 
 	lua_pushboolean(l, res);
@@ -793,7 +789,7 @@ static int mod_lua_bytes_set_byte(lua_State * l)
 	// ensure we have capacity, if not, then resize
 	if ( as_bytes_ensure(b, pos + size, true) == true ) {
 		// write the bytes
-		res	= as_bytes_set_byte(b, pos, v);
+		res	= as_bytes_set_byte(b, pos, (uint8_t)v);
 	}
 
 	lua_pushboolean(l, res);

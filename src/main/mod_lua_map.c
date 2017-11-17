@@ -14,18 +14,15 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-
-#include <aerospike/as_iterator.h>
-#include <aerospike/as_map.h>
-#include <aerospike/as_map_iterator.h>
-#include <aerospike/as_val.h>
-
-#include <aerospike/mod_lua_val.h>
 #include <aerospike/mod_lua_map.h>
-#include <aerospike/mod_lua_iterator.h>
-#include <aerospike/mod_lua_reg.h>
+#include <aerospike/as_iterator.h>
+#include <aerospike/as_map_iterator.h>
 #include <aerospike/as_msgpack.h>
 #include <aerospike/as_serializer.h>
+#include <aerospike/as_val.h>
+#include <aerospike/mod_lua_iterator.h>
+#include <aerospike/mod_lua_reg.h>
+#include <citrusleaf/alloc.h>
 
 #include "internal.h"
 
