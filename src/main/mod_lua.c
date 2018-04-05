@@ -15,26 +15,28 @@
  * the License.
  */
 #include <aerospike/mod_lua.h>
+
 #include <aerospike/as_aerospike.h>
 #include <aerospike/as_atomic.h>
 #include <aerospike/as_dir.h>
 #include <aerospike/as_log_macros.h>
 #include <aerospike/as_types.h>
-#include <aerospike/mod_lua_config.h>
 #include <aerospike/mod_lua_aerospike.h>
-#include <aerospike/mod_lua_record.h>
+#include <aerospike/mod_lua_bytes.h>
+#include <aerospike/mod_lua_config.h>
 #include <aerospike/mod_lua_geojson.h>
 #include <aerospike/mod_lua_iterator.h>
-#include <aerospike/mod_lua_stream.h>
 #include <aerospike/mod_lua_list.h>
 #include <aerospike/mod_lua_map.h>
-#include <aerospike/mod_lua_bytes.h>
+#include <aerospike/mod_lua_record.h>
+#include <aerospike/mod_lua_stream.h>
 #include <aerospike/mod_lua_val.h>
-#include <citrusleaf/cf_queue.h>
-#include <citrusleaf/cf_rchash.h>
 #include <citrusleaf/alloc.h>
-#include <lua.h>
+#include <citrusleaf/cf_hash_math.h>
+#include <citrusleaf/cf_queue.h>
+
 #include <lauxlib.h>
+#include <lua.h>
 #include <lualib.h>
 #include <pthread.h>
 #include <setjmp.h>         // needed for gracefully handling lua panics
@@ -89,7 +91,6 @@ struct cache_item_s {
 	lua_State *     state;
 };
 
-
 struct context_s;
 typedef struct context_s context;
 
@@ -98,15 +99,25 @@ struct context_s {
 	pthread_rwlock_t *  lock;
 };
 
+typedef struct lua_hash_ele_s {
+	struct lua_hash_ele_s* next;
+	cache_entry* value;
+	char key[]; // key_size bytes of key
+} lua_hash_ele;
+
+typedef struct lua_hash_s {
+	uint32_t ele_size;
+	uint32_t n_rows;
+	uint8_t* table;
+} lua_hash;
+
 /******************************************************************************
  * VARIABLES
  ******************************************************************************/
 
 static pthread_rwlock_t lock;
 
-static cf_rchash * centry_hash = NULL;
-
-// static const as_module_hooks hooks;
+static lua_hash* g_lua_hash = NULL;
 
 /**
  * Lua Module Specific Data
@@ -124,7 +135,7 @@ static context mod_lua_source = {
 
 
 /******************************************************************************
- * STATIC FUNCTIONS
+ * STATIC FORWARD DECLARATIONS
  ******************************************************************************/
 
 static int update(as_module *, as_module_event *);
@@ -134,22 +145,26 @@ static int apply_stream(as_module *, as_udf_context *, const char *, const char 
 static lua_State * create_state(context *, const char *filename);
 static int poll_state(context *, cache_item *);
 static int offer_state(context *, cache_item *);
+static void destroy_cache_entry(cache_entry *centry);
+static inline void lua_hash_call_cb_if(void (*cb)(cache_entry *), cache_entry *centry);
+static inline lua_hash_ele* lua_hash_get_row_head(const lua_hash* h, const char* key);
 
+
+/******************************************************************************
+ * FORWARD DECLARATIONS
+ *****************************************************************************/
+
+void lua_hash_clear(lua_hash* h, void (*cb)(cache_entry *));
+lua_hash* lua_hash_create(uint32_t key_size, uint32_t n_rows);
+void lua_hash_destroy(lua_hash* h);
+bool lua_hash_get(const lua_hash* h, const char* key, cache_entry** p_value);
+cache_entry* lua_hash_put(lua_hash* h, const char* key, cache_entry* value);
+cache_entry* lua_hash_remove(lua_hash* h, const char* key);
 
 
 /******************************************************************************
  * FUNCTIONS
  ******************************************************************************/
-
-// Raj (todo) fix stupid hash function
-uint32_t filename_hash_fn(const void *filename, uint32_t len) {
-	const char *b = filename;
-	uint32_t acc = 0;
-	for (uint32_t i=0;i<len;i++) {
-		acc += *(b+i);
-	}
-	return(acc);
-}
 
 static inline int cache_entry_cleanup(cache_entry * centry) {
 	lua_State *l = NULL;
@@ -180,51 +195,49 @@ static inline int cache_entry_init(context * ctx, cache_entry * centry, const ch
 	cache_entry_populate(ctx, centry, key);
 	strncpy(centry->key, key, CACHE_ENTRY_KEY_MAX);
 	strncpy(centry->gen, gen, CACHE_ENTRY_GEN_MAX);
+
 	return 0;
 }
 
-int cache_rm(context * ctx, const char *key) {
-	if ( !key || ( strlen(key) == 0 )) return 0;
-	cache_entry     * centry = NULL;
-	WRLOCK;
-	if (CF_RCHASH_OK != cf_rchash_get(centry_hash, (void *)key, (uint32_t)strlen(key), (void *)&centry)) {
-		UNLOCK;
+int
+cache_rm(context* ctx, const char *key)
+{
+	if (key == NULL || *key == '\0') {
 		return 0;
 	}
-	cf_rchash_delete(centry_hash, (void *)key, (uint32_t)strlen(key));
+
+	WRLOCK;
+	cache_entry* centry = lua_hash_remove(g_lua_hash, key);
 	UNLOCK;
-	cache_entry_cleanup(centry);
-	cf_queue_destroy(centry->lua_state_q);
-	cf_rc_releaseandfree(centry);
-	centry = 0;
+
+	if (centry != NULL) {
+		destroy_cache_entry(centry);
+	}
+
 	return 0;
 }
 
 int cache_init(context * ctx, const char *key, const char * gen) {
-	if (strlen(key) == 0) return 0;
+	if (key == NULL || *key == '\0') {
+		return 0;
+	}
+
 	cache_entry     * centry = NULL;
 	WRLOCK;
-	if (CF_RCHASH_OK != cf_rchash_get(centry_hash, (void *)key, (uint32_t)strlen(key), (void *)&centry)) {
-		centry = cf_rc_alloc(sizeof(cache_entry));
+
+	if (! lua_hash_get(g_lua_hash, key, &centry)) {
+		centry = cf_malloc(sizeof(cache_entry));
 		as_store_uint64(&centry->total, 0);
 		as_store_uint64(&centry->cache_miss, 0);
 		// Start Small and grow (as necessary) up to the max
 		centry->lua_state_q = cf_queue_create(sizeof(lua_State *), true);
 		cache_entry_init(ctx, centry, key, gen);
-		int retval = cf_rchash_put(centry_hash, (void *)key, (uint32_t)strlen(key), (void *)centry);
+		lua_hash_put(g_lua_hash, key, centry);
 		UNLOCK;
-		if (retval != CF_RCHASH_OK) {
-			// weird should not happen
-			cf_queue_destroy(centry->lua_state_q);
-			cf_rc_releaseandfree(centry);
-			return 1;
-		} else {
-			as_log_trace("[CACHE] Added [%s:%p]", key, centry);
-		}
+		as_log_trace("[CACHE] Added [%s:%p]", key, centry)
 	} else {
 		UNLOCK;
 		cache_entry_init(ctx, centry, key, gen);
-		cf_rc_releaseandfree(centry);
 		centry = 0;
 	}
 	return 0;
@@ -232,7 +245,10 @@ int cache_init(context * ctx, const char *key, const char * gen) {
 
 static int cache_remove_file(context * ctx, const char * filename) {
 	char key[CACHE_ENTRY_KEY_MAX];
-	as_strncpy(key, filename, sizeof(key));
+	if (as_strncpy(key, filename, sizeof(key))) {
+		as_log_error("LUA cache remove failed : filename truncated %s", key);
+		return -1;
+	}
 
 	char* p = strrchr(key, '.');
 
@@ -245,7 +261,11 @@ static int cache_remove_file(context * ctx, const char * filename) {
 
 static int cache_add_file(context * ctx, const char * filename) {
 	char key[CACHE_ENTRY_KEY_MAX];
-	as_strncpy(key, filename, sizeof(key));
+	if (as_strncpy(key, filename, sizeof(key))) {
+		as_log_error("LUA registration failed : filename truncated %s", key);
+		return -1;
+	}
+
 	char *tmp_char = strrchr(key, '.');
 	if (  !tmp_char             // Filename without extension
 	   || key == tmp_char       // '.' as first character
@@ -255,10 +275,10 @@ static int cache_add_file(context * ctx, const char * filename) {
 		return -1;
 	}
 	*tmp_char = '\0';
-	
+
 	char gen[CACHE_ENTRY_GEN_MAX];
 	gen[0] = 0;
-	
+
 	cache_init(ctx, key, gen);
 	return 0;
 }
@@ -284,7 +304,7 @@ static int cache_scan_dir(context * ctx, const char * directory) {
 
 	as_dir dir;
 	const char* entry;
-	
+
 	if (!as_dir_open(&dir, directory)) {
 		return -1;
 	}
@@ -292,8 +312,11 @@ static int cache_scan_dir(context * ctx, const char * directory) {
 	while ( (entry = as_dir_read(&dir)) ) {
 
 		char key[CACHE_ENTRY_KEY_MAX];
-		as_strncpy(key, entry, sizeof(key));
-		
+		if (as_strncpy(key, entry, sizeof(key))) {
+			as_log_error("LUA cache dir scan skipping truncated entry %s", key);
+			continue;
+		}
+
 		char gen[CACHE_ENTRY_GEN_MAX];
 		gen[0] = 0;
 
@@ -319,11 +342,13 @@ static int cache_scan_dir(context * ctx, const char * directory) {
 	return 0;
 }
 
-static int cache_reduce_delete_fn(const void *key, uint32_t keylen, void *object, void *udata)
+static void
+destroy_cache_entry(cache_entry *centry)
 {
-	return CF_RCHASH_REDUCE_DELETE;
+	cache_entry_cleanup(centry);
+	cf_queue_destroy(centry->lua_state_q);
+	cf_free(centry);
 }
-
 /**
  * Module Configurator.
  * This configures and reconfigures the module. This can be called an
@@ -346,12 +371,9 @@ static int update(as_module * m, as_module_event * e) {
 			ctx->config.server_mode     = config->server_mode;
 			ctx->config.cache_enabled   = config->cache_enabled;
 
-			if ( centry_hash == NULL && ctx->config.cache_enabled ) {
+			if (g_lua_hash == NULL && ctx->config.cache_enabled) {
 				// No Internal Lock
-				int rc = cf_rchash_create(&centry_hash, filename_hash_fn, NULL, 0, 64, 0);
-				if ( CF_RCHASH_OK != rc ) {
-					return 1;
-				}
+				g_lua_hash = lua_hash_create(CACHE_ENTRY_KEY_MAX, 64);
 			}
 
 			if ( ctx->lock == NULL ) {
@@ -454,13 +476,17 @@ static int update(as_module * m, as_module_event * e) {
 		}
 		case AS_MODULE_EVENT_FILE_REMOVE: {
 			if ( e->data.filename == NULL ) return 2;
-			if ( ctx->config.cache_enabled ) cache_remove_file(ctx, e->data.filename);
+			if ( ctx->config.cache_enabled ) {
+				if (cache_remove_file(ctx, e->data.filename) != 0) {
+					return 2;
+				}
+			}
 			break;
 		}
 		case AS_MODULE_EVENT_CLEAR_CACHE: {
 			if (ctx->config.cache_enabled) {
 				WRLOCK;
-				cf_rchash_reduce(centry_hash, cache_reduce_delete_fn, NULL);
+				lua_hash_clear(g_lua_hash, &destroy_cache_entry);
 				UNLOCK;
 			}
 			break;
@@ -613,8 +639,7 @@ static int poll_state(context * ctx, cache_item * citem) {
 	if ( ctx->config.cache_enabled == true ) {
 		cache_entry     * centry = NULL;
 		RDLOCK;
-		int retval = cf_rchash_get(centry_hash, (void *)citem->key, (uint32_t)strlen(citem->key), (void *)&centry);
-		if ( CF_RCHASH_OK == retval ) {
+		if (lua_hash_get(g_lua_hash, citem->key, &centry)) {
 			uint64_t miss;
 			if (cf_queue_pop(centry->lua_state_q, &citem->state, CF_QUEUE_NOWAIT) != CF_QUEUE_EMPTY) {
 				strncpy(citem->key, centry->key, CACHE_ENTRY_KEY_MAX);
@@ -627,7 +652,6 @@ static int poll_state(context * ctx, cache_item * citem) {
 				citem->state = NULL;
 			}
 			uint64_t total = as_aaf_uint64(&centry->total, 1);
-			cf_rc_releaseandfree(centry);
 			centry = 0;
 			as_log_trace("[CACHE] Miss %lu : Total %lu", miss, total);
 		} else {
@@ -727,7 +751,7 @@ static int offer_state(context * ctx, cache_item * citem) {
 
 		cache_entry *centry = NULL;
 		RDLOCK;
-		if (CF_RCHASH_OK == cf_rchash_get(centry_hash, (void *)citem->key, (uint32_t)strlen(citem->key), (void *)&centry) ) {
+		if (lua_hash_get(g_lua_hash, citem->key, &centry) ) {
 			as_log_trace("[CACHE] found entry: %s", citem->key);
 			if (( cf_queue_sz(centry->lua_state_q) < CACHE_ENTRY_STATE_MAX )
 				&& ( !strncmp(centry->gen, citem->gen, CACHE_ENTRY_GEN_MAX) )) {
@@ -735,7 +759,6 @@ static int offer_state(context * ctx, cache_item * citem) {
 				as_log_trace("[CACHE] returning state: %s", citem->key);
 				citem->state = NULL;
 			}
-			cf_rc_releaseandfree(centry);
 			centry = 0;
 		}
 		else {
@@ -1334,3 +1357,194 @@ as_module mod_lua = {
 	.source         = &mod_lua_source,
 	.hooks          = &mod_lua_hooks
 };
+
+//==========================================================
+// Simple hashmap for lua configuration.
+// - keys are null terminated but fixed-size allocated
+// - key parameters are assumed to be good
+// - values are lua cache_entry struct pointers
+//
+
+static lua_hash_ele*
+lua_hash_get_row_head(const lua_hash* h, const char* key)
+{
+	uint64_t hashed_key = cf_hash_fnv32((const uint8_t*)key, strlen(key));
+	uint32_t row_i = (uint32_t)(hashed_key % h->n_rows);
+
+	lua_hash_ele* e = (lua_hash_ele*)(h->table + (h->ele_size * row_i));
+
+	return e;
+}
+
+lua_hash*
+lua_hash_create(uint32_t key_size, uint32_t n_rows)
+{
+	lua_hash* h = (lua_hash*)cf_malloc(sizeof(lua_hash));
+
+	h->ele_size = sizeof(lua_hash_ele) + key_size;
+	h->n_rows = n_rows;
+
+	size_t table_size = n_rows * h->ele_size;
+
+	h->table = cf_malloc(table_size);
+
+	memset((void*)h->table, 0, table_size);
+
+	return h;
+}
+
+cache_entry*
+lua_hash_remove(lua_hash* h, const char* key)
+{
+	lua_hash_ele* e = lua_hash_get_row_head(h, key);
+
+	// Nobody in row yet so nothing to delete.
+	if (e->value == NULL) {
+		return NULL;
+	}
+
+	lua_hash_ele* e_head = e;
+	lua_hash_ele* e_last = NULL;
+
+	while (e != NULL) {
+		if (strcmp(e->key, key) == 0) {
+			cache_entry* ele_to_remove_val = e->value;
+
+			// Special cases for removing first element in a row.
+			if (e == e_head) {
+				if (e->next) { // move the next element up to the head
+					lua_hash_ele* e_next = e->next;
+					e->next = e_next->next;
+					e->value = e_next->value;
+					strcpy(e->key, e_next->key);
+					cf_free(e_next);
+				}
+				else { // remove only element in row
+					e->next = NULL;
+					e->value = NULL;
+					e->key[0] = '\0';
+				}
+			}
+			else {
+				e_last->next = e->next;
+				cf_free(e);
+			}
+
+			return ele_to_remove_val;
+		}
+
+		e_last = e;
+		e = e->next;
+	}
+
+	return NULL;
+}
+
+static inline void
+lua_hash_call_cb_if(void (*cb)(cache_entry*), cache_entry* centry)
+{
+	if (cb != NULL && centry != NULL) {
+		(*cb)(centry);
+	}
+}
+
+// Wipe out all entries but leave hash itself intact. This function cleans up
+// the hash itself. The callback may be used to do any additional cleanup on the
+// hash values.
+void
+lua_hash_clear(lua_hash* h, void (*cb)(cache_entry*))
+{
+	lua_hash_ele* e_table = (lua_hash_ele*)h->table;
+
+	for (uint32_t i = 0; i < h->n_rows; i++) {
+		lua_hash_call_cb_if(cb, e_table->value);
+
+		if (e_table->next != NULL) {
+			lua_hash_ele* e = e_table->next;
+
+			while (e != NULL) {
+				lua_hash_call_cb_if(cb, e->value);
+
+				lua_hash_ele* t = e->next;
+				cf_free(e);
+				e = t;
+			}
+		}
+
+		e_table->next = NULL;
+		e_table->value = NULL;
+		e_table->key[0] = '\0';
+		e_table = (lua_hash_ele*)((uint8_t*)e_table + h->ele_size);
+	}
+}
+
+// Wipe out entire hash (hash not usable after calling).
+void
+lua_hash_destroy(lua_hash* h)
+{
+	lua_hash_clear(h, NULL);
+	cf_free(h->table);
+	cf_free(h);
+}
+
+// Returns old cache_entry if key had value before NULL otherwise.
+cache_entry*
+lua_hash_put(lua_hash* h, const char* key, cache_entry* value)
+{
+	lua_hash_ele* e = lua_hash_get_row_head(h, key);
+
+	// Nobody in row yet so just set that first element
+	if (e->value == NULL) {
+		strcpy(e->key, key);
+		e->value = value;
+		return NULL;
+	}
+
+	lua_hash_ele* e_head = e;
+	cache_entry* overwritten_value = NULL;
+
+	while (e) {
+		if (strcmp(e->key, key) == 0) {
+			overwritten_value = e->value;
+			break;
+		}
+
+		e = e->next;
+	}
+
+	if (overwritten_value == NULL) {
+		e = (lua_hash_ele*)cf_malloc(h->ele_size);
+		strcpy(e->key, key);
+		e->next = e_head->next;
+		e_head->next = e;
+	}
+
+	e->value = value;
+
+	return overwritten_value;
+}
+
+// Functions as a "has" if called with a null p_value.
+bool
+lua_hash_get(const lua_hash* h, const char* key, cache_entry** p_value)
+{
+	lua_hash_ele* e = lua_hash_get_row_head(h, key);
+
+	if (e->value == NULL) {
+		return false;
+	}
+
+	while (e) {
+		if (strcmp(e->key, key) == 0) {
+			if (p_value) {
+				*p_value = e->value;
+			}
+
+			return true;
+		}
+
+		e = e->next;
+	}
+
+	return false;
+}

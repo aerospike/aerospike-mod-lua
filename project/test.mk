@@ -19,19 +19,20 @@ else
 endif
 
 TEST_DEPS =
-TEST_DEPS += $(COMMON)/$(TARGET_LIB)/libaerospike-common.a 
+TEST_DEPS += $(COMMON)/$(TARGET_LIB)/libaerospike-common.a
 
 ###############################################################################
 ##  TEST OBJECTS                                                             ##
 ###############################################################################
 
-TEST_PLANS = 
+TEST_PLANS =
 TEST_PLANS += list/list_udf
 TEST_PLANS += record/record_udf
 TEST_PLANS += stream/stream_udf
 TEST_PLANS += validation/validation_basics
+TEST_PLANS += hash/hash_udf
 
-TEST_UTIL = 
+TEST_UTIL =
 TEST_UTIL += util/consumer_stream
 TEST_UTIL += util/producer_stream
 TEST_UTIL += util/map_rec
@@ -40,7 +41,7 @@ TEST_UTIL += util/test_logger
 #TEST_UTIL += util/test_memtracker
 
 TEST_MOD_LUA = mod_lua_test
-TEST_MOD_LUA += $(TEST_UTIL) 
+TEST_MOD_LUA += $(TEST_UTIL)
 TEST_MOD_LUA += $(TEST_PLANS)
 
 ###############################################################################
@@ -79,7 +80,7 @@ endif
 test-build: test/mod_lua_test
 
 .PHONY: test-clean
-test-clean: 
+test-clean:
 	@rm -rf $(TARGET_BIN)/test
 	@rm -rf $(TARGET_OBJ)/test
 

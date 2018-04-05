@@ -27,7 +27,8 @@ PLAN(mod_lua_test)
 {
 	plan_before(before);
 
-    plan_add(list_udf);
+	plan_add(hash_udf);
+	plan_add(list_udf);
 	plan_add(record_udf);
 	plan_add(stream_udf);
 	plan_add(validation_basics);
