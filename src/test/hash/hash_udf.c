@@ -210,11 +210,9 @@ TEST(hash_udf_6, "replacing a key works and returns previous value, long keys ge
  *****************************************************************************/
 SUITE(hash_udf, "list udf tests")
 {
-	char* system_path = getenv("AS_SYSTEM_LUA");
-	if (system_path == NULL) {
-		setenv("AS_SYSTEM_LUA", "/tmp", false);
-	}
 	suite_before(test_suite_before);
+	suite_after(test_suite_after);
+
 	suite_add(hash_udf_1);
 	suite_add(hash_udf_2);
 	suite_add(hash_udf_3);

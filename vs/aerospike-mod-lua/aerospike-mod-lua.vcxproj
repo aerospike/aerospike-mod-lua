@@ -38,6 +38,9 @@
     <ClCompile Include="..\..\src\main\mod_lua_stream.c" />
     <ClCompile Include="..\..\src\main\mod_lua_val.c" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{F1554C15-D9F6-48FD-A827-58683E769C4C}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
@@ -99,5 +102,13 @@
     </Link>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
-  <ImportGroup Label="ExtensionTargets" />
+  <ImportGroup Label="ExtensionTargets">
+    <Import Project="..\packages\aerospike-client-c-dependencies.1.0.1\build\native\aerospike-client-c-dependencies.targets" Condition="Exists('..\packages\aerospike-client-c-dependencies.1.0.1\build\native\aerospike-client-c-dependencies.targets')" />
+  </ImportGroup>
+  <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
+    <PropertyGroup>
+      <ErrorText>This project references NuGet package(s) that are missing on this computer. Use NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
+    </PropertyGroup>
+    <Error Condition="!Exists('..\packages\aerospike-client-c-dependencies.1.0.1\build\native\aerospike-client-c-dependencies.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\aerospike-client-c-dependencies.1.0.1\build\native\aerospike-client-c-dependencies.targets'))" />
+  </Target>
 </Project>

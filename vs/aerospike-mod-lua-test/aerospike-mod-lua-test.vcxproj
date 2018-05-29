@@ -19,6 +19,7 @@
     <ClInclude Include="..\..\src\test\util\test_logger.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\src\test\hash\hash_udf.c" />
     <ClCompile Include="..\..\src\test\list\list_udf.c" />
     <ClCompile Include="..\..\src\test\mod_lua_test.c" />
     <ClCompile Include="..\..\src\test\record\record_udf.c" />
@@ -35,6 +36,9 @@
     <ProjectReference Include="..\aerospike-mod-lua\aerospike-mod-lua.vcxproj">
       <Project>{f1554c15-d9f6-48fd-a827-58683e769c4c}</Project>
     </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{6E32762B-3CA9-417F-BDC4-9C0BE0A8D6E9}</ProjectGuid>
@@ -87,6 +91,9 @@
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
+    <PostBuildEvent>
+      <Command>XCOPY ..\..\..\aerospike-client-c\vs\packages\aerospike-client-c-dependencies.1.0.1\build\native\lib\x64\$(Configuration)\*.dll "$(TargetDir)" /D /K /Y</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -106,5 +113,12 @@
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
+    <Import Project="..\packages\aerospike-client-c-dependencies.1.0.1\build\native\aerospike-client-c-dependencies.targets" Condition="Exists('..\packages\aerospike-client-c-dependencies.1.0.1\build\native\aerospike-client-c-dependencies.targets')" />
   </ImportGroup>
+  <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
+    <PropertyGroup>
+      <ErrorText>This project references NuGet package(s) that are missing on this computer. Use NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
+    </PropertyGroup>
+    <Error Condition="!Exists('..\packages\aerospike-client-c-dependencies.1.0.1\build\native\aerospike-client-c-dependencies.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\aerospike-client-c-dependencies.1.0.1\build\native\aerospike-client-c-dependencies.targets'))" />
+  </Target>
 </Project>
