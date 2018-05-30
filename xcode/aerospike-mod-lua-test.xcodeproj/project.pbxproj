@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		BF1C2ADA20BDD68400868695 /* hash_udf.c in Sources */ = {isa = PBXBuildFile; fileRef = BF1C2AD920BDD68400868695 /* hash_udf.c */; };
 		BF255C011B4C9EF600816CCC /* list_udf.c in Sources */ = {isa = PBXBuildFile; fileRef = BF255C001B4C9EF600816CCC /* list_udf.c */; };
 		BF814A471F85A0D200B46BD1 /* libaerospike-common.a in Frameworks */ = {isa = PBXBuildFile; fileRef = BF814A441F85A08E00B46BD1 /* libaerospike-common.a */; };
 		BFC7B29E18C90BEE0047DA3C /* mod_lua_test.c in Sources */ = {isa = PBXBuildFile; fileRef = BFC7B29B18C90BEE0047DA3C /* mod_lua_test.c */; };
@@ -67,6 +68,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		BF1C2AD920BDD68400868695 /* hash_udf.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = hash_udf.c; path = ../src/test/hash/hash_udf.c; sourceTree = "<group>"; };
 		BF255C001B4C9EF600816CCC /* list_udf.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = list_udf.c; path = ../src/test/list/list_udf.c; sourceTree = "<group>"; };
 		BF814A3F1F85A08E00B46BD1 /* aerospike-common.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = "aerospike-common.xcodeproj"; path = "../../common/xcode/aerospike-common.xcodeproj"; sourceTree = "<group>"; };
 		BFC7B28918C90A0A0047DA3C /* aerospike-mod-lua-test */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "aerospike-mod-lua-test"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -99,6 +101,14 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		BF1C2AD820BDD66E00868695 /* hash */ = {
+			isa = PBXGroup;
+			children = (
+				BF1C2AD920BDD68400868695 /* hash_udf.c */,
+			);
+			name = hash;
+			sourceTree = "<group>";
+		};
 		BF48303318D7E0CC00032348 /* Products */ = {
 			isa = PBXGroup;
 			children = (
@@ -128,6 +138,7 @@
 		BFC65EA41C9379130079DF5A /* src */ = {
 			isa = PBXGroup;
 			children = (
+				BF1C2AD820BDD66E00868695 /* hash */,
 				BFC65EA91C9379F90079DF5A /* list */,
 				BFC65EA81C9379C80079DF5A /* record */,
 				BFC65EA71C9379BA0079DF5A /* stream */,
@@ -286,6 +297,7 @@
 				BFC7B2AD18C90C4C0047DA3C /* test_logger.c in Sources */,
 				BFC7B2AB18C90C4C0047DA3C /* producer_stream.c in Sources */,
 				BFC7B2A118C90C040047DA3C /* record_udf.c in Sources */,
+				BF1C2ADA20BDD68400868695 /* hash_udf.c in Sources */,
 				BFC7B2AC18C90C4C0047DA3C /* test_aerospike.c in Sources */,
 				BFC7B29E18C90BEE0047DA3C /* mod_lua_test.c in Sources */,
 				BFC7B2A318C90C240047DA3C /* stream_udf.c in Sources */,

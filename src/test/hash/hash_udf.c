@@ -58,7 +58,7 @@ lua_hash* h;
 /******************************************************************************
  * TEST CASES
  *****************************************************************************/
-bool
+static void
 hash_udf_setup_test()
 {
 	h = lua_hash_create(5, 3);
@@ -74,7 +74,7 @@ hash_udf_setup_test()
 	vals[3][0] = '\0';
 }
 
-bool
+static void
 hash_udf_teardown_test()
 {
 	debug("tearing down");
