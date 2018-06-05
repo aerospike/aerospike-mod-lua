@@ -72,6 +72,9 @@ ifeq ($(OS),Darwin)
   endif
 
   LUA_PLATFORM = macosx
+else ifeq ($(OS),FreeBSD)
+  CC_FLAGS += -finline-functions
+  LUA_PLATFORM = freebsd
 else
   CC_FLAGS += -finline-functions -rdynamic
   LUA_PLATFORM = linux
@@ -124,6 +127,11 @@ else
       ifneq ($(wildcard /usr/local/lib),)
         LIB_LUA = -L/usr/local/lib
       endif
+    endif
+    ifeq ($(OS),FreeBSD)
+      INC_PATH += /usr/local/include/lua51
+      LIB_LUA = -L/usr/local/lib
+      LUA_SUFFIX = -5.1
     endif
     LIB_LUA += -llua$(LUA_SUFFIX)
   endif
