@@ -531,9 +531,7 @@ static int mod_lua_bytes_append_int64_be(lua_State * l)
 
 	// check preconditions:
 	// 	- b != NULL 
-	//	- INT64_MIN <= v <= INT64_MAX
-	if ( !b || 
-		 v < INT64_MIN || v > INT64_MAX ) {
+	if ( !b ) {
 		lua_pushboolean(l, false);
 		return 1;
 	}
@@ -578,9 +576,7 @@ static int mod_lua_bytes_append_int64_le(lua_State * l)
 	
 	// check preconditions:
 	// 	- b != NULL
-	//	- INT64_MIN <= v <= INT64_MAX
-	if ( !b ||
-		v < INT64_MIN || v > INT64_MAX ) {
+	if ( !b ) {
 		lua_pushboolean(l, false);
 		return 1;
 	}
@@ -1028,10 +1024,8 @@ static int mod_lua_bytes_set_int64_be(lua_State * l)
 	// check preconditions:
 	// 	- b != NULL 
 	//	- 1 <= i <= UINT32_MAX
-	//	- INT64_MIN <= v <= INT64_MAX
 	if ( !b || 
-		i < 1 || i > UINT32_MAX || 
-		v < INT64_MIN || v > INT64_MAX ) {
+		i < 1 || i > UINT32_MAX ) {
 		lua_pushboolean(l, false);
 		return 1;
 	}
@@ -1079,10 +1073,8 @@ static int mod_lua_bytes_set_int64_le(lua_State * l)
 	// check preconditions:
 	// 	- b != NULL
 	//	- 1 <= i <= UINT32_MAX
-	//	- INT64_MIN <= v <= INT64_MAX
 	if ( !b ||
-		i < 1 || i > UINT32_MAX ||
-		v < INT64_MIN || v > INT64_MAX ) {
+		i < 1 || i > UINT32_MAX ) {
 		lua_pushboolean(l, false);
 		return 1;
 	}

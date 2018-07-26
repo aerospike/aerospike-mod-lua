@@ -193,8 +193,8 @@ static inline int cache_entry_populate(context *ctx, cache_entry *centry, const 
 static inline int cache_entry_init(context * ctx, cache_entry * centry, const char *key, const char *gen) {
 	cache_entry_cleanup(centry);
 	cache_entry_populate(ctx, centry, key);
-	strncpy(centry->key, key, CACHE_ENTRY_KEY_MAX);
-	strncpy(centry->gen, gen, CACHE_ENTRY_GEN_MAX);
+	strncpy(centry->key, key, CACHE_ENTRY_KEY_MAX - 1);
+	strncpy(centry->gen, gen, CACHE_ENTRY_GEN_MAX - 1);
 
 	return 0;
 }
@@ -438,7 +438,7 @@ static int update(as_module * m, as_module_event * e) {
             	}
             	char external[265] = {0};
             	strncpy(external, ctx->config.system_path, 255);
-            	strncpy(external + syslen, "/external", 9);
+            	strncpy(external + syslen, "/external", 10);
 
             	cache_scan_dir(ctx, external);
             }
@@ -459,7 +459,7 @@ static int update(as_module * m, as_module_event * e) {
             	}
             	char external[265] = {0};
             	strncpy(external, ctx->config.system_path, 255);
-            	strncpy(external + syslen, "/external", 9);
+            	strncpy(external + syslen, "/external", 10);
 
             	cache_scan_dir(ctx, external);
             }
@@ -1150,7 +1150,7 @@ static int apply_record(as_module * m, as_udf_context * udf_ctx, const char * fi
 		.state  = NULL
 	};
 
-	strncpy(citem.key, filename, CACHE_ENTRY_KEY_MAX);
+	strncpy(citem.key, filename, CACHE_ENTRY_KEY_MAX - 1);
 
 	as_log_trace("apply_record: BEGIN");
 
@@ -1244,7 +1244,7 @@ static int apply_stream(as_module * m, as_udf_context *udf_ctx, const char * fil
 		.state  = NULL
 	};
 
-	strncpy(citem.key, filename, CACHE_ENTRY_KEY_MAX);
+	strncpy(citem.key, filename, CACHE_ENTRY_KEY_MAX - 1);
 
 	as_log_trace("apply_stream: BEGIN");
 
