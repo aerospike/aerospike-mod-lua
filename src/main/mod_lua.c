@@ -64,7 +64,6 @@ pthread_rwlock_t g_cache_lock = PTHREAD_RWLOCK_INITIALIZER;
 
 #define LUA_PARAM_COUNT_THRESHOLD 20 // warn if a function call exceeds this
 
-#define MOD_LUA_CONFIG_SYSPATH "/opt/aerospike/sys/udf/lua"
 #define MOD_LUA_CONFIG_USRPATH "/opt/aerospike/usr/udf/lua"
 
 /******************************************************************************
@@ -126,7 +125,6 @@ static lua_hash* g_lua_hash = NULL;
 static context mod_lua_source = {
 	.config = {
 		.cache_enabled  = true,
-		.system_path    = MOD_LUA_CONFIG_SYSPATH,
 		.user_path      = MOD_LUA_CONFIG_USRPATH,
 		.server_mode    = true
 	},
@@ -403,19 +401,6 @@ static int update(as_module * m, as_module_event * e) {
 			// Attempt to open the directory.
 			// If it opens, then set the ctx value.
 			// Otherwise, we alert the user of the error when a UDF is called. (for now)
-			if ( config->system_path[0] != '\0' ) {
-				if (!as_dir_exists(config->system_path)) {
-					ctx->config.system_path[0] = '\0';
-					strncpy(ctx->config.system_path + 1, config->system_path, 255);
-				}
-				else {
-					strncpy(ctx->config.system_path, config->system_path, 256);
-				}
-			}
-
-			// Attempt to open the directory.
-			// If it opens, then set the ctx value.
-			// Otherwise, we alert the user of the error when a UDF is called. (for now)
 			if ( config->user_path[0] != '\0' ) {
 				if (!as_dir_exists(config->user_path)) {
 					ctx->config.user_path[0] = '\0';
@@ -429,18 +414,6 @@ static int update(as_module * m, as_module_event * e) {
             if ( ctx->config.cache_enabled ) {
             	// Set up the USER path
             	cache_scan_dir(ctx, ctx->config.user_path);
-
-            	// Set up the SYSTEM path.  Build a string for the new sub-dir "external".
-            	size_t syslen = strlen(ctx->config.system_path);
-            	if ( ctx->config.system_path[syslen-1] == '/' ) {
-            		ctx->config.system_path[syslen-1] = '\0';
-            		syslen--;
-            	}
-            	char external[265] = {0};
-            	strncpy(external, ctx->config.system_path, 255);
-            	strncpy(external + syslen, "/external", 10);
-
-            	cache_scan_dir(ctx, external);
             }
 
 			break;
@@ -450,18 +423,6 @@ static int update(as_module * m, as_module_event * e) {
             if ( ctx->config.cache_enabled ) {
             	// Set up the USER path
             	cache_scan_dir(ctx, ctx->config.user_path);
-
-            	// Set up the SYSTEM path.  Build a string for the new sub-dir "external".
-            	size_t syslen = strlen(ctx->config.system_path);
-            	if ( ctx->config.system_path[syslen-1] == '/' ) {
-            		ctx->config.system_path[syslen-1] = '\0';
-            		syslen--;
-            	}
-            	char external[265] = {0};
-            	strncpy(external, ctx->config.system_path, 255);
-            	strncpy(external + syslen, "/external", 10);
-
-            	cache_scan_dir(ctx, external);
             }
 			break;
 		}
@@ -496,22 +457,12 @@ static int update(as_module * m, as_module_event * e) {
 	return 0;
 }
 
-static void package_path_set(lua_State * l, char * system_path, char * user_path) {
+static void package_path_set(lua_State * l, char * user_path) {
 	int stack = 0;
 
 	lua_getglobal(l, "package");
 	lua_getfield(l, -1, "path");
 	stack += 1;
-
-	lua_pushstring(l, ";");
-	lua_pushstring(l, system_path);
-	lua_pushstring(l, "/?.lua");
-	stack += 3;
-
-	lua_pushstring(l, ";");
-	lua_pushstring(l, system_path);
-	lua_pushstring(l, "/external/?.lua");
-	stack += 3;
 
 	lua_pushstring(l, ";");
 	lua_pushstring(l, user_path);
@@ -524,22 +475,12 @@ static void package_path_set(lua_State * l, char * system_path, char * user_path
 	lua_pop(l, 1);
 }
 
-static void package_cpath_set(lua_State * l, char * system_path, char * user_path) {
+static void package_cpath_set(lua_State * l, char * user_path) {
 	int stack = 0;
 
 	lua_getglobal(l, "package");
 	lua_getfield(l, -1, "cpath");
 	stack += 1;
-
-	lua_pushstring(l, ";");
-	lua_pushstring(l, system_path);
-	lua_pushstring(l, "/?.so");
-	stack += 3;
-
-	lua_pushstring(l, ";");
-	lua_pushstring(l, system_path);
-	lua_pushstring(l, "/external/?.so");
-	stack += 3;
 
 	lua_pushstring(l, ";");
 	lua_pushstring(l, user_path);
@@ -567,12 +508,25 @@ static bool is_native_module(context * ctx, const char *filename)
 		return true;
 	}
 
-	snprintf(fn, sizeof(fn), "%s/%s.so", ctx->config.system_path, filename);
-	if (!stat(fn, &buf)) {
-		return true;
-	}
-
 	return false;
+}
+
+extern const char as_lua_as[];
+extern const char as_lua_stream_ops[];
+extern const char as_lua_aerospike[];
+
+extern size_t as_lua_as_size;
+extern size_t as_lua_stream_ops_size;
+extern size_t as_lua_aerospike_size;
+
+static bool load_buffer(lua_State* l, const char* script, size_t size, const char* name)
+{
+	if (luaL_loadbuffer(l, script, size - 1, name) || lua_pcall(l, 0, LUA_MULTRET, 0)) {
+		as_log_error("Failed to load lua string: %s %d", name, (int)size);
+		lua_close(l);
+		return false;
+	}
+	return true;
 }
 
 /**
@@ -587,8 +541,8 @@ static lua_State * create_state(context * ctx, const char * filename) {
 
 	luaL_openlibs(l);
 
-	package_path_set(l, ctx->config.system_path, ctx->config.user_path);
-	package_cpath_set(l, ctx->config.system_path, ctx->config.user_path);
+	package_path_set(l, ctx->config.user_path);
+	package_cpath_set(l, ctx->config.user_path);
 
 	mod_lua_aerospike_register(l);
 	mod_lua_record_register(l);
@@ -599,12 +553,15 @@ static lua_State * create_state(context * ctx, const char * filename) {
 	mod_lua_bytes_register(l);
 	mod_lua_geojson_register(l);
 
-	lua_getglobal(l, "require");
-	lua_pushstring(l, "aerospike");
-	int rc = lua_pcall(l, 1, 1, 0);
-	if (rc) {
-		as_log_error("Lua Create Error: %s", lua_tostring(l, -1));
-		lua_close(l);
+	if (! load_buffer(l, as_lua_as, as_lua_as_size, "as.lua")) {
+		return NULL;
+	}
+
+	if (! load_buffer(l, as_lua_stream_ops, as_lua_stream_ops_size, "stream_ops.lua")) {
+		return NULL;
+	}
+
+	if (! load_buffer(l, as_lua_aerospike, as_lua_aerospike_size, "aerospike.lua")) {
 		return NULL;
 	}
 
@@ -615,7 +572,7 @@ static lua_State * create_state(context * ctx, const char * filename) {
 
 	lua_getglobal(l, "require");
 	lua_pushstring(l, filename);
-	rc = lua_pcall(l, 1, 1, 0);
+	int rc = lua_pcall(l, 1, 1, 0);
 	if (rc) {
 		as_log_error("Lua Create Error: %s", lua_tostring(l, -1));
 		lua_close(l);
@@ -1037,6 +994,29 @@ static void populate_error(lua_State * l, const char * filename, int rc, as_modu
 	}
 }
 
+static bool
+load_buffer_validate(
+	lua_State* l, const char* filename, const char* script, size_t size, const char* name,
+	as_module_error* err
+	)
+{
+	int rc = luaL_loadbuffer(l, script, size - 1, name);
+
+	if (rc) {
+		populate_error(l, filename, rc, err);
+		return false;
+	}
+
+	rc = lua_pcall(l, 0, LUA_MULTRET, 0);
+
+	if (rc) {
+		populate_error(l, filename, rc, err);
+		return false;
+	}
+
+	return true;
+}
+
 /**
  * Validates a UDF module
  */
@@ -1065,8 +1045,8 @@ static int validate(as_module * m, as_aerospike * as, const char * filename, con
 
 	luaL_openlibs(l);
 
-	package_path_set(l, ctx->config.system_path, ctx->config.user_path);
-	package_cpath_set(l, ctx->config.system_path, ctx->config.user_path);
+	package_path_set(l, ctx->config.user_path);
+	package_cpath_set(l, ctx->config.user_path);
 
 	mod_lua_aerospike_register(l);
 	mod_lua_record_register(l);
@@ -1077,12 +1057,15 @@ static int validate(as_module * m, as_aerospike * as, const char * filename, con
 	mod_lua_bytes_register(l);
 	mod_lua_geojson_register(l);
 
-	lua_getglobal(l, "require");
-	lua_pushstring(l, "aerospike");
+	if (! load_buffer_validate(l, filename, as_lua_as, as_lua_as_size, "as.lua", err)) {
+		goto Cleanup;
+	}
 
-	rc = lua_pcall(l, 1, 1, 0);
-	if ( rc ) {
-		populate_error(l, filename, rc, err);
+	if (! load_buffer_validate(l, filename, as_lua_stream_ops, as_lua_stream_ops_size, "stream_ops.lua", err)) {
+		goto Cleanup;
+	}
+
+	if (! load_buffer_validate(l, filename, as_lua_aerospike, as_lua_aerospike_size, "aerospike.lua", err)) {
 		goto Cleanup;
 	}
 

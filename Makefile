@@ -151,6 +151,7 @@ MOD_LUA += mod_lua_list.o
 MOD_LUA += mod_lua_map.o
 MOD_LUA += mod_lua_bytes.o
 MOD_LUA += mod_lua_stream.o
+MOD_LUA += mod_lua_system.o
 MOD_LUA += mod_lua_val.o
 MOD_LUA += mod_lua_geojson.o
 

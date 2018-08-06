@@ -98,19 +98,8 @@ test_suite_before(atf_suite* suite)
 	mod_lua_config config = {
 		.server_mode = true,
 		.cache_enabled = false,
-		.system_path = { '\0' },
 		.user_path = AS_START_DIR "src/test/lua"
 	};
-
-	char * system_path = getenv("AS_SYSTEM_LUA");
-	if (system_path != NULL) {
-		strncpy(config.system_path, system_path, 255);
-		config.system_path[255] = '\0';
-	}
-	else {
-		error("environment variable 'AS_SYSTEM_LUA' should be set to point to the directory containing system lua files.")
-			return false;
-	}
 
 	as_lua_log_init();
 

@@ -52,31 +52,11 @@ TEST_MOD_LUA += $(TEST_PLANS)
 
 .PHONY: test
 test: test-build
-ifndef LUA_CORE
-$(warning ***************************************************************)
-$(warning *)
-$(warning *  LUA_CORE is not defined. )
-$(warning *  LUA_CORE should be set to a valid path. )
-$(warning *)
-$(warning ***************************************************************)
-$(error )
-else
-	AS_SYSTEM_LUA=$(LUA_CORE)/src $(TARGET_BIN)/test/mod_lua_test
-endif
+	$(TARGET_BIN)/test/mod_lua_test
 
 .PHONY: test-valgrind
 test-valgrind: test-build
-ifndef LUA_CORE
-$(warning ***************************************************************)
-$(warning *)
-$(warning *  LUA_CORE is not defined. )
-$(warning *  LUA_CORE should be set to a valid path. )
-$(warning *)
-$(warning ***************************************************************)
-$(error )
-else
-	AS_SYSTEM_LUA=$(LUA_CORE)/src valgrind $(TEST_VALGRIND) $(TARGET_BIN)/test/mod_lua_test 1>&2 2>mod_lua_test-valgrind
-endif
+	valgrind $(TEST_VALGRIND) $(TARGET_BIN)/test/mod_lua_test 1>&2 2>mod_lua_test-valgrind
 
 .PHONY: test-build
 test-build: test/mod_lua_test
