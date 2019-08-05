@@ -194,7 +194,7 @@ $(TARGET_LIB)/libmod_lua.a: $(MOD_LUA:%=$(TARGET_OBJ)/%) | $(COMMON)/$(TARGET_IN
 	$(archive)
 
 $(TARGET_INCL)/aerospike: | $(TARGET_INCL)
-	mkdir $@
+	mkdir -p $@
 
 $(TARGET_INCL)/aerospike/%.h:: $(SOURCE_INCL)/aerospike/%.h | $(TARGET_INCL)/aerospike
 	cp -p $^ $(TARGET_INCL)/aerospike
