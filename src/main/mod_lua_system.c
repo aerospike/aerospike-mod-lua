@@ -299,6 +299,7 @@ const char as_lua_aerospike[] =
 "		[\"getmetatable\"] = getmetatable,\n"
 "		[\"ipairs\"] = ipairs,\n"
 "		[\"load\"] = load,\n"
+"		[\"loadstring\"] = loadstring,\n"
 "		[\"module\"] = module,\n"
 "		[\"next\"] = next,\n"
 "		[\"pairs\"] = pairs,\n"
