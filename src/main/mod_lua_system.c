@@ -1,22 +1,28 @@
 /*
- * Copyright 2008-2018 Aerospike, Inc.
+ * mod_lua_system.c
+ *
+ * Copyright (C) 2018-2020 Aerospike, Inc.
  *
  * Portions may be licensed to Aerospike, Inc. under one or more contributor
  * license agreements.
  *
- * Licensed under the Apache License, Version 2.0 (the "License"); you may not
- * use this file except in compliance with the License. You may obtain a copy of
- * the License at http://www.apache.org/licenses/LICENSE-2.0
+ * This program is free software: you can redistribute it and/or modify it under
+ * the terms of the GNU Affero General Public License as published by the Free
+ * Software Foundation, either version 3 of the License, or (at your option) any
+ * later version.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
- * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
- * License for the specific language governing permissions and limitations under
- * the License.
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for more
+ * details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see http://www.gnu.org/licenses/
  */
+
 #include <aerospike/as_std.h>
 
-// This system lua code in the lua-core repo have been converted to these strings.
+// Auto-generated from system lua code in the lua-core repo.
 
 const char as_lua_as[] =
 "Map = Map or getmetatable(map())\n"
@@ -262,7 +268,6 @@ const char as_lua_stream_ops[] =
 size_t as_lua_stream_ops_size = sizeof(as_lua_stream_ops);
 
 const char as_lua_aerospike[] =
-"sandboxed = {}\n"
 "ldebug = debug;\n"
 "function trace(m, ...)\n"
 "	return aerospike:log(4, string.format(m, ...))\n"
@@ -276,72 +281,9 @@ const char as_lua_aerospike[] =
 "function warn(m, ...)\n"
 "	return aerospike:log(1, string.format(m, ...))\n"
 "end\n"
-"function env_record()\n"
-"	return {\n"
-"		[\"record\"] = record,\n"
-"		[\"iterator\"] = iterator,\n"
-"		[\"list\"] = list,\n"
-"		[\"map\"] = map,\n"
-"		[\"bytes\"] = bytes,\n"
-"		[\"geojson\"] = geojson,\n"
-"		[\"aerospike\"] = aerospike,\n"
-"		[\"Map\"] = Map, \n"
-"		[\"List\"] = List,\n"
-"		[\"Bytes\"] = Bytes,\n"
-"		[\"GeoJSON\"] = GeoJSON,\n"
-"		[\"putX\"] = putX,\n"
-"		[\"trace\"] = trace,\n"
-"		[\"debug\"] = debug,\n"
-"		[\"info\"] = info,\n"
-"		[\"warn\"] = warn,\n"
-"		[\"collectgarbage\"] = collectgarbage,\n"
-"		[\"error\"] = error,\n"
-"		[\"getmetatable\"] = getmetatable,\n"
-"		[\"ipairs\"] = ipairs,\n"
-"		[\"load\"] = load,\n"
-"		[\"loadstring\"] = loadstring,\n"
-"		[\"module\"] = module,\n"
-"		[\"next\"] = next,\n"
-"		[\"pairs\"] = pairs,\n"
-"		[\"print\"] = print,\n"
-"		[\"pcall\"] = pcall,\n"
-"		[\"rawequal\"] = rawequal,\n"
-"		[\"rawget\"] = rawget,\n"
-"		[\"rawset\"] = rawset,\n"
-"		[\"require\"] = require,\n"
-"		[\"require\"] = require,\n"
-"		[\"select\"] = select,\n"
-"		[\"setmetatable\"] = setmetatable,\n"
-"		[\"setfenv\"] = setfenv,\n"
-"		[\"tonumber\"] = tonumber,\n"
-"		[\"tostring\"] = tostring,\n"
-"		[\"type\"] = type,\n"
-"		[\"unpack\"] = unpack,\n"
-"		[\"xpcall\"] = xpcall,\n"
-"		[\"math\"] = math,\n"
-"		[\"io\"] = io,\n"
-"		[\"os\"] = {\n"
-"			['clock'] = os.clock,\n"
-"			['date'] = os.date,\n"
-"			['difftime'] = os.difftime,\n"
-"			['getenv'] = os.getenv,\n"
-"			['setlocale'] = os.setlocale,\n"
-"			['time'] = os.time,\n"
-"			['tmpname'] = os.tmpname\n"
-"		},\n"
-"		[\"package\"] = package,\n"
-"		[\"string\"] = string,\n"
-"		[\"table\"] = table,\n"
-"		[\"_G\"] = {}\n"
-"	}\n"
-"end\n"
 "function apply_record(f, r, ...)\n"
 "	if f == nil then\n"
 "		error(\"function not found\", 2)\n"
-"	end\n"
-"	if not sandboxed[f] then\n"
-"		setfenv(f,env_record())\n"
-"		sandboxed[f] = true\n"
 "	end\n"
 "	success, result = pcall(f, r, ...)\n"
 "	if success then\n"
@@ -355,10 +297,6 @@ const char as_lua_aerospike[] =
 "	if f == nil then\n"
 "		error(\"function not found\", 2)\n"
 "		return 2\n"
-"	end\n"
-"	if not sandboxed[f] then\n"
-"		setfenv(f,env_record())\n"
-"		sandboxed[f] = true\n"
 "	end\n"
 "	local stream_ops = StreamOps_create();\n"
 "	success, result = pcall(f, stream_ops, ...)\n"
