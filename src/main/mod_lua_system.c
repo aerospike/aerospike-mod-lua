@@ -268,7 +268,6 @@ const char as_lua_stream_ops[] =
 size_t as_lua_stream_ops_size = sizeof(as_lua_stream_ops);
 
 const char as_lua_aerospike[] =
-"ldebug = debug;\n"
 "function trace(m, ...)\n"
 "	return aerospike:log(4, string.format(m, ...))\n"
 "end\n"
