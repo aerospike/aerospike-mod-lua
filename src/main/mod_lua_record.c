@@ -178,7 +178,10 @@ static int mod_lua_record_bin_names(lua_State * l) {
     as_rec * rec = (as_rec *) mod_lua_checkrecord(l, 1);
     bin_names_data udata = {.state = l, .return_val = 0};
 
-	as_rec_bin_names(rec, bin_names_callback, (void *) &udata);
+    // Hook will either return non-0 (error) or make callback and return 0.
+	if (as_rec_bin_names(rec, bin_names_callback, (void *)&udata) != 0) {
+		return luaL_error(l, "can't get bin names");
+	}
 
     return 1;
 }
@@ -247,12 +250,11 @@ static int mod_lua_record_newindex(lua_State * l) {
         // reference to this value is created by mod_lua_toval
         // then stashed in the record cache
         as_val * value = (as_val *) mod_lua_toval(l, 3);
-        if ( value != NULL ) {
-            as_rec_set(rec, name, value);
+        if ( value == NULL ) {
+        	return luaL_error(l, "can't set bin %s to unsupported type", name);
         }
-        else {
-            as_rec_remove(rec, name);
-        }
+
+        as_rec_set(rec, name, value);
     }
     return 0;
 }
