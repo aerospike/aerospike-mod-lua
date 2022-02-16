@@ -1351,8 +1351,7 @@ as_module mod_lua = {
 static lua_hash_ele*
 lua_hash_get_row_head(const lua_hash* h, const char* key)
 {
-	uint64_t hashed_key = cf_hash_fnv32((const uint8_t*)key, strlen(key));
-	uint32_t row_i = (uint32_t)(hashed_key % h->n_rows);
+	uint32_t row_i = cf_wyhash32((const uint8_t*)key, strlen(key)) % h->n_rows;
 
 	lua_hash_ele* e = (lua_hash_ele*)(h->table + (h->ele_size * row_i));
 
