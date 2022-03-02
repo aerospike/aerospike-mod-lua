@@ -42,7 +42,7 @@ ifeq ($(USE_LUAJIT),1)
   CC_FLAGS += -DUSE_LUAJIT
 endif
 
-ifneq ($(ARCH),$(filter $(ARCH),ppc64 ppc64le))
+ifneq ($(ARCH),$(filter $(ARCH),ppc64 ppc64le arm64))
 CC_FLAGS += -march=nocona
 endif
 
