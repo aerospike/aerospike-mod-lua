@@ -179,10 +179,10 @@ TEST(hash_udf_5, "cleared hash callback is called correctly")
 	lua_hash_clear(h, &clear_cb);
 	// These depend on the order in the hash. The hash is stable so we can
 	// hardcode it.
-	assert_string_eq(vals[0], "test1");
-	assert_string_eq(vals[1], "test4");
+	assert_string_eq(vals[0], "test3");
+	assert_string_eq(vals[1], "test1");
 	assert_string_eq(vals[2], "test2");
-	assert_string_eq(vals[3], "test3");
+	assert_string_eq(vals[3], "test4");
 	assert_int_eq(val_count, 4);
 
 	hash_udf_teardown_test();
