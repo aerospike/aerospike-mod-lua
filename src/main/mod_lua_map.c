@@ -143,12 +143,27 @@ static int mod_lua_map_index(lua_State * l) {
 	return 1;
 }
 
+static inline as_val * valid_key_val(as_val * key_val) {
+	if (key_val) {
+		switch (as_val_type(key_val)) {
+		case AS_REC:
+		case AS_MAP:
+		case AS_LIST:
+			as_val_destroy(key_val);
+			return NULL;
+		default:
+			break;
+		}
+	}
+	return key_val;
+}
+
 static int mod_lua_map_newindex(lua_State * l) {
 	as_map * map = mod_lua_checkmap(l, 1);
 	if ( map ) {
-		as_val * key = mod_lua_takeval(l, 2);
+		as_val * key = valid_key_val(mod_lua_takeval(l, 2));
 		as_val * val = mod_lua_takeval(l, 3);
-		if ( !key ) {
+		if ( !key || as_val_type(val) == AS_REC ) {
 			as_val_destroy(key);
 			as_val_destroy(val);
 		}
