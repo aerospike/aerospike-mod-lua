@@ -61,6 +61,14 @@ static int mod_lua_list_gc(lua_State * l) {
 	return 0;
 }
 
+static inline as_val * valid_list_val(as_val * val) {
+	if (val && as_val_type(val) == AS_REC) {
+		as_val_destroy(val);
+		return NULL;
+	}
+	return val;
+}
+
 static int mod_lua_list_insert(lua_State * l) {
 	as_list * list = mod_lua_checklist(l, 1);
 	if (list) {
@@ -68,7 +76,7 @@ static int mod_lua_list_insert(lua_State * l) {
 		// Lua index is 1-based.
 		if (idx > 0) {
 			// increases ref, correct - held by box and this list
-			as_val * value = mod_lua_toval(l, 3);
+			as_val * value = valid_list_val(mod_lua_toval(l, 3));
 			if (value) {
 				as_list_insert(list, (uint32_t)idx - 1, value);
 			}
@@ -81,7 +89,7 @@ static int mod_lua_list_append(lua_State * l) {
 	as_list * list = mod_lua_checklist(l, 1);
 	if ( list ) {
 		// increases ref, correct - held by box and this list
-		as_val * value = mod_lua_toval(l, 2);
+		as_val * value = valid_list_val(mod_lua_toval(l, 2));
 		if ( value ) {
 			as_list_append(list,value);
 		}
@@ -92,7 +100,7 @@ static int mod_lua_list_append(lua_State * l) {
 static int mod_lua_list_prepend(lua_State * l) {
 	as_list * list = mod_lua_checklist(l, 1);
 	if ( list ) {
-		as_val * value = mod_lua_toval(l, 2);
+		as_val * value = valid_list_val(mod_lua_toval(l, 2));
 		if ( value ) {
 			as_list_prepend(list,value);
 		}
@@ -280,7 +288,7 @@ static int mod_lua_list_newindex(lua_State * l) {
 	if ( list ) {
 		const uint32_t idx = (uint32_t) luaL_optlong(l, 2, 0);
 		if (idx > 0) { // Lua is 1 index, C is 0
-			as_val * val = mod_lua_takeval(l, 3);
+			as_val * val = valid_list_val(mod_lua_takeval(l, 3));
 			if ( val ) {
 				as_list_set(list, idx - 1, val);
 			}
