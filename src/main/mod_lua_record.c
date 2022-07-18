@@ -1,5 +1,5 @@
 /* 
- * Copyright 2008-2018 Aerospike, Inc.
+ * Copyright 2008-2022 Aerospike, Inc.
  *
  * Portions may be licensed to Aerospike, Inc. under one or more contributor
  * license agreements.
@@ -183,7 +183,7 @@ void bin_names_callback(char * bin_names, uint32_t nbins, uint16_t max_name_size
 		lua_rawseti(l, -2, 1);
 	}
 	else {
-		for (uint16_t i = 0; i < nbins; i++) {
+		for (uint32_t i = 0; i < nbins; i++) {
 			lua_pushstring(l, &bin_names[i * max_name_size]);
 			lua_rawseti(l, -2, i + 1);
 		}
