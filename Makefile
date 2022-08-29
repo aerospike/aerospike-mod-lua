@@ -46,6 +46,10 @@ ifeq ($(ARCH),x86_64)
   CC_FLAGS += -march=nocona
 endif
 
+ifeq ($(ARCH),aarch64)
+  CC_CFLAGS += -mcpu=neoverse-n1
+endif
+
 ifeq ($(TARGET_SERVER), )
   CC_FLAGS += -DAS_MOD_LUA_CLIENT
 endif
