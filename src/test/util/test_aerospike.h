@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2018 Aerospike, Inc.
+ * Copyright 2008-2022 Aerospike, Inc.
  *
  * Portions may be licensed to Aerospike, Inc. under one or more contributor
  * license agreements.
@@ -35,7 +35,7 @@ extern as_udf_context ctx;
  *****************************************************************************/
 
 as_aerospike* 
-test_aerospike_new();
+test_aerospike_new(void);
 
 as_aerospike*
 test_aerospike_init(as_aerospike *);

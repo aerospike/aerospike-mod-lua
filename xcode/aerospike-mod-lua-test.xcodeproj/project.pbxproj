@@ -9,7 +9,6 @@
 /* Begin PBXBuildFile section */
 		BF1C2ADA20BDD68400868695 /* hash_udf.c in Sources */ = {isa = PBXBuildFile; fileRef = BF1C2AD920BDD68400868695 /* hash_udf.c */; };
 		BF255C011B4C9EF600816CCC /* list_udf.c in Sources */ = {isa = PBXBuildFile; fileRef = BF255C001B4C9EF600816CCC /* list_udf.c */; };
-		BF814A471F85A0D200B46BD1 /* libaerospike-common.a in Frameworks */ = {isa = PBXBuildFile; fileRef = BF814A441F85A08E00B46BD1 /* libaerospike-common.a */; };
 		BFC7B29E18C90BEE0047DA3C /* mod_lua_test.c in Sources */ = {isa = PBXBuildFile; fileRef = BFC7B29B18C90BEE0047DA3C /* mod_lua_test.c */; };
 		BFC7B29F18C90BEE0047DA3C /* test.c in Sources */ = {isa = PBXBuildFile; fileRef = BFC7B29C18C90BEE0047DA3C /* test.c */; };
 		BFC7B2A118C90C040047DA3C /* record_udf.c in Sources */ = {isa = PBXBuildFile; fileRef = BFC7B2A018C90C040047DA3C /* record_udf.c */; };
@@ -20,8 +19,9 @@
 		BFC7B2AC18C90C4C0047DA3C /* test_aerospike.c in Sources */ = {isa = PBXBuildFile; fileRef = BFC7B2A718C90C4C0047DA3C /* test_aerospike.c */; };
 		BFC7B2AD18C90C4C0047DA3C /* test_logger.c in Sources */ = {isa = PBXBuildFile; fileRef = BFC7B2A818C90C4C0047DA3C /* test_logger.c */; };
 		BFC7B2AF18C90C5D0047DA3C /* validation_basics.c in Sources */ = {isa = PBXBuildFile; fileRef = BFC7B2AE18C90C5D0047DA3C /* validation_basics.c */; };
-		BFC7B2C318C91B0D0047DA3C /* liblua.a in Frameworks */ = {isa = PBXBuildFile; fileRef = BFC7B2C118C91A4D0047DA3C /* liblua.a */; };
 		BFD8C85E18D7E10500CB8B6D /* libaerospike-mod-lua.a in Frameworks */ = {isa = PBXBuildFile; fileRef = BF48303718D7E0CC00032348 /* libaerospike-mod-lua.a */; };
+		BFD8EF2428D5367100B8709A /* libaerospike-common.a in Frameworks */ = {isa = PBXBuildFile; fileRef = BFD8EF2128D5362800B8709A /* libaerospike-common.a */; };
+		BFD8EF2928D5375C00B8709A /* liblua.5.1.5.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = BFD8EF2828D5375C00B8709A /* liblua.5.1.5.dylib */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -32,26 +32,26 @@
 			remoteGlobalIDString = BFBB7F5118C0105A0080851E;
 			remoteInfo = "aerospike-mod-lua";
 		};
-		BF814A431F85A08E00B46BD1 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = BF814A3F1F85A08E00B46BD1 /* aerospike-common.xcodeproj */;
-			proxyType = 2;
-			remoteGlobalIDString = BFBB7EEF18BFFD2D0080851E;
-			remoteInfo = "aerospike-common";
-		};
-		BF814A451F85A0BB00B46BD1 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = BF814A3F1F85A08E00B46BD1 /* aerospike-common.xcodeproj */;
-			proxyType = 1;
-			remoteGlobalIDString = BFBB7EEE18BFFD2D0080851E;
-			remoteInfo = "aerospike-common";
-		};
 		BFD8C85918D7E0EE00CB8B6D /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = BFC7B29518C90A2B0047DA3C /* aerospike-mod-lua.xcodeproj */;
 			proxyType = 1;
 			remoteGlobalIDString = BFBB7F5018C0105A0080851E;
 			remoteInfo = "aerospike-mod-lua";
+		};
+		BFD8EF2028D5362800B8709A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = BFD8EF1C28D5362800B8709A /* aerospike-common.xcodeproj */;
+			proxyType = 2;
+			remoteGlobalIDString = BFBB7EEF18BFFD2D0080851E;
+			remoteInfo = "aerospike-common";
+		};
+		BFD8EF2228D5365700B8709A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = BFD8EF1C28D5362800B8709A /* aerospike-common.xcodeproj */;
+			proxyType = 1;
+			remoteGlobalIDString = BFBB7EEE18BFFD2D0080851E;
+			remoteInfo = "aerospike-common";
 		};
 /* End PBXContainerItemProxy section */
 
@@ -70,7 +70,11 @@
 /* Begin PBXFileReference section */
 		BF1C2AD920BDD68400868695 /* hash_udf.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = hash_udf.c; path = ../src/test/hash/hash_udf.c; sourceTree = "<group>"; };
 		BF255C001B4C9EF600816CCC /* list_udf.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = list_udf.c; path = ../src/test/list/list_udf.c; sourceTree = "<group>"; };
-		BF814A3F1F85A08E00B46BD1 /* aerospike-common.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = "aerospike-common.xcodeproj"; path = "../../common/xcode/aerospike-common.xcodeproj"; sourceTree = "<group>"; };
+		BF417C1228D7F0940002F940 /* consumer_stream.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = consumer_stream.h; path = ../src/test/util/consumer_stream.h; sourceTree = "<group>"; };
+		BF417C1328D7F0940002F940 /* map_rec.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = map_rec.h; path = ../src/test/util/map_rec.h; sourceTree = "<group>"; };
+		BF417C1428D7F0940002F940 /* producer_stream.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = producer_stream.h; path = ../src/test/util/producer_stream.h; sourceTree = "<group>"; };
+		BF417C1528D7F0940002F940 /* test_logger.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = test_logger.h; path = ../src/test/util/test_logger.h; sourceTree = "<group>"; };
+		BF417C1628D7F0940002F940 /* test_aerospike.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = test_aerospike.h; path = ../src/test/util/test_aerospike.h; sourceTree = "<group>"; };
 		BFC7B28918C90A0A0047DA3C /* aerospike-mod-lua-test */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "aerospike-mod-lua-test"; sourceTree = BUILT_PRODUCTS_DIR; };
 		BFC7B29518C90A2B0047DA3C /* aerospike-mod-lua.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = "aerospike-mod-lua.xcodeproj"; sourceTree = "<group>"; };
 		BFC7B29B18C90BEE0047DA3C /* mod_lua_test.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = mod_lua_test.c; path = ../src/test/mod_lua_test.c; sourceTree = "<group>"; };
@@ -84,7 +88,8 @@
 		BFC7B2A718C90C4C0047DA3C /* test_aerospike.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = test_aerospike.c; path = ../src/test/util/test_aerospike.c; sourceTree = "<group>"; };
 		BFC7B2A818C90C4C0047DA3C /* test_logger.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = test_logger.c; path = ../src/test/util/test_logger.c; sourceTree = "<group>"; };
 		BFC7B2AE18C90C5D0047DA3C /* validation_basics.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = validation_basics.c; path = ../src/test/validation/validation_basics.c; sourceTree = "<group>"; };
-		BFC7B2C118C91A4D0047DA3C /* liblua.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = liblua.a; path = /usr/local/lib/liblua.a; sourceTree = "<absolute>"; };
+		BFD8EF1C28D5362800B8709A /* aerospike-common.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = "aerospike-common.xcodeproj"; path = "../../aerospike-common/xcode/aerospike-common.xcodeproj"; sourceTree = "<group>"; };
+		BFD8EF2828D5375C00B8709A /* liblua.5.1.5.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = liblua.5.1.5.dylib; path = "../../../../opt/homebrew/Cellar/lua@5.1/5.1.5_8/lib/liblua.5.1.5.dylib"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -93,8 +98,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				BFD8C85E18D7E10500CB8B6D /* libaerospike-mod-lua.a in Frameworks */,
-				BF814A471F85A0D200B46BD1 /* libaerospike-common.a in Frameworks */,
-				BFC7B2C318C91B0D0047DA3C /* liblua.a in Frameworks */,
+				BFD8EF2428D5367100B8709A /* libaerospike-common.a in Frameworks */,
+				BFD8EF2928D5375C00B8709A /* liblua.5.1.5.dylib in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -117,20 +122,11 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
-		BF814A401F85A08E00B46BD1 /* Products */ = {
-			isa = PBXGroup;
-			children = (
-				BF814A441F85A08E00B46BD1 /* libaerospike-common.a */,
-			);
-			name = Products;
-			sourceTree = "<group>";
-		};
 		BFC65EA31C9378DF0079DF5A /* libs */ = {
 			isa = PBXGroup;
 			children = (
-				BF814A3F1F85A08E00B46BD1 /* aerospike-common.xcodeproj */,
+				BFD8EF1C28D5362800B8709A /* aerospike-common.xcodeproj */,
 				BFC7B29518C90A2B0047DA3C /* aerospike-mod-lua.xcodeproj */,
-				BFC7B2C118C91A4D0047DA3C /* liblua.a */,
 			);
 			name = libs;
 			sourceTree = "<group>";
@@ -162,6 +158,11 @@
 		BFC65EA61C93796F0079DF5A /* util */ = {
 			isa = PBXGroup;
 			children = (
+				BF417C1228D7F0940002F940 /* consumer_stream.h */,
+				BF417C1328D7F0940002F940 /* map_rec.h */,
+				BF417C1428D7F0940002F940 /* producer_stream.h */,
+				BF417C1628D7F0940002F940 /* test_aerospike.h */,
+				BF417C1528D7F0940002F940 /* test_logger.h */,
 				BFC7B2A418C90C4C0047DA3C /* consumer_stream.c */,
 				BFC7B2A518C90C4C0047DA3C /* map_rec.c */,
 				BFC7B2A618C90C4C0047DA3C /* producer_stream.c */,
@@ -201,6 +202,7 @@
 				BFC65EA41C9379130079DF5A /* src */,
 				BFC65EA31C9378DF0079DF5A /* libs */,
 				BFC7B28A18C90A0A0047DA3C /* Products */,
+				BFD8EF2728D5375C00B8709A /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -210,6 +212,22 @@
 				BFC7B28918C90A0A0047DA3C /* aerospike-mod-lua-test */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		BFD8EF1D28D5362800B8709A /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				BFD8EF2128D5362800B8709A /* libaerospike-common.a */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		BFD8EF2728D5375C00B8709A /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				BFD8EF2828D5375C00B8709A /* liblua.5.1.5.dylib */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -227,7 +245,7 @@
 			);
 			dependencies = (
 				BFD8C85A18D7E0EE00CB8B6D /* PBXTargetDependency */,
-				BF814A461F85A0BB00B46BD1 /* PBXTargetDependency */,
+				BFD8EF2328D5365700B8709A /* PBXTargetDependency */,
 			);
 			name = "aerospike-mod-lua-test";
 			productName = "aerospike-mod-lua-test";
@@ -240,23 +258,24 @@
 		BFC7B28118C90A0A0047DA3C /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
-				LastUpgradeCheck = 0820;
+				LastUpgradeCheck = 1340;
 				ORGANIZATIONNAME = Aerospike;
 			};
 			buildConfigurationList = BFC7B28418C90A0A0047DA3C /* Build configuration list for PBXProject "aerospike-mod-lua-test" */;
 			compatibilityVersion = "Xcode 3.2";
-			developmentRegion = English;
+			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
+				Base,
 			);
 			mainGroup = BFC7B28018C90A0A0047DA3C;
 			productRefGroup = BFC7B28A18C90A0A0047DA3C /* Products */;
 			projectDirPath = "";
 			projectReferences = (
 				{
-					ProductGroup = BF814A401F85A08E00B46BD1 /* Products */;
-					ProjectRef = BF814A3F1F85A08E00B46BD1 /* aerospike-common.xcodeproj */;
+					ProductGroup = BFD8EF1D28D5362800B8709A /* Products */;
+					ProjectRef = BFD8EF1C28D5362800B8709A /* aerospike-common.xcodeproj */;
 				},
 				{
 					ProductGroup = BF48303318D7E0CC00032348 /* Products */;
@@ -278,11 +297,11 @@
 			remoteRef = BF48303618D7E0CC00032348 /* PBXContainerItemProxy */;
 			sourceTree = BUILT_PRODUCTS_DIR;
 		};
-		BF814A441F85A08E00B46BD1 /* libaerospike-common.a */ = {
+		BFD8EF2128D5362800B8709A /* libaerospike-common.a */ = {
 			isa = PBXReferenceProxy;
 			fileType = archive.ar;
 			path = "libaerospike-common.a";
-			remoteRef = BF814A431F85A08E00B46BD1 /* PBXContainerItemProxy */;
+			remoteRef = BFD8EF2028D5362800B8709A /* PBXContainerItemProxy */;
 			sourceTree = BUILT_PRODUCTS_DIR;
 		};
 /* End PBXReferenceProxy section */
@@ -310,15 +329,15 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
-		BF814A461F85A0BB00B46BD1 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			name = "aerospike-common";
-			targetProxy = BF814A451F85A0BB00B46BD1 /* PBXContainerItemProxy */;
-		};
 		BFD8C85A18D7E0EE00CB8B6D /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			name = "aerospike-mod-lua";
 			targetProxy = BFD8C85918D7E0EE00CB8B6D /* PBXContainerItemProxy */;
+		};
+		BFD8EF2328D5365700B8709A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = "aerospike-common";
+			targetProxy = BFD8EF2228D5365700B8709A /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -327,17 +346,27 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
 				CLANG_CXX_LIBRARY = "libc++";
 				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
 				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
 				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
 				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
 				CLANG_WARN_EMPTY_BODY = YES;
 				CLANG_WARN_ENUM_CONVERSION = YES;
 				CLANG_WARN_INFINITE_RECURSION = YES;
 				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
 				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
@@ -370,17 +399,27 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
 				CLANG_CXX_LIBRARY = "libc++";
 				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
 				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
 				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
 				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
 				CLANG_WARN_EMPTY_BODY = YES;
 				CLANG_WARN_ENUM_CONVERSION = YES;
 				CLANG_WARN_INFINITE_RECURSION = YES;
 				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
 				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
@@ -405,6 +444,7 @@
 		BFC7B29318C90A0A0047DA3C /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
@@ -412,8 +452,11 @@
 					../src/include,
 					/usr/local/include,
 				);
-				LIBRARY_SEARCH_PATHS = "$(inherited)";
-				MACOSX_DEPLOYMENT_TARGET = 10.12;
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"/opt/homebrew/Cellar/lua@5.1/5.1.5_8/lib",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 12.0;
 				OTHER_LDFLAGS = "-L/usr/local/lib";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
@@ -423,6 +466,7 @@
 		BFC7B29418C90A0A0047DA3C /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
@@ -430,8 +474,11 @@
 					../src/include,
 					/usr/local/include,
 				);
-				LIBRARY_SEARCH_PATHS = "$(inherited)";
-				MACOSX_DEPLOYMENT_TARGET = 10.12;
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"/opt/homebrew/Cellar/lua@5.1/5.1.5_8/lib",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 12.0;
 				OTHER_LDFLAGS = "-L/usr/local/lib";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;

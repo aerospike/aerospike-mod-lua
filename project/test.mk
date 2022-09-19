@@ -8,6 +8,15 @@ TEST_CFLAGS =
 TEST_CFLAGS += -I$(TARGET_INCL)
 TEST_CFLAGS += -I$(COMMON)/$(TARGET_INCL)
 
+TEST_LDFLAGS =
+
+ifeq ($(OS),Darwin)
+  ifneq ($(wildcard /opt/homebrew/opt/openssl/lib),)
+    # Mac new homebrew openssl lib path
+    TEST_LDFLAGS += -L/opt/homebrew/opt/openssl/lib
+  endif
+endif
+
 TEST_LDFLAGS += -lssl -lcrypto $(LIB_LUA) -lpthread -lm
 
 ifeq ($(OS),Darwin)

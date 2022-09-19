@@ -65,16 +65,22 @@ ifeq ($(OS),Darwin)
   CC_FLAGS += -D_DARWIN_UNLIMITED_SELECT
   CC_FLAGS += -DLUA_DEBUG_HOOK
 
-  # homebrew openssl include path
-  ifneq ($(wildcard /usr/local/opt/openssl/include),)
-    CC_FLAGS += -I/usr/local/opt/openssl/include
+  ifneq ($(wildcard /opt/homebrew/include/lua5.1),)
+    # Mac new homebrew lua include path
+    CC_FLAGS += -I/opt/homebrew/include/lua5.1
   endif
 
-  # macports openssl include path
-  ifneq ($(wildcard /opt/local/include/openssl),)
+  ifneq ($(wildcard /opt/homebrew/opt/openssl/include),)
+    # Mac new homebrew openssl include path
+    CC_FLAGS += -I/opt/homebrew/opt/openssl/include
+  else ifneq ($(wildcard /usr/local/opt/openssl/include),)
+    # Mac old homebrew openssl include path
+    CC_FLAGS += -I/usr/local/opt/openssl/include
+  else ifneq ($(wildcard /opt/local/include/openssl),)
+    # macports openssl include path
     CC_FLAGS += -I/opt/local/include
   endif
-
+  
   LUA_PLATFORM = macosx
 else ifeq ($(OS),FreeBSD)
   CC_FLAGS += -finline-functions
@@ -132,7 +138,11 @@ else
       ifneq ($(wildcard /usr/local/include),)
         INC_PATH += /usr/local/include
       endif
-      ifneq ($(wildcard /usr/local/lib),)
+      
+      ifneq ($(wildcard /opt/homebrew/lib),)
+        LIB_LUA = -L/opt/homebrew/lib
+        LUA_SUFFIX = 5.1
+	  else ifneq ($(wildcard /usr/local/lib),)
         LIB_LUA = -L/usr/local/lib
       endif
     endif
