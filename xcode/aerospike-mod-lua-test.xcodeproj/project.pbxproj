@@ -454,7 +454,7 @@
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
-					"/opt/homebrew/Cellar/lua@5.1/5.1.5_8/lib",
+					"$(HomeBrew)/lib",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 12.0;
 				OTHER_LDFLAGS = "-L/usr/local/lib";
@@ -476,7 +476,7 @@
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
-					"/opt/homebrew/Cellar/lua@5.1/5.1.5_8/lib",
+					"$(HomeBrew)/lib",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 12.0;
 				OTHER_LDFLAGS = "-L/usr/local/lib";
