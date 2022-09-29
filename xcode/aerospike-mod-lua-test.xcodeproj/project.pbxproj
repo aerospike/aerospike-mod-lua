@@ -454,7 +454,7 @@
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
-					"$(HomeBrew)/lib",
+					"$(ExternalLib)",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 12.0;
 				OTHER_LDFLAGS = "-L/usr/local/lib";
@@ -476,7 +476,7 @@
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
-					"$(HomeBrew)/lib",
+					"$(ExternalLib)",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 12.0;
 				OTHER_LDFLAGS = "-L/usr/local/lib";

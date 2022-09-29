@@ -286,7 +286,7 @@
 					"$(AerospikeCommon)/src/include",
 					../src/include,
 					/usr/local/include,
-					"$(HomeBrew)/include/lua5.1",
+					/opt/homebrew/include/lua5.1,
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.12;
 				OTHER_CFLAGS = (
@@ -308,7 +308,7 @@
 					"$(AerospikeCommon)/src/include",
 					../src/include,
 					/usr/local/include,
-					"$(HomeBrew)/include/lua5.1",
+					/opt/homebrew/include/lua5.1,
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.12;
 				OTHER_CFLAGS = (
