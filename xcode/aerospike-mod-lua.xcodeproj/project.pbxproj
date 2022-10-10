@@ -285,8 +285,8 @@
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					"$(AerospikeCommon)/src/include",
 					../src/include,
-					/usr/local/include,
-					/opt/homebrew/include/lua5.1,
+					"$(External)/include",
+					"$(External)/include/lua5.1",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.12;
 				OTHER_CFLAGS = (
@@ -307,8 +307,8 @@
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					"$(AerospikeCommon)/src/include",
 					../src/include,
-					/usr/local/include,
-					/opt/homebrew/include/lua5.1,
+					"$(External)/include",
+					"$(External)/include/lua5.1",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.12;
 				OTHER_CFLAGS = (
