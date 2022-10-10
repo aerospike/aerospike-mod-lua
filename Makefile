@@ -63,7 +63,6 @@ endif
 
 ifeq ($(OS),Darwin)
   CC_FLAGS += -D_DARWIN_UNLIMITED_SELECT
-  CC_FLAGS += -DLUA_DEBUG_HOOK
 
   ifneq ($(wildcard /opt/homebrew/include/lua5.1),)
     # Mac new homebrew lua include path

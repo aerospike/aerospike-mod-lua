@@ -37,7 +37,7 @@ struct cache_entry_s;
 typedef struct cache_entry_s cache_entry;
 
 void lua_hash_clear(lua_hash* h, void (*cb)(cache_entry *));
-lua_hash* lua_hash_create(uint32_t key_size, uint32_t n_rows);
+lua_hash* lua_hash_create(uint32_t n_rows);
 void lua_hash_destroy(lua_hash* h);
 bool lua_hash_get(const lua_hash* h, const char* key, cache_entry** p_value);
 cache_entry* lua_hash_put(lua_hash* h, const char* key, cache_entry* value);
@@ -61,7 +61,7 @@ lua_hash* h;
 static void
 hash_udf_setup_test()
 {
-	h = lua_hash_create(5, 3);
+	h = lua_hash_create(3);
 	lua_hash_put(h, "a", (cache_entry*)a_val);
 	lua_hash_put(h, "b", (cache_entry*)b_val);
 	lua_hash_put(h, "c", (cache_entry*)c_val);
@@ -78,6 +78,8 @@ static void
 hash_udf_teardown_test()
 {
 	debug("tearing down");
+
+	// Not used by client or server, for this test only.
 	lua_hash_destroy(h);
 }
 
