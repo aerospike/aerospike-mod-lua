@@ -969,6 +969,9 @@ get_state(bool cache_enabled, const char* user_path,  cache_item* citem)
 static int
 pushargs(lua_State* l, as_list* args)
 {
+	// Grow the stack if necessary.
+	lua_checkstack(l, as_list_size(args) + LUA_MINSTACK);
+
 	pushargs_data data = { .l = l };
 
 	as_list_foreach(args, pushargs_foreach, &data);
