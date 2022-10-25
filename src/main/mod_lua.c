@@ -506,6 +506,11 @@ apply_record(as_module* m, as_udf_context* udf_ctx, const char* filename,
 	// Push each argument onto the stack.
 	int argc = pushargs(l, args);
 
+	if (argc < 0) {
+		release_state(g_lua_cfg.cache_enabled, &citem);
+		return 2;
+	}
+
 	if (argc > LUA_PARAM_COUNT_THRESHOLD) {
 		as_log_error("large number of lua function arguments (%d)", argc);
 	}
@@ -569,6 +574,11 @@ apply_stream(as_module* m, as_udf_context* udf_ctx, const char* filename,
 
 	// Push each argument onto the stack.
 	int argc = pushargs(l, args);
+
+	if (argc < 0) {
+		release_state(g_lua_cfg.cache_enabled, &citem);
+		return 2;
+	}
 
 	if (argc > LUA_PARAM_COUNT_THRESHOLD) {
 		as_log_error("large number of lua function arguments (%d)", argc);
@@ -969,14 +979,19 @@ get_state(bool cache_enabled, const char* user_path,  cache_item* citem)
 static int
 pushargs(lua_State* l, as_list* args)
 {
-	// Grow the stack if necessary.
-	lua_checkstack(l, as_list_size(args) + LUA_MINSTACK);
+#ifndef USE_LUAJIT
+	// Grow the stack if necessary. (Return value 0 is a failure.)
+	if (lua_checkstack(l, as_list_size(args) + LUA_MINSTACK) == 0) {
+		as_log_error("failed to push %u lua args", as_list_size(args));
+		return -1;
+	}
+#endif
 
 	pushargs_data data = { .l = l };
 
 	as_list_foreach(args, pushargs_foreach, &data);
 
-	return data.count;
+	return (int)data.count;
 }
 
 // Pushes arguments into the Lua stack. We scope the arguments to Lua, so Lua is
