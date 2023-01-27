@@ -283,7 +283,7 @@ static int mod_lua_record_newindex(lua_State * l) {
  * OBJECT TABLE
  *****************************************************************************/
 
-static const luaL_reg object_table[] = {
+static const luaL_Reg object_table[] = {
     {"ttl",        mod_lua_record_ttl},
     {"last_update_time", mod_lua_record_last_update_time},
     {"gen",        mod_lua_record_gen},
@@ -299,7 +299,7 @@ static const luaL_reg object_table[] = {
     {0, 0}
 };
 
-static const luaL_reg object_metatable[] = {
+static const luaL_Reg object_metatable[] = {
     // {"__index",         mod_lua_record_index},
     {0, 0}
 };
@@ -308,12 +308,12 @@ static const luaL_reg object_metatable[] = {
  * CLASS TABLE
  *****************************************************************************/
 /*
-static const luaL_reg class_table[] = {
+static const luaL_Reg class_table[] = {
     {0, 0}
 };
 */
 
-static const luaL_reg class_metatable[] = {
+static const luaL_Reg class_metatable[] = {
     {"__index",         mod_lua_record_index},
     {"__newindex",      mod_lua_record_newindex},
     {"__gc",            mod_lua_record_gc},

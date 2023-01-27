@@ -21,7 +21,7 @@
 
 #include "internal.h"
 
-int mod_lua_reg_object(lua_State * l, const char * name, const luaL_reg * table, const luaL_reg * metatable) {
+int mod_lua_reg_object(lua_State * l, const char * name, const luaL_Reg * table, const luaL_Reg * metatable) {
 
     int tableId = 0, metatableId = 0;
 
@@ -46,7 +46,7 @@ int mod_lua_reg_object(lua_State * l, const char * name, const luaL_reg * table,
     return 0;
 }
 
-int mod_lua_reg_class(lua_State * l, const char * name, const luaL_reg * table, const luaL_reg * metatable) {
+int mod_lua_reg_class(lua_State * l, const char * name, const luaL_Reg * table, const luaL_Reg * metatable) {
 
     int tableId = 0, metatableId = 0;
 

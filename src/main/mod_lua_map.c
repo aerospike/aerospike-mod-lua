@@ -329,7 +329,7 @@ static int mod_lua_map_values(lua_State * l) {
  * OBJECT TABLE
  *****************************************************************************/
 
-static const luaL_reg object_table[] = {
+static const luaL_Reg object_table[] = {
 	{"new",             mod_lua_map_new},    // Only supported in C.
 	{"create",          mod_lua_map_new},    // Supported in all languages.
 	{"iterator",        mod_lua_map_pairs},
@@ -343,7 +343,7 @@ static const luaL_reg object_table[] = {
 	{0, 0}
 };
 
-static const luaL_reg object_metatable[] = {
+static const luaL_Reg object_metatable[] = {
 	{"__call",          mod_lua_map_cons},
 	{0, 0}
 };
@@ -353,12 +353,12 @@ static const luaL_reg object_metatable[] = {
  *****************************************************************************/
 
 /*
-static const luaL_reg class_table[] = {
+static const luaL_Reg class_table[] = {
 	{0, 0}
 };
 */
 
-static const luaL_reg class_metatable[] = {
+static const luaL_Reg class_metatable[] = {
 	{"__index",         mod_lua_map_index},
 	{"__newindex",      mod_lua_map_newindex},
 	{"__len",           mod_lua_map_len},

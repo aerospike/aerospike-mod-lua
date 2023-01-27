@@ -1705,7 +1705,7 @@ static int mod_lua_bytes_get_bytes(lua_State * l)
  * OBJECT TABLE
  *****************************************************************************/
 
-static const luaL_reg bytes_object_table[] = {
+static const luaL_Reg bytes_object_table[] = {
 
 	{"size",			mod_lua_bytes_size},
 	{"set_size",		mod_lua_bytes_ensure},
@@ -1758,7 +1758,7 @@ static const luaL_reg bytes_object_table[] = {
 	{0, 0}
 };
 
-static const luaL_reg bytes_object_metatable[] = {
+static const luaL_Reg bytes_object_metatable[] = {
 	{"__call",          mod_lua_bytes_new},
 	{0, 0}
 };
@@ -1768,13 +1768,13 @@ static const luaL_reg bytes_object_metatable[] = {
  *****************************************************************************/
 
 /*
-static const luaL_reg bytes_class_table[] = {
+static const luaL_Reg bytes_class_table[] = {
 	{"putX",            mod_lua_bytes_tostring},
 	{0, 0}
 };
 */
 
-static const luaL_reg bytes_class_metatable[] = {
+static const luaL_Reg bytes_class_metatable[] = {
 	{"__index",         mod_lua_bytes_get_byte},
 	{"__newindex",      mod_lua_bytes_set_byte},
 	{"__len",           mod_lua_bytes_size},

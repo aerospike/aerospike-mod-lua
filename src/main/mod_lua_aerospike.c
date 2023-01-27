@@ -186,7 +186,7 @@ static int mod_lua_aerospike_get_config(lua_State * l) {
  * CLASS TABLE
  *****************************************************************************/
 
-static const luaL_reg class_table[] = {
+static const luaL_Reg class_table[] = {
     {"create",           mod_lua_aerospike_rec_create},
     {"update",           mod_lua_aerospike_rec_update},
     {"exists",           mod_lua_aerospike_rec_exists},
@@ -198,7 +198,7 @@ static const luaL_reg class_table[] = {
     {0, 0}
 };
 
-static const luaL_reg class_metatable[] = {
+static const luaL_Reg class_metatable[] = {
     {"__gc",        mod_lua_aerospike_gc},
     {0, 0}
 };

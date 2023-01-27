@@ -96,13 +96,13 @@ static int mod_lua_iterator_next(lua_State * l) {
  * OBJECT TABLE
  *****************************************************************************/
 
-static const luaL_reg object_table[] = {
+static const luaL_Reg object_table[] = {
     {"has_next",        mod_lua_iterator_has_next},
     {"next",            mod_lua_iterator_next},
     {0, 0}
 };
 
-static const luaL_reg object_metatable[] = {
+static const luaL_Reg object_metatable[] = {
     {"__call",          mod_lua_iterator_next},
     {0, 0}
 };
@@ -111,13 +111,13 @@ static const luaL_reg object_metatable[] = {
  * CLASS TABLE
  *****************************************************************************/
 
-static const luaL_reg class_table[] = {
+static const luaL_Reg class_table[] = {
     {"has_next",        mod_lua_iterator_has_next},
     {"next",            mod_lua_iterator_next},
     {0, 0}
 };
 
-static const luaL_reg class_metatable[] = {
+static const luaL_Reg class_metatable[] = {
     {"__gc",            mod_lua_iterator_gc},
     {0, 0}
 };

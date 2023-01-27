@@ -136,7 +136,7 @@ static int mod_lua_stream_writable(lua_State * l) {
  * OBJECT TABLE
  ******************************************************************************/
 
-static const luaL_reg object_table[] = {
+static const luaL_Reg object_table[] = {
     {"read",            mod_lua_stream_read},
     {"write",           mod_lua_stream_write},
     {"readable",        mod_lua_stream_readable},
@@ -145,7 +145,7 @@ static const luaL_reg object_table[] = {
     {0, 0}
 };
 
-static const luaL_reg object_metatable[] = {
+static const luaL_Reg object_metatable[] = {
     {0, 0}
 };
 
@@ -154,12 +154,12 @@ static const luaL_reg object_metatable[] = {
  ******************************************************************************/
 
 /*
-static const luaL_reg class_table[] = {
+static const luaL_Reg class_table[] = {
     {0, 0}
 };
 */
 
-static const luaL_reg class_metatable[] = {
+static const luaL_Reg class_metatable[] = {
     {"__tostring",      mod_lua_stream_tostring},
     {"__gc",            mod_lua_stream_gc},
     {0, 0}

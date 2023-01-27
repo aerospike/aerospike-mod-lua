@@ -113,11 +113,11 @@ static int mod_lua_geojson_tostring(lua_State * l)
  * OBJECT TABLE
  *****************************************************************************/
 
-static const luaL_reg geojson_object_table[] = {
+static const luaL_Reg geojson_object_table[] = {
 	{0, 0}
 };
 
-static const luaL_reg geojson_object_metatable[] = {
+static const luaL_Reg geojson_object_metatable[] = {
 	{"__call",          mod_lua_geojson_new},
 	{0, 0}
 };
@@ -126,7 +126,7 @@ static const luaL_reg geojson_object_metatable[] = {
  * CLASS TABLE
  *****************************************************************************/
 
-static const luaL_reg geojson_class_metatable[] = {
+static const luaL_Reg geojson_class_metatable[] = {
 	{"__tostring",      mod_lua_geojson_tostring},
 	{"__gc",            mod_lua_geojson_gc},
 	{0, 0}
