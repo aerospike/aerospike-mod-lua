@@ -84,20 +84,14 @@ ifeq ($(USE_LUAMOD),1)
 	$(MAKE) -C $(LUAMOD) $(LUA_PLATFORM)
 endif
 
-$(LUAMOD)/src/luaconf.h:	$(LUAMOD)/src/luaconf.h.orig
-ifeq ($(USE_LUAMOD),1)
-	(cd $(LUAMOD)/src; rm -f $(notdir $@); ln -s $(notdir $<) $(notdir $@))
-endif
-
 .PHONY: LUAMOD-clean
 LUAMOD-clean:
 ifeq ($(USE_LUAMOD),1)
 	$(MAKE) -e -C $(LUAMOD) clean
-	rm -f $(LUAMOD)/src/luaconf.h
 endif
 
 .PHONY: LUAMOD-prepare
-LUAMOD-prepare:	$(LUAMOD)/src/luaconf.h
+LUAMOD-prepare:
 
 ###############################################################################
 ##  LUA JIT MODULE                                                           ##
@@ -134,17 +128,12 @@ ifeq ($(USE_LUAJIT),1)
 	$(MAKE) -C $(LUAJIT) Q= TARGET_SONAME=libluajit.so CCDEBUG=-g CFLAGS= LDFLAGS=
 endif
 
-$(LUAJIT)/src/luaconf.h:	$(LUAJIT)/src/luaconf.h.orig
-ifeq ($(USE_LUAJIT),1)
-	(cd $(LUAJIT)/src; ln -s $(notdir $<) $(notdir $@))
-endif
-
 .PHONY: LUAJIT-clean
-LUAJIT-clean:	$(LUAJIT)/src/luaconf.h
+LUAJIT-clean:
 ifeq ($(USE_LUAJIT),1)
 	$(MAKE) -e -C $(LUAJIT) clean
-	(cd $(LUAJIT)/src; $(RM) $(LUAJIT)/src/luaconf.h $(LUAJIT)/src/libluajit.a)
+	(cd $(LUAJIT)/src; $(RM) $(LUAJIT)/src/libluajit.a)
 endif
 
 .PHONY: LUAJIT-prepare
-LUAJIT-prepare:	$(LUAJIT)/src/luaconf.h
+LUAJIT-prepare:
