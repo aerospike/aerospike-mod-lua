@@ -178,15 +178,10 @@ void bin_names_callback(char * bin_names, uint32_t nbins, uint16_t max_name_size
 	bin_names_data * data = (bin_names_data *) udata;
 	lua_State * l = data->state;
 	lua_createtable(l, nbins, 0);
-	if (nbins == 1 && *bin_names == 0) { // single-bin case
-		lua_pushnil(l);
-		lua_rawseti(l, -2, 1);
-	}
-	else {
-		for (uint32_t i = 0; i < nbins; i++) {
-			lua_pushstring(l, &bin_names[i * max_name_size]);
-			lua_rawseti(l, -2, i + 1);
-		}
+
+	for (uint32_t i = 0; i < nbins; i++) {
+		lua_pushstring(l, &bin_names[i * max_name_size]);
+		lua_rawseti(l, -2, i + 1);
 	}
 }
 
