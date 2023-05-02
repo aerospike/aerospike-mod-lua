@@ -81,11 +81,12 @@ extern size_t as_lua_aerospike_size;
 typedef struct cache_entry_s {
 	uint64_t cache_miss;
 	uint64_t total;
+	uint32_t id;
 	cf_queue* lua_state_q;
 } cache_entry;
 
 typedef struct cache_item_s {
-	char key[CACHE_ENTRY_KEY_MAX];
+	uint32_t id;
 	lua_State* state;
 } cache_item;
 
@@ -109,6 +110,8 @@ typedef struct lua_hash_s {
 //==========================================================
 // Globals.
 //
+
+static uint32_t g_id = 0;
 
 static pthread_rwlock_t g_lock =
 #if defined(__USE_UNIX98) || defined (__USE_XOPEN2K)
@@ -151,11 +154,11 @@ static void package_cpath_set(lua_State* l, const char* user_path);
 static bool load_buffer_validate(lua_State* l, const char* filename, const char* script, size_t size, const char* name, as_module_error* err);
 static void populate_error(lua_State* l, const char* filename, int rc, as_module_error* err);
 
-static int get_state(bool cache_enabled, const char* user_path, cache_item* citem);
+static int get_state(const char* filename, cache_item* citem);
 static int pushargs(lua_State* l, as_list* args);
 static bool pushargs_foreach(as_val* val, void* context);
 static int apply(lua_State* l, as_udf_context* udf_ctx, int err, int argc, as_result* res, bool is_stream);
-static void release_state(bool cache_enabled, cache_item* citem);
+static void release_state(const char* filename, cache_item* citem);
 static lua_State* create_state(const char* user_path, const char* filename);
 static bool load_buffer(lua_State* l, const char* script, size_t size, const char* name);
 static bool is_native_module(const char* user_path, const char* filename);
@@ -224,6 +227,7 @@ static inline void
 cache_entry_init(cache_entry* centry, const char* user_path,
 		const char* filename)
 {
+	centry->id = as_aaf_uint32(&g_id, 1);
 	cache_entry_cleanup(centry);
 	cache_entry_populate(centry, user_path, filename);
 }
@@ -471,13 +475,10 @@ apply_record(as_module* m, as_udf_context* udf_ctx, const char* filename,
 {
 	(void)m;
 
-	cache_item citem;
-
-	strcpy(citem.key, filename);
-	citem.state = NULL;
+	cache_item citem = { 0 };
 
 	// Get a state.
-	int rc = get_state(g_lua_cfg.cache_enabled, g_lua_cfg.user_path, &citem);
+	int rc = get_state(filename, &citem);
 
 	if (rc != 0) {
 		return rc;
@@ -507,7 +508,7 @@ apply_record(as_module* m, as_udf_context* udf_ctx, const char* filename,
 	int argc = pushargs(l, args);
 
 	if (argc < 0) {
-		release_state(g_lua_cfg.cache_enabled, &citem);
+		release_state(filename, &citem);
 		return 2;
 	}
 
@@ -521,7 +522,7 @@ apply_record(as_module* m, as_udf_context* udf_ctx, const char* filename,
 	apply(l, udf_ctx, err, argc, res, false); // here, return value is always 0
 
 	// Release the state.
-	release_state(g_lua_cfg.cache_enabled, &citem);
+	release_state(filename, &citem);
 
 	return 0;
 }
@@ -534,13 +535,10 @@ apply_stream(as_module* m, as_udf_context* udf_ctx, const char* filename,
 {
 	(void)m;
 
-	cache_item citem;
-
-	strcpy(citem.key, filename);
-	citem.state = NULL;
+	cache_item citem = { 0 };
 
 	// Get a state.
-	int rc = get_state(g_lua_cfg.cache_enabled, g_lua_cfg.user_path, &citem);
+	int rc = get_state(filename, &citem);
 
 	if (rc != 0) {
 		return rc;
@@ -576,7 +574,7 @@ apply_stream(as_module* m, as_udf_context* udf_ctx, const char* filename,
 	int argc = pushargs(l, args);
 
 	if (argc < 0) {
-		release_state(g_lua_cfg.cache_enabled, &citem);
+		release_state(filename, &citem);
 		return 2;
 	}
 
@@ -590,7 +588,7 @@ apply_stream(as_module* m, as_udf_context* udf_ctx, const char* filename,
 	rc = apply(l, udf_ctx, err, argc, res, true);
 
 	// Release the state.
-	release_state(g_lua_cfg.cache_enabled, &citem);
+	release_state(filename, &citem);
 
 	return rc;
 }
@@ -930,30 +928,38 @@ populate_error(lua_State* l, const char* filename, int rc, as_module_error* err)
 
 // Get a lua_State. Re-uses an existing state if possible.
 static int
-get_state(bool cache_enabled, const char* user_path,  cache_item* citem)
+get_state(const char* filename, cache_item* citem)
 {
-	if (cache_enabled) {
+	if (g_lua_cfg.cache_enabled) {
 		pthread_rwlock_rdlock(&g_cache_lock);
 
 		cache_entry* centry;
 
-		if (lua_hash_get(g_lua_hash, citem->key, &centry)) {
+		if (lua_hash_get(g_lua_hash, filename, &centry)) {
 			uint64_t miss;
+
+			citem->id = centry->id;
 
 			if (cf_queue_pop(centry->lua_state_q, &citem->state,
 					CF_QUEUE_NOWAIT) != CF_QUEUE_EMPTY) {
-				as_log_trace("[CACHE] took state: %s", citem->key);
+				as_log_trace("[CACHE] took state (id %u): %s", citem->id,
+						filename);
+
 				miss = centry->cache_miss;
 			}
 			else {
-				as_log_trace("[CACHE] miss state: %s", citem->key);
+				as_log_trace("[CACHE] miss state (id %u): %s", citem->id,
+						filename);
+
 				miss = as_aaf_uint64(&centry->cache_miss, 1);
-				citem->state = NULL;
 			}
 
 			uint64_t total = as_aaf_uint64(&centry->total, 1);
 
 			as_log_debug("[CACHE] miss %lu : total %lu", miss, total);
+		}
+		else {
+			as_log_trace("[CACHE] not found: %s", filename);
 		}
 
 		pthread_rwlock_unlock(&g_cache_lock);
@@ -961,15 +967,15 @@ get_state(bool cache_enabled, const char* user_path,  cache_item* citem)
 
 	if (citem->state == NULL) {
 		pthread_rwlock_rdlock(&g_lock);
-		citem->state = create_state(user_path, citem->key);
+		citem->state = create_state(g_lua_cfg.user_path, filename);
 		pthread_rwlock_unlock(&g_lock);
 
 		if (citem->state == NULL) {
-			as_log_trace("[CACHE] state create failed: %s", citem->key);
+			as_log_trace("[CACHE] state create failed: %s", filename);
 			return 1;
 		}
 
-		as_log_trace("[CACHE] state created: %s", citem->key);
+		as_log_trace("[CACHE] state created (id %u): %s", citem->id, filename);
 	}
 
 	return 0;
@@ -1062,11 +1068,11 @@ apply(lua_State* l, as_udf_context* udf_ctx, int err, int argc, as_result* res,
 }
 
 static void
-release_state(bool cache_enabled, cache_item* citem)
+release_state(const char* filename, cache_item* citem)
 {
 	pthread_rwlock_rdlock(&g_lock);
 
-	if (cache_enabled) {
+	if (g_lua_cfg.cache_enabled) {
 		// Do GC only if we've used over 10Mb.
 		if (lua_gc(citem->state, LUA_GCCOUNT, 0) > 1024 * 10) {
 			// First, try 40 "iterations" of "step" GC.
@@ -1081,12 +1087,27 @@ release_state(bool cache_enabled, cache_item* citem)
 
 		cache_entry* centry;
 
-		if (lua_hash_get(g_lua_hash, citem->key, &centry)) {
-			if (cf_queue_sz(centry->lua_state_q) < CACHE_ENTRY_STATE_MAX) {
-				cf_queue_push(centry->lua_state_q, &citem->state);
-				as_log_trace("[CACHE] re-caching state: %s", citem->key);
-				citem->state = NULL;
+		if (lua_hash_get(g_lua_hash, filename, &centry)) {
+			if (centry->id == citem->id) {
+				if (cf_queue_sz(centry->lua_state_q) < CACHE_ENTRY_STATE_MAX) {
+					as_log_trace("[CACHE] re-caching state (id %u): %s",
+							citem->id, filename);
+
+					cf_queue_push(centry->lua_state_q, &citem->state);
+					citem->state = NULL;
+				}
+				else {
+					as_log_trace("[CACHE] excess state (id %u): %s", citem->id,
+							filename);
+				}
 			}
+			else {
+				as_log_trace("[CACHE] stale state (id %u cached id %u): %s",
+						citem->id, centry->id, filename);
+			}
+		}
+		else {
+			as_log_trace("[CACHE] not found: %s", filename);
 		}
 
 		pthread_rwlock_unlock(&g_cache_lock);
@@ -1095,7 +1116,7 @@ release_state(bool cache_enabled, cache_item* citem)
 	// l not NULL - it was not returned to the cache, free it.
 	if (citem->state != NULL) {
 		lua_close(citem->state);
-		as_log_trace("[CACHE] state closed: %s", citem->key);
+		as_log_trace("[CACHE] state closed (id %u): %s", citem->id, filename);
 	}
 
 	pthread_rwlock_unlock(&g_lock);
