@@ -54,7 +54,7 @@ To build a dynamic library `libmod_lua.so`:
 - Double click xcode/aerospike-mod-lua.xcworkspace
 - Click Product -> Build
 
-### Build Windows Visual Studio 2017 (or greater)
+### Build Windows Visual Studio 2022+
 
 - Double click vs/aerospike-mod-lua.sln
 - Click Build -> Build Solution
