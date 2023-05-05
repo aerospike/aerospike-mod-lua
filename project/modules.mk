@@ -84,14 +84,21 @@ ifeq ($(USE_LUAMOD),1)
 	$(MAKE) -C $(LUAMOD) $(LUA_PLATFORM)
 endif
 
+## This is necessary to build without luajit. ##
+$(LUAMOD)/src/luaconf.h:  $(LUAMOD)/src/luaconf.h.orig
+ifeq ($(USE_LUAMOD),1)
+	(cd $(LUAMOD)/src; rm -f $(notdir $@); ln -s $(notdir $<) $(notdir $@))
+endif
+
 .PHONY: LUAMOD-clean
 LUAMOD-clean:
 ifeq ($(USE_LUAMOD),1)
 	$(MAKE) -e -C $(LUAMOD) clean
+	rm -f $(LUAMOD)/src/luaconf.h
 endif
 
 .PHONY: LUAMOD-prepare
-LUAMOD-prepare:
+LUAMOD-prepare: $(LUAMOD)/src/luaconf.h
 
 ###############################################################################
 ##  LUA JIT MODULE                                                           ##
