@@ -39,7 +39,7 @@ static uint32_t limit = 0;
 static uint32_t produced = 0;
 static uint32_t consumed = 0;
 
-static as_val * produce1()
+static as_val * produce1(void)
 {
 	if (produced >= limit) {
 		return AS_STREAM_END;
@@ -105,7 +105,7 @@ TEST(stream_udf_2, "increment range (1-10)")
 
 static as_integer * result3 = NULL;
 
-static as_val * produce3()
+static as_val * produce3(void)
 {
 	if (produced >= limit) {
 		return AS_STREAM_END;
@@ -179,7 +179,7 @@ TEST(stream_udf_4, "product range (1-10)")
 
 static as_map * result5 = NULL;
 
-static as_val * produce5()
+static as_val * produce5(void)
 {
 	if (produced >= limit) {
 		return AS_STREAM_END;
