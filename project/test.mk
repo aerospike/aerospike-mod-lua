@@ -19,13 +19,9 @@ endif
 
 TEST_LDFLAGS += -lssl -lcrypto $(LIB_LUA) -lpthread -lm
 
-ifeq ($(OS),Darwin)
-  ifeq ($(USE_LUAJIT),1)
-    TEST_LDFLAGS += -pagezero_size 10000 -image_base 100000000
-  endif
-else ifeq ($(OS),FreeBSD)
+ifeq ($(OS),FreeBSD)
   TEST_LDFLAGS += -lrt
-else
+else ifneq ($(OS),Darwin)
   TEST_LDFLAGS += -lrt -ldl
 endif
 

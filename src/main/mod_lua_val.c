@@ -191,14 +191,14 @@ mod_lua_box * mod_lua_pushbox(lua_State * l, mod_lua_scope scope, void * value, 
 
 mod_lua_box * mod_lua_tobox(lua_State * l, int index, const char * type) {
     mod_lua_box * box = (mod_lua_box *) lua_touserdata(l, index);
-    if (box == NULL && type != NULL ) luaL_typerror(l, index, type);
+    if (box == NULL && type != NULL ) mod_lua_typerror(l, index, type);
     return box;
 }
 
 mod_lua_box * mod_lua_checkbox(lua_State * l, int index, const char * type) {
     luaL_checktype(l, index, LUA_TUSERDATA);
     mod_lua_box * box = (mod_lua_box *) luaL_checkudata(l, index, type);
-    if (box == NULL) luaL_typerror(l, index, type);
+    if (box == NULL) mod_lua_typerror(l, index, type);
     return box;
 }
 

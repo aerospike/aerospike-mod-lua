@@ -115,7 +115,7 @@ static int mod_lua_bytes_ensure(lua_State *l)
 
 	as_bytes * 	b = mod_lua_checkbytes(l, 1);
 	lua_Integer c = luaL_optinteger(l, 2, 0);
-	int 		r = luaL_optint(l, 3, 0);
+	int 		r = (int)luaL_optinteger(l, 3, 0);
 
 	// check preconditions:
 	//	- b != NULL

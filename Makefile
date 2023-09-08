@@ -4,30 +4,14 @@
 include project/settings.mk
 
 # Modules
-COMMON 	:= $(COMMON)
+COMMON := $(COMMON)
 MODULES := COMMON
 
 # Use the Lua submodule?  [By default, no.]
 USE_LUAMOD = 0
 
-# Use LuaJIT instead of Lua?  [By default, no.]
-USE_LUAJIT = 0
-
-# Permit easy overriding of the default.
-ifeq ($(USE_LUAJIT),1)
-  USE_LUAMOD = 0
-endif
-
-ifeq ($(and $(USE_LUAMOD:0=),$(USE_LUAJIT:0=)),1)
-  $(error Only at most one of USE_LUAMOD or USE_LUAJIT may be enabled (i.e., set to 1.))
-else
-  ifeq ($(USE_LUAMOD),1)
-    MODULES += LUAMOD
-  else
-    ifeq ($(USE_LUAJIT),1)
-      MODULES += LUAJIT
-    endif
-  endif
+ifeq ($(USE_LUAMOD),1)
+  MODULES += LUAMOD
 endif
 
 # Override optimizations via: make O=n
@@ -37,10 +21,6 @@ O = 3
 CC_FLAGS = -std=gnu99 -g -fPIC -O$(O)
 CC_FLAGS += -fno-common -fno-strict-aliasing
 CC_FLAGS += -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_GNU_SOURCE $(EXT_CFLAGS)
-
-ifeq ($(USE_LUAJIT),1)
-  CC_FLAGS += -DUSE_LUAJIT
-endif
 
 ifeq ($(ARCH),x86_64)
   CC_FLAGS += -march=nocona
@@ -64,9 +44,9 @@ endif
 ifeq ($(OS),Darwin)
   CC_FLAGS += -D_DARWIN_UNLIMITED_SELECT
 
-  ifneq ($(wildcard /opt/homebrew/include/lua5.1),)
+  ifneq ($(wildcard /opt/homebrew/include/lua5.3),)
     # Mac new homebrew lua include path
-    CC_FLAGS += -I/opt/homebrew/include/lua5.1
+    CC_FLAGS += -I/opt/homebrew/include/lua5.3
   endif
 
   ifneq ($(wildcard /opt/homebrew/opt/openssl/include),)
@@ -79,7 +59,7 @@ ifeq ($(OS),Darwin)
     # macports openssl include path
     CC_FLAGS += -I/opt/local/include
   endif
-  
+
   LUA_PLATFORM = macosx
 else ifeq ($(OS),FreeBSD)
   CC_FLAGS += -finline-functions
@@ -87,7 +67,7 @@ else ifeq ($(OS),FreeBSD)
 else
   CC_FLAGS += -finline-functions -rdynamic
   LUA_PLATFORM = linux
-  
+
   ifneq ($(wildcard /etc/alpine-release),)
     CC_FLAGS += -DAS_ALPINE
   endif
@@ -112,46 +92,41 @@ ifdef DEBUG
 endif
 
 # Make-tree Compiler Flags
-CFLAGS = -O$(O) 
+CFLAGS = -O$(O)
 
 # Include Paths
 INC_PATH += $(COMMON)/$(TARGET_INCL)
 
-ifeq ($(USE_LUAJIT),1)
-  INC_PATH += $(LUAJIT)/src
-  LIB_LUA = $(LUAJIT)/src/libluajit.a
+ifeq ($(USE_LUAMOD),1)
+  INC_PATH += $(LUAMOD)/src
+  LIB_LUA = -L$(LUAMOD)/src -llua
 else
-  ifeq ($(USE_LUAMOD),1)
-    INC_PATH += $(LUAMOD)/src
-    LIB_LUA = -L$(LUAMOD)/src -llua
-  else
-    # Find where the Lua development package is installed in the build environment.
-    INC_PATH += $(or \
-      $(wildcard /usr/include/lua-5.1), \
-      $(wildcard /usr/include/lua5.1))
-    INCLUDE_LUA_5_1 = /usr/include/lua5.1
-    ifneq ($(wildcard $(INCLUDE_LUA_5_1)),)
-      LUA_SUFFIX=5.1
-    endif
-    ifeq ($(OS),Darwin)
-      ifneq ($(wildcard /usr/local/include),)
-        INC_PATH += /usr/local/include
-      endif
-      
-      ifneq ($(wildcard /opt/homebrew/lib),)
-        LIB_LUA = -L/opt/homebrew/lib
-        LUA_SUFFIX = 5.1
-	  else ifneq ($(wildcard /usr/local/lib),)
-        LIB_LUA = -L/usr/local/lib
-      endif
-    endif
-    ifeq ($(OS),FreeBSD)
-      INC_PATH += /usr/local/include/lua51
-      LIB_LUA = -L/usr/local/lib
-      LUA_SUFFIX = -5.1
-    endif
-    LIB_LUA += -llua$(LUA_SUFFIX)
+  # Find where the Lua development package is installed in the build environment.
+  INC_PATH += $(wildcard /usr/include/lua5.3)
+  INCLUDE_LUA = /usr/include/lua5.3
+
+  ifneq ($(wildcard $(INCLUDE_LUA)),)
+    LUA_SUFFIX=5.3
   endif
+
+  ifeq ($(OS),Darwin)
+    ifneq ($(wildcard /usr/local/include),)
+      INC_PATH += /usr/local/include
+    endif
+
+    ifneq ($(wildcard /opt/homebrew/lib),)
+      LIB_LUA = -L/opt/homebrew/lib
+      LUA_SUFFIX = 5.3
+    else ifneq ($(wildcard /usr/local/lib),)
+      LIB_LUA = -L/usr/local/lib
+    endif
+  else ifeq ($(OS),FreeBSD)
+    INC_PATH += /usr/local/include/lua53
+    LIB_LUA = -L/usr/local/lib
+    LUA_SUFFIX = -5.3
+  endif
+
+  LIB_LUA += -llua$(LUA_SUFFIX)
 endif
 
 ###############################################################################
@@ -160,17 +135,17 @@ endif
 
 MOD_LUA =
 MOD_LUA += mod_lua.o
-MOD_LUA += mod_lua_reg.o
 MOD_LUA += mod_lua_aerospike.o
-MOD_LUA += mod_lua_record.o
+MOD_LUA += mod_lua_bytes.o
+MOD_LUA += mod_lua_geojson.o
 MOD_LUA += mod_lua_iterator.o
 MOD_LUA += mod_lua_list.o
 MOD_LUA += mod_lua_map.o
-MOD_LUA += mod_lua_bytes.o
+MOD_LUA += mod_lua_record.o
+MOD_LUA += mod_lua_reg.o
 MOD_LUA += mod_lua_stream.o
 MOD_LUA += mod_lua_system.o
 MOD_LUA += mod_lua_val.o
-MOD_LUA += mod_lua_geojson.o
 
 ###############################################################################
 ##  MAIN TARGETS                                                             ##
@@ -178,7 +153,7 @@ MOD_LUA += mod_lua_geojson.o
 
 all: build prepare
 
-.PHONY: build 
+.PHONY: build
 build: libmod_lua
 
 .PHONY: prepare

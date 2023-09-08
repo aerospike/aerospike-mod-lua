@@ -1,5 +1,5 @@
 /* 
- * Copyright 2008-2018 Aerospike, Inc.
+ * Copyright 2008-2023 Aerospike, Inc.
  *
  * Portions may be licensed to Aerospike, Inc. under one or more contributor
  * license agreements.
@@ -15,63 +15,77 @@
  * the License.
  */
 
-#include <aerospike/as_val.h>
+#include <stddef.h>
 
+#include <aerospike/as_val.h>
 #include <aerospike/mod_lua_reg.h>
 
 #include "internal.h"
 
-int mod_lua_reg_object(lua_State * l, const char * name, const luaL_Reg * table, const luaL_Reg * metatable) {
+int
+mod_lua_reg_object(lua_State* l, const char* name, const luaL_Reg* table,
+		const luaL_Reg* metatable)
+{
+	lua_newtable(l);                   // -0 +1
+	luaL_setfuncs(l, table, 0);        // -0 +0
+	lua_pushvalue(l, -1);              // -0 +1
+	lua_setglobal(l, name);            // -1 +0
 
-    int tableId = 0, metatableId = 0;
+	int table_id = lua_gettop(l);      // -0 +0
 
-    luaL_register(l, name, table);
-    tableId = lua_gettop(l);
+	lua_newtable(l);                   // -0 +1
+	luaL_setfuncs(l, metatable, 0);    // -0 +0
 
-    lua_newtable(l);
-    luaL_register(l, 0, metatable);
-    metatableId = lua_gettop(l);
+	int metatable_id = lua_gettop(l);  // -0 +0
 
-    lua_pushvalue(l, tableId);
-    lua_pushvalue(l, metatableId);
-    lua_setmetatable(l, 0);
+	lua_pushvalue(l, metatable_id);    // -0 +1
+	lua_setmetatable(l, table_id);     // -1 +0
 
-    lua_pushliteral(l, "__metatable");
-    lua_pushvalue(l, tableId);
-    lua_rawset(l, metatableId);
+	lua_pushliteral(l, "__metatable"); // -0 +1
+	lua_pushvalue(l, table_id);        // -0 +1
+	lua_rawset(l, metatable_id);       // -2 +0
 
+	lua_pop(l, 2);                     // -2 +0 - pop metatable and table
 
-    lua_pop(l, 1);
-
-    return 0;
+	return 0;
 }
 
-int mod_lua_reg_class(lua_State * l, const char * name, const luaL_Reg * table, const luaL_Reg * metatable) {
+int
+mod_lua_reg_class(lua_State* l, const char* name, const luaL_Reg* table,
+		const luaL_Reg* metatable)
+{
+	int table_id = 0;
+	int pop_cnt = 0;
 
-    int tableId = 0, metatableId = 0;
+	if (table != NULL) {
+		lua_newtable(l);                   // -0 +1
+		luaL_setfuncs(l, table, 0);        // -0 +0
+		lua_pushvalue(l, -1);              // -0 +1
+		lua_setglobal(l, name);            // -1 +0
+		table_id = lua_gettop(l);          // -0 +0
+		pop_cnt++;
+	}
 
-    if ( table ) {
-        luaL_register(l, name, table);
-        tableId = lua_gettop(l);
-    }
+	int metatable_id = 0;
 
-    if ( metatable ) {
-        luaL_newmetatable(l, name);
-        luaL_register(l, 0, metatable);
-        metatableId = lua_gettop(l);
-    }
+	if (metatable != NULL) {
+		luaL_newmetatable(l, name);        // -0 +1
+		luaL_setfuncs(l, metatable, 0);    // -0 +0
+		metatable_id = lua_gettop(l);      // -0 +0
+		pop_cnt++;
+	}
 
-    if ( table && metatable ) {
-        lua_pushliteral(l, "__index");
-        lua_pushvalue(l, tableId);
-        lua_rawset(l, metatableId);
+	if (table != NULL && metatable != NULL) {
+		lua_pushliteral(l, "__index");     // -0 +1
+		lua_pushvalue(l, table_id);        // -0 +1
+		lua_rawset(l, metatable_id);       // -2 +0
 
-        lua_pushliteral(l, "__metatable");
-        lua_pushvalue(l, tableId);
-        lua_rawset(l, metatableId);
+		lua_pushliteral(l, "__metatable"); // -0 +1
+		lua_pushvalue(l, table_id);        // -0 +1
+		lua_rawset(l, metatable_id);       // -2 +0
+	}
 
-        lua_pop(l, 1);
-    }
+	lua_pop(l, pop_cnt);                   // -pop_cnt +0
 
-    return 0;
+	return 0;
 }

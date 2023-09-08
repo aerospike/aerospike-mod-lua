@@ -1,7 +1,7 @@
 /*
  * mod_lua_system.c
  *
- * Copyright (C) 2018-2020 Aerospike, Inc.
+ * Copyright (C) 2018-2023 Aerospike, Inc.
  *
  * Portions may be licensed to Aerospike, Inc. under one or more contributor
  * license agreements.
@@ -199,7 +199,7 @@ const char as_lua_stream_ops[] =
 "	n = n or #ops\n"
 "	if i > n then return stream end\n"
 "	local op = ops[i]\n"
-"	local s = op.func(stream, unpack(op.args)) or stream\n"
+"	local s = op.func(stream, table.unpack(op.args)) or stream\n"
 "	return StreamOps_apply(s, ops, i + 1, n)\n"
 "end\n"
 "function StreamOps_select(stream_ops, scope)\n"
@@ -219,7 +219,7 @@ const char as_lua_stream_ops[] =
 "			end\n"
 "		elseif phase == SCOPE_CLIENT then\n"
 "			table.insert(client_ops, op)\n"
-"		end \n"
+"		end\n"
 "	end\n"
 "	if scope == SCOPE_CLIENT then\n"
 "		return client_ops\n"

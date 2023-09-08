@@ -265,7 +265,7 @@ static int mod_lua_list_index(lua_State * l) {
 	as_val *		val		= NULL;
 
 	if ( list ) {
-		const uint32_t  idx = (uint32_t) luaL_optlong(l, 2, 0);
+		const uint32_t idx = (uint32_t)luaL_optinteger(l, 2, 0);
 		if (idx > 0) {
 			// Lua is 1 index, C is 0
 			val = as_list_get(list, idx-1);
@@ -286,7 +286,7 @@ static int mod_lua_list_newindex(lua_State * l) {
 	as_list * list = mod_lua_checklist(l, 1);
 
 	if ( list ) {
-		const uint32_t idx = (uint32_t) luaL_optlong(l, 2, 0);
+		const uint32_t idx = (uint32_t)luaL_optinteger(l, 2, 0);
 		if (idx > 0) { // Lua is 1 index, C is 0
 			as_val * val = valid_list_val(mod_lua_takeval(l, 3));
 			if ( val ) {

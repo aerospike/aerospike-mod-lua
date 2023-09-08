@@ -56,7 +56,7 @@ as_iterator * mod_lua_pushiterator(lua_State * l, size_t sz) {
 static as_iterator * mod_lua_checkiterator(lua_State * l, int index) {
     luaL_checktype(l, index, LUA_TUSERDATA);
     as_iterator * itr = (as_iterator *) luaL_checkudata(l, index, CLASS_NAME);
-    if (itr == NULL) luaL_typerror(l, index, CLASS_NAME);
+    if (itr == NULL) mod_lua_typerror(l, index, CLASS_NAME);
     return itr;
 }
 

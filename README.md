@@ -9,7 +9,7 @@ Aerospike Server and the Aerospike C Client as a `git` submodule.
 ### Linux Dependencies
 
 Building Aerospike Mod Lua requires the development resources for the
-Lua language version 5.1.4.  The installation instructions for common
+Lua language version 5.3. The installation instructions for common
 Linux distributions are as follows:
 
 #### Red Hat Dependencies
@@ -27,11 +27,11 @@ If `yum` is your package manager, then you should be able to run the following c
 
 Debian based Linux Distributions (Debian, Ubuntu, etc.) require the following packages:
 
-* `liblua5.1-dev` - Development resources for the Lua language.
+* `liblua5.3-dev` - Development resources for the Lua language.
 
 If `apt-get` is your package manager, then you should be able to run the following command:
 
-	$ sudo apt-get install liblua5.1-dev
+	$ sudo apt-get install liblua5.3-dev
 
 ## Build
 

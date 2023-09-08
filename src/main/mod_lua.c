@@ -402,7 +402,7 @@ validate(as_module* m, as_aerospike* as, const char* filename,
 	err->line = 0;
 	err->func[0] = '\0';
 
-	lua_State* l = lua_open();
+	lua_State* l = luaL_newstate();
 
 	if (l == NULL) {
 		err->scope = 1;
@@ -900,7 +900,7 @@ populate_error(lua_State* l, const char* filename, int rc, as_module_error* err)
 	}
 	else {
 		lua_Debug ar;
-		lua_getfield(l, LUA_GLOBALSINDEX, "f");
+		lua_rawgeti(l, LUA_REGISTRYINDEX, LUA_RIDX_GLOBALS);
 		lua_getinfo(l, ">Snl", &ar);
 
 		// TODO - really? This goes to stdout?
@@ -985,13 +985,11 @@ get_state(const char* filename, cache_item* citem)
 static int
 pushargs(lua_State* l, as_list* args)
 {
-#ifndef USE_LUAJIT
 	// Grow the stack if necessary. (Return value 0 is a failure.)
 	if (lua_checkstack(l, as_list_size(args) + LUA_MINSTACK) == 0) {
 		as_log_error("failed to push %u lua args", as_list_size(args));
 		return -1;
 	}
-#endif
 
 	pushargs_data data = { .l = l };
 
@@ -1126,7 +1124,7 @@ release_state(const char* filename, cache_item* citem)
 static lua_State*
 create_state(const char* user_path, const char* filename)
 {
-	lua_State* l = lua_open();
+	lua_State* l = luaL_newstate();
 
 	luaL_openlibs(l);
 

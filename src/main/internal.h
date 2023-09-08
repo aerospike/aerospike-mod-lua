@@ -17,6 +17,8 @@
 
 #pragma once
 
+struct lua_State;
+
 //
 // logging
 //
@@ -25,6 +27,15 @@
     // __log_append(__FILE__, __LINE__, fmt, ##__VA_ARGS__);
 
 void __log_append(const char * file, int line, const char * fmt, ...);
+
+// A copy of luaL_typerror which was dropped in lua-5.3.
+static inline int
+mod_lua_typerror(struct lua_State *L, int narg, const char *tname)
+{
+	const char *msg = lua_pushfstring(L, "%s expected, got %s",
+			tname, luaL_typename(L, narg));
+	return luaL_argerror(L, narg, msg);
+}
 
 #define DO_PRAGMA(x) _Pragma (#x)
 #define TODO(x) DO_PRAGMA(message ("TODO - " #x))
