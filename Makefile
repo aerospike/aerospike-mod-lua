@@ -5,14 +5,9 @@ include project/settings.mk
 
 # Modules
 COMMON := $(COMMON)
+LUAMOD := $(LUAMOD)
 MODULES := COMMON
-
-# Use the Lua submodule?  [By default, no.]
-USE_LUAMOD = 0
-
-ifeq ($(USE_LUAMOD),1)
-  MODULES += LUAMOD
-endif
+MODULES += LUAMOD
 
 # Override optimizations via: make O=n
 O = 3
@@ -41,13 +36,13 @@ ifeq ($(PREPRO),1)
 "
 endif
 
+# Linker flags
+LD_FLAGS = $(LDFLAGS)
+
 ifeq ($(OS),Darwin)
   CC_FLAGS += -D_DARWIN_UNLIMITED_SELECT
-
-  ifneq ($(wildcard /opt/homebrew/include/lua5.3),)
-    # Mac new homebrew lua include path
-    CC_FLAGS += -I/opt/homebrew/include/lua5.3
-  endif
+  LD_FLAGS += -undefined dynamic_lookup
+  LUA_PLATFORM = LUA_USE_MACOSX
 
   ifneq ($(wildcard /opt/homebrew/opt/openssl/include),)
     # Mac new homebrew openssl include path
@@ -59,14 +54,12 @@ ifeq ($(OS),Darwin)
     # macports openssl include path
     CC_FLAGS += -I/opt/local/include
   endif
-
-  LUA_PLATFORM = macosx
 else ifeq ($(OS),FreeBSD)
   CC_FLAGS += -finline-functions
-  LUA_PLATFORM = freebsd
+  LUA_PLATFORM = LUA_USE_LINUX # nothing BSD specific in luaconf.h
 else
   CC_FLAGS += -finline-functions -rdynamic
-  LUA_PLATFORM = linux
+  LUA_PLATFORM = LUA_USE_LINUX
 
   ifneq ($(wildcard /etc/alpine-release),)
     CC_FLAGS += -DAS_ALPINE
@@ -75,13 +68,6 @@ endif
 
 ifneq ($(CF), )
   CC_FLAGS += -I$(CF)/include
-endif
-
-# Linker flags
-LD_FLAGS = $(LDFLAGS)
-
-ifeq ($(OS),Darwin)
-  LD_FLAGS += -undefined dynamic_lookup
 endif
 
 # DEBUG Settings
@@ -96,38 +82,7 @@ CFLAGS = -O$(O)
 
 # Include Paths
 INC_PATH += $(COMMON)/$(TARGET_INCL)
-
-ifeq ($(USE_LUAMOD),1)
-  INC_PATH += $(LUAMOD)/src
-  LIB_LUA = -L$(LUAMOD)/src -llua
-else
-  # Find where the Lua development package is installed in the build environment.
-  INC_PATH += $(wildcard /usr/include/lua5.3)
-  INCLUDE_LUA = /usr/include/lua5.3
-
-  ifneq ($(wildcard $(INCLUDE_LUA)),)
-    LUA_SUFFIX=5.3
-  endif
-
-  ifeq ($(OS),Darwin)
-    ifneq ($(wildcard /usr/local/include),)
-      INC_PATH += /usr/local/include
-    endif
-
-    ifneq ($(wildcard /opt/homebrew/lib),)
-      LIB_LUA = -L/opt/homebrew/lib
-      LUA_SUFFIX = 5.3
-    else ifneq ($(wildcard /usr/local/lib),)
-      LIB_LUA = -L/usr/local/lib
-    endif
-  else ifeq ($(OS),FreeBSD)
-    INC_PATH += /usr/local/include/lua53
-    LIB_LUA = -L/usr/local/lib
-    LUA_SUFFIX = -5.3
-  endif
-
-  LIB_LUA += -llua$(LUA_SUFFIX)
-endif
+INC_PATH += $(LUAMOD)
 
 ###############################################################################
 ##  OBJECTS                                                                  ##
@@ -154,10 +109,10 @@ MOD_LUA += mod_lua_val.o
 all: build prepare
 
 .PHONY: build
-build: libmod_lua
+build: modules-build libmod_lua
 
 .PHONY: prepare
-prepare: $(TARGET_INCL)/aerospike/*.h
+prepare: modules-prepare $(TARGET_INCL)/aerospike/*.h
 
 .PHONY: clean
 clean:	modules-clean

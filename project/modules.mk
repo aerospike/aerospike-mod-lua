@@ -41,7 +41,7 @@ COMMON-prepare: COMMON-make-prepare $(subst $(COMMON)/$(SOURCE_INCL),$(TARGET_IN
 
 .PHONY: COMMON-make-prepare
 COMMON-make-prepare:
-	$(MAKE) -e -C $(COMMON) prepare 
+	$(MAKE) -e -C $(COMMON) prepare
 
 $(TARGET_INCL)/aerospike/%.h: $(COMMON)/$(TARGET_INCL)/aerospike/%.h | $(TARGET_INCL)/aerospike
 	 cp -p $^ $@
@@ -53,49 +53,37 @@ $(TARGET_INCL)/citrusleaf/%.h: $(COMMON)/$(TARGET_INCL)/citrusleaf/%.h | $(TARGE
 ##  LUA MODULE                                                               ##
 ###############################################################################
 
-ifeq ($(USE_LUAMOD),1)
-  ifndef LUAMOD
-    $(warning ***************************************************************)
-    $(warning *)
-    $(warning *  LUAMOD is not defined. )
-    $(warning *  LUAMOD should be set to a valid path. )
-    $(warning *)
-    $(warning ***************************************************************)
-    $(error )
-  endif
+ifndef LUAMOD
+  $(warning ***************************************************************)
+  $(warning *)
+  $(warning *  LUAMOD is not defined. )
+  $(warning *  LUAMOD should be set to a valid path. )
+  $(warning *)
+  $(warning ***************************************************************)
+  $(error )
+endif
 
-  ifeq ($(wildcard $(LUAMOD)/Makefile),)
-    $(warning ***************************************************************)
-    $(warning *)
-    $(warning *  LUAMOD is '$(LUAMOD)')
-    $(warning *  LUAMOD doesn't contain 'Makefile'. )
-    $(warning *  LUAMOD should be set to a valid path. )
-    $(warning *)
-    $(warning ***************************************************************)
-    $(error )
-  endif
+ifeq ($(wildcard $(LUAMOD)/makefile),)
+  $(warning ***************************************************************)
+  $(warning *)
+  $(warning *  LUAMOD is '$(LUAMOD)')
+  $(warning *  LUAMOD doesn't contain 'makefile'. )
+  $(warning *  LUAMOD should be set to a valid path. )
+  $(warning *)
+  $(warning ***************************************************************)
+  $(error )
 endif
 
 .PHONY: LUAMOD-build
-LUAMOD-build:	$(LUAMOD)/src/liblua.a
+LUAMOD-build: $(LUAMOD)/liblua.a
 
-$(LUAMOD)/src/liblua.a:	$(LUAMOD)/src/luaconf.h
-ifeq ($(USE_LUAMOD),1)
-	$(MAKE) -C $(LUAMOD) $(LUA_PLATFORM)
-endif
-
-## This is necessary to build without luajit. ##
-$(LUAMOD)/src/luaconf.h:  $(LUAMOD)/src/luaconf.h.orig
-ifeq ($(USE_LUAMOD),1)
-	(cd $(LUAMOD)/src; rm -f $(notdir $@); ln -s $(notdir $<) $(notdir $@))
-endif
+$(LUAMOD)/liblua.a:
+	$(MAKE) -C $(LUAMOD) MYCFLAGS="-std=c99 -D$(LUA_PLATFORM) -fPIC" MYLIBS="-ldl" a
 
 .PHONY: LUAMOD-clean
 LUAMOD-clean:
-ifeq ($(USE_LUAMOD),1)
 	$(MAKE) -e -C $(LUAMOD) clean
-	rm -f $(LUAMOD)/src/luaconf.h
-endif
 
 .PHONY: LUAMOD-prepare
-LUAMOD-prepare: $(LUAMOD)/src/luaconf.h
+LUAMOD-prepare: ;
+
