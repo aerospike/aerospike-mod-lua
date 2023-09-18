@@ -7,6 +7,7 @@ TEST_VALGRIND = --tool=memcheck --leak-check=yes --show-reachable=yes --num-call
 TEST_CFLAGS =
 TEST_CFLAGS += -I$(TARGET_INCL)
 TEST_CFLAGS += -I$(COMMON)/$(TARGET_INCL)
+TEST_CFLAGS += -I$(LUAMOD)
 
 TEST_LDFLAGS =
 
@@ -17,7 +18,7 @@ ifeq ($(OS),Darwin)
   endif
 endif
 
-TEST_LDFLAGS += -lssl -lcrypto $(LIB_LUA) -lpthread -lm
+TEST_LDFLAGS += -lssl -lcrypto -lpthread -lm
 
 ifeq ($(OS),FreeBSD)
   TEST_LDFLAGS += -lrt
@@ -27,6 +28,8 @@ endif
 
 TEST_DEPS =
 TEST_DEPS += $(COMMON)/$(TARGET_LIB)/libaerospike-common.a
+TEST_DEPS += $(LUAMOD)/liblua.a
+TEST_DEPS += $(TARGET_LIB)/libmod_lua.a
 
 ###############################################################################
 ##  TEST OBJECTS                                                             ##
@@ -64,7 +67,7 @@ test-valgrind: test-build
 	valgrind $(TEST_VALGRIND) $(TARGET_BIN)/test/mod_lua_test 1>&2 2>mod_lua_test-valgrind
 
 .PHONY: test-build
-test-build: test/mod_lua_test
+test-build: $(TEST_DEPS) test/mod_lua_test
 
 .PHONY: test-clean
 test-clean:
