@@ -101,6 +101,17 @@ static int mod_lua_record_gen(lua_State * l) {
 }
 
 /**
+ * Get a record's stored size (bytes):
+ *      record.size(r)
+ */
+static int mod_lua_record_size(lua_State * l) {
+    as_rec * rec = (as_rec *) mod_lua_checkrecord(l, 1);
+    lua_pushinteger(l, as_rec_size(rec));
+    return 1;
+}
+
+/**
+ * Deprecated!
  * Get a record's memory storage size:
  *      record.memory_size(r)
  */
@@ -111,6 +122,7 @@ static int mod_lua_record_memory_size(lua_State * l) {
 }
 
 /**
+ * Deprecated!
  * Get a record's device storage size:
  *      record.device_size(r)
  */
@@ -282,6 +294,7 @@ static const luaL_Reg object_table[] = {
     {"ttl",        mod_lua_record_ttl},
     {"last_update_time", mod_lua_record_last_update_time},
     {"gen",        mod_lua_record_gen},
+    {"size",       mod_lua_record_size},
     {"memory_size", mod_lua_record_memory_size},
     {"device_size", mod_lua_record_device_size},
     {"key",        mod_lua_record_key},
