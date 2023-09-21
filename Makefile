@@ -25,7 +25,7 @@ ifeq ($(ARCH),aarch64)
   REAL_ARCH = -mcpu=neoverse-n1
 endif
 
-CC_CFLAGS += REAL_ARCH
+CC_CFLAGS += $(REAL_ARCH)
 
 ifeq ($(TARGET_SERVER), )
   CC_FLAGS += -DAS_MOD_LUA_CLIENT
