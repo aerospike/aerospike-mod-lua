@@ -1,0 +1,35 @@
+name: Build
+on:
+  push:
+
+env:
+  COMMON_REF: master
+  LUAMOD_REF: v5.4.6
+
+jobs:
+  build-n-test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    - uses: actions/checkout@v4
+      with:
+        repository: ${{ github.repository_owner }}/aerospike-common
+        ref: ${{ env.COMMON_REF }}
+        fetch-depth: 0
+        token: ${{ secrets.PERSONAL_ACCESS_TOKEN || github.token }}
+        path: common
+    - uses: actions/checkout@v4
+      with:
+        repository: aerospike/lua
+        ref: ${{ env.LUAMOD_REF }}
+        fetch-depth: 0
+        path: lua
+    - name: Build
+      run: "make COMMON=common LUAMOD=lua"
+    - name: Test
+      run: "make COMMON=common LUAMOD=lua test"
