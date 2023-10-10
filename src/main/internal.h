@@ -17,6 +17,9 @@
 
 #pragma once
 
+#include <lauxlib.h>
+#include <lua.h>
+
 struct lua_State;
 
 //
