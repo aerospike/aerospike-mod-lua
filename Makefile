@@ -99,6 +99,12 @@ MOD_LUA += mod_lua_system.o
 MOD_LUA += mod_lua_val.o
 
 ###############################################################################
+##  HEADERS                                                                  ##
+###############################################################################
+
+MOD_LUA_HS = $(wildcard $(SOURCE_INCL)/aerospike/*.h)
+
+###############################################################################
 ##  MAIN TARGETS                                                             ##
 ###############################################################################
 
@@ -108,7 +114,7 @@ all: build prepare
 build: modules-build libmod_lua
 
 .PHONY: prepare
-prepare: modules-prepare $(TARGET_INCL)/aerospike/*.h
+prepare: modules-prepare $(subst $(SOURCE_INCL),$(TARGET_INCL),$(MOD_LUA_HS))
 
 .PHONY: clean
 clean:	modules-clean
