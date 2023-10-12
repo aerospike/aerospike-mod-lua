@@ -19,8 +19,7 @@ PROJECT = project
 MODULES = modules
 SOURCE  = src
 TARGET  = target
-
-MODULES = 
+LIBRARIES =
 
 ###############################################################################
 ##  BUILD TOOLS                                                              ##
@@ -97,55 +96,10 @@ TARGET_INCL = $(TARGET_BASE)/include
 ##  FUNCTIONS                                                                ##
 ###############################################################################
 
-#
-# Builds an object, library, archive or executable using the dependencies specified for the target.
-# 
-# x: [dependencies]
-#   $(call <command>, include_paths, library_paths, libraries, flags)
-#
-# Commands:
-# 		build 			- Automatically determine build type based on target name.
-# 		object 			- Build an object: .o
-# 		library 		- Build a dynamic shared library: .so
-# 		archive 		- Build a static library (archive): .a
-#		executable 		- Build an executable
-# 
-# Arguments:
-#		include_paths	- Space separated list of search paths for include files.
-#						  Relative paths are relative to the project root.
-#		library_paths	- Space separated list of search paths for libraries.
-#						  Relative paths are relative to the project root.
-#		libraries		- space separated list of libraries.
-#		flags 			- space separated list of linking flags.
-#
-# You can optionally define variables, rather than arguments as:
-#
-#	X_inc_path = [include_paths]
-#	X_lib_path = [library_paths]
-#	X_lib = [libraries]
-# 	X_flags = [flags]
-#
-# Where X is the name of the build target.
-#
-
-define build
-	$(if $(filter .o,$(suffix $@)), 
-		$(call object, $(1),$(2),$(3),$(4)),
-		$(if $(filter .so,$(suffix $@)), 
-			$(call library, $(1),$(2),$(3),$(4)),
-			$(if $(filter .a,$(suffix $@)), 
-				$(call archive, $(1),$(2),$(3),$(4)),
-				$(call executable, $(1),$(2),$(3),$(4))
-			)
-		)
-	)
-endef
-
 define executable
 	@if [ ! -d `dirname $@` ]; then mkdir -p `dirname $@`; fi
 	$(strip $(CC) \
 		$(addprefix -I, $(INC_PATH)) \
-		$(addprefix -L, $(SUBMODULES:%=%/$(TARGET_LIB))) \
 		$(addprefix -L, $(LIB_PATH)) \
 		$(addprefix -l, $(LIBRARIES)) \
 		$(CC_FLAGS) \
@@ -156,8 +110,6 @@ define executable
 	)
 endef
 
-ifneq ($(PREPRO),1)
-ifneq ($(MEXP_PHASE),1)
 define archive
 	@if [ ! -d `dirname $@` ]; then mkdir -p `dirname $@`; fi
 	$(strip $(AR) \
@@ -168,16 +120,11 @@ define archive
 		$(filter %.o, $^) \
 	)
 endef
-endif
-endif
 
-ifneq ($(PREPRO),1)
-ifneq ($(MEXP_PHASE),1)
 define library
 	@if [ ! -d `dirname $@` ]; then mkdir -p `dirname $@`; fi
 	$(strip $(CC) $(DYNAMIC_FLAG) \
 		$(addprefix -I, $(INC_PATH)) \
-		$(addprefix -L, $(SUBMODULES:%=%/$(TARGET_LIB))) \
 		$(addprefix -L, $(LIB_PATH)) \
 		$(addprefix -l, $(LIBRARIES)) \
 		$(LD_FLAGS) \
@@ -186,47 +133,15 @@ define library
 		$(filter %.o, $^) \
 	)
 endef
-endif
-endif
 
-ifeq ($(MEXP_PHASE),1)
-define object
-	@if [ ! -d `dirname $(TARGET_M4)/$<` ]; then mkdir -p `dirname $(TARGET_M4)/$<`; fi
-	$(TOOLS_DIR)/mexp $< $(TARGET_M4)/$<
-endef
-else ifeq ($(MEXP_PHASE),2)
 define object
 	@if [ ! -d `dirname $@` ]; then mkdir -p `dirname $@`; fi
 	$(strip $(CC) \
 		$(addprefix -I, $(INC_PATH)) \
-		$(addprefix -I, $(SOURCE_MAIN)) \
-		$(addprefix -L, $(SUBMODULES:%=%/$(TARGET_LIB))) \
 		$(addprefix -L, $(LIB_PATH)) \
 		$(CC_FLAGS) \
 		$(CFLAGS) \
 		-o $@ \
-		-c $(TARGET_M4)/$< \
-	)
-endef
-else
-define object
-	@if [ ! -d `dirname $@` ]; then mkdir -p `dirname $@`; fi
-	$(strip $(CC) \
-		$(addprefix -I, $(INC_PATH)) \
-		$(addprefix -L, $(SUBMODULES:%=%/$(TARGET_LIB))) \
-		$(addprefix -L, $(LIB_PATH)) \
-		$(CC_FLAGS) \
-		$(CFLAGS) \
-		-o $@$(SUFFIX) \
 		-c $(filter %.c %.cpp, $^)  \
 	)
-endef
-endif
-
-define make_each
-	@for i in $(1); do \
-		if [ -e "$$i/Makefile" ]; then \
-			make -C $$i $(2);\
-		fi \
-	done;
 endef

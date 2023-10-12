@@ -13,6 +13,7 @@ MODULES += LUAMOD
 O = 3
 
 # Make-local Compiler Flags
+EXT_CFLAGS =
 CC_FLAGS = -std=gnu99 -g -fPIC -O$(O)
 CC_FLAGS += -fno-common -fno-strict-aliasing
 CC_FLAGS += -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_GNU_SOURCE $(EXT_CFLAGS)
@@ -129,19 +130,17 @@ libmod_lua.$(DYNAMIC_SUFFIX): $(TARGET_LIB)/libmod_lua.$(DYNAMIC_SUFFIX)
 ##  BUILD TARGETS                                                            ##
 ###############################################################################
 
-$(TARGET_OBJ)/%.o: $(SOURCE_MAIN)/%.c | modules-prepare
+$(TARGET_OBJ)/%.o: $(SOURCE_MAIN)/%.c | modules
 	$(object)
 
-$(TARGET_LIB)/libmod_lua.$(DYNAMIC_SUFFIX): $(MOD_LUA:%=$(TARGET_OBJ)/%) | $(COMMON)/$(TARGET_INCL)/aerospike
+$(TARGET_LIB)/libmod_lua.$(DYNAMIC_SUFFIX): $(MOD_LUA:%=$(TARGET_OBJ)/%) | modules
 	$(library)
 
-$(TARGET_LIB)/libmod_lua.a: $(MOD_LUA:%=$(TARGET_OBJ)/%) | $(COMMON)/$(TARGET_INCL)/aerospike
+$(TARGET_LIB)/libmod_lua.a: $(MOD_LUA:%=$(TARGET_OBJ)/%) | modules
 	$(archive)
 
-$(TARGET_INCL)/aerospike: | $(TARGET_INCL)
-	mkdir -p $@
-
-$(TARGET_INCL)/aerospike/%.h:: $(SOURCE_INCL)/aerospike/%.h | $(TARGET_INCL)/aerospike
+$(TARGET_INCL)/aerospike/%.h: $(SOURCE_INCL)/aerospike/%.h
+	@mkdir -p $@
 	cp -p $^ $(TARGET_INCL)/aerospike
 
 ###############################################################################
