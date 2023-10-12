@@ -32,13 +32,6 @@ ifeq ($(TARGET_SERVER), )
   CC_FLAGS += -DAS_MOD_LUA_CLIENT
 endif
 
-PREPRO_SUFFIX = .cpp
-ifeq ($(PREPRO),1)
-  SUFFIX = $(PREPRO_SUFFIX)
-  CC_FLAGS += -E -DPREPRO=$(PREPRO) -DGEN_TAG=$(GEN_TAG)"\
-"
-endif
-
 # Linker flags
 LD_FLAGS = $(LDFLAGS)
 
