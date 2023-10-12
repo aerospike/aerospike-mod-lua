@@ -77,7 +77,7 @@ endif
 CFLAGS = -O$(O)
 
 # Include Paths
-INC_PATH += $(COMMON)/$(TARGET_INCL)
+INC_PATH += $(COMMON)/$(SOURCE_INCL)
 INC_PATH += $(LUAMOD)
 
 ###############################################################################
@@ -123,7 +123,7 @@ libmod_lua.$(DYNAMIC_SUFFIX): $(TARGET_LIB)/libmod_lua.$(DYNAMIC_SUFFIX)
 ##  BUILD TARGETS                                                            ##
 ###############################################################################
 
-$(TARGET_OBJ)/%.o: $(SOURCE_MAIN)/%.c | modules
+$(TARGET_OBJ)/%.o: $(SOURCE_MAIN)/%.c
 	$(object)
 
 $(TARGET_LIB)/libmod_lua.$(DYNAMIC_SUFFIX): $(MOD_LUA:%=$(TARGET_OBJ)/%) | modules
@@ -133,8 +133,8 @@ $(TARGET_LIB)/libmod_lua.a: $(MOD_LUA:%=$(TARGET_OBJ)/%) | modules
 	$(archive)
 
 $(TARGET_INCL)/aerospike/%.h: $(SOURCE_INCL)/aerospike/%.h
-	@mkdir -p $@
-	cp -p $^ $(TARGET_INCL)/aerospike
+	@mkdir -p $(@D)
+	cp -p $< $@
 
 ###############################################################################
 include project/modules.mk project/test.mk project/rules.mk

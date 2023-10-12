@@ -43,11 +43,13 @@ COMMON-prepare: COMMON-make-prepare $(subst $(COMMON)/$(SOURCE_INCL),$(TARGET_IN
 COMMON-make-prepare:
 	$(MAKE) -e -C $(COMMON) prepare
 
-$(TARGET_INCL)/aerospike/%.h: $(COMMON)/$(TARGET_INCL)/aerospike/%.h | $(TARGET_INCL)/aerospike
-	 cp -p $^ $@
+$(TARGET_INCL)/aerospike/%.h: $(COMMON)/$(TARGET_INCL)/aerospike/%.h
+	@mkdir -p $(@D)
+	cp -p $< $@
 
-$(TARGET_INCL)/citrusleaf/%.h: $(COMMON)/$(TARGET_INCL)/citrusleaf/%.h | $(TARGET_INCL)/citrusleaf
-	 cp -p $^ $@
+$(TARGET_INCL)/citrusleaf/%.h: $(COMMON)/$(TARGET_INCL)/citrusleaf/%.h
+	@mkdir -p $(@D)
+	cp -p $< $@
 
 ###############################################################################
 ##  LUA MODULE                                                               ##
