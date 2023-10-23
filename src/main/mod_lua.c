@@ -1071,16 +1071,6 @@ release_state(const char* filename, cache_item* citem)
 	pthread_rwlock_rdlock(&g_lock);
 
 	if (g_lua_cfg.cache_enabled) {
-		// Do GC only if we've used over 10Mb.
-		if (lua_gc(citem->state, LUA_GCCOUNT, 0) > 1024 * 10) {
-			// First, try 40 "iterations" of "step" GC.
-			if (lua_gc(citem->state, LUA_GCSTEP, 40) != 1) {
-				// Step GC not enough, do "full" GC.
-				// TODO - what does the 200 do, if anything?
-				lua_gc(citem->state, LUA_GCCOLLECT, 200);
-			}
-		}
-
 		pthread_rwlock_rdlock(&g_cache_lock);
 
 		cache_entry* centry;
@@ -1127,6 +1117,8 @@ create_state(const char* user_path, const char* filename)
 	lua_State* l = luaL_newstate();
 
 	luaL_openlibs(l);
+
+	lua_gc(l, LUA_GCGEN, 0, 0);
 
 	package_path_set(l, user_path);
 	package_cpath_set(l, user_path);
