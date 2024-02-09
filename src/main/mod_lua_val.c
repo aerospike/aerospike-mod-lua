@@ -47,61 +47,52 @@ as_val * mod_lua_retval(lua_State * l) {
  * @param i the position of the val on the stack
  * @returns the val if exists, otherwise NULL.
  */
-as_val * mod_lua_toval(lua_State * l, int i) {
-    switch( lua_type(l, i) ) {
-        case LUA_TNUMBER : {
-			double d = lua_tonumber(l, i);
-			int64_t i64 = (int64_t)d;
-			
-			if (d == i64) {
-				return (as_val*) as_integer_new(i64);
+as_val* mod_lua_toval(lua_State* l, int i) {
+	switch (lua_type(l, i)) {
+	case LUA_TNUMBER:
+		return (lua_isinteger(l, i)) == 1 ?
+				(as_val*)as_integer_new(lua_tointeger(l, i)) :
+				(as_val*)as_double_new(lua_tonumber(l, i));
+	case LUA_TBOOLEAN:
+		return (as_val*)as_boolean_new(lua_toboolean(l, i));
+	case LUA_TSTRING:
+		return (as_val*)as_string_new(cf_strdup(lua_tostring(l, i)), true);
+	case LUA_TUSERDATA : {
+		mod_lua_box* box = (mod_lua_box*)lua_touserdata(l, i);
+		if ( box && box->value ) {
+			switch (as_val_type(box->value)) {
+			case AS_BOOLEAN:
+			case AS_INTEGER:
+			case AS_DOUBLE:
+			case AS_STRING:
+			case AS_BYTES:
+			case AS_LIST:
+			case AS_MAP:
+			case AS_REC:
+			case AS_GEOJSON:
+				switch (box->scope) {
+				case MOD_LUA_SCOPE_LUA:
+					as_val_reserve(box->value);
+					return box->value;
+				case MOD_LUA_SCOPE_HOST:
+					return box->value;
+				}
+				default:
+					return NULL;
 			}
-			else {
-				return (as_val*) as_double_new(d);
-			}
-        }
-        case LUA_TBOOLEAN : {
-            return (as_val *) as_boolean_new(lua_toboolean(l, i));
-        }
-        case LUA_TSTRING : {
-            return (as_val *) as_string_new(cf_strdup(lua_tostring(l, i)), true);
-        }
-        case LUA_TUSERDATA : {
-            mod_lua_box * box = (mod_lua_box *) lua_touserdata(l, i);
-            if ( box && box->value ) {
-                switch( as_val_type(box->value) ) {
-                    case AS_BOOLEAN: 
-                    case AS_INTEGER:
-					case AS_DOUBLE:
-                    case AS_STRING: 
-                    case AS_BYTES:
-                    case AS_LIST:
-                    case AS_MAP:
-                    case AS_REC:
-                    case AS_GEOJSON:
-                        switch (box->scope) {
-                            case MOD_LUA_SCOPE_LUA:
-                                as_val_reserve(box->value);
-                                return box->value;
-                            case MOD_LUA_SCOPE_HOST:
-                                return box->value;
-                        }
-                    default:
-                        return NULL;
-                }
-            }
-            else {
-                return (as_val *) NULL;
-            }
-        }
-        case LUA_TNIL :
-        	return (as_val *)&as_nil;
-        case LUA_TTABLE :
-        case LUA_TFUNCTION :
-        case LUA_TLIGHTUSERDATA :
-        default:
-            return (as_val *) NULL;
-    }
+		}
+		else {
+			return (as_val*)NULL;
+		}
+	}
+	case LUA_TNIL :
+		return (as_val*)&as_nil;
+	case LUA_TTABLE :
+	case LUA_TFUNCTION :
+	case LUA_TLIGHTUSERDATA :
+	default:
+		return (as_val*)NULL;
+	}
 }
 
 
