@@ -14,13 +14,13 @@
   <ItemDefinitionGroup Condition="'$(UseDebugLibraries)' == 'true'">
     <Link>
       <AdditionalLibraryDirectories>$(SolutionDir)x64\$(Configuration);..\..\..\aerospike-client-c\vs\lib;..\..\..\aerospike-client-c\vs\packages\aerospike-client-c-dependencies.1.0.0\build\native\lib\x64\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>pthreadVC2d.lib;lua51.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>pthreadVC2d.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(UseDebugLibraries)' == 'false'">
     <Link>
       <AdditionalLibraryDirectories>$(SolutionDir)x64\$(Configuration);..\..\..\aerospike-client-c\vs\lib;..\..\..\aerospike-client-c\vs\packages\aerospike-client-c-dependencies.1.0.0\build\native\lib\x64\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>pthreadVC2.lib;lua51.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>pthreadVC2.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup />
