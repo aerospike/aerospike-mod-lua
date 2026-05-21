@@ -41,6 +41,7 @@ TEST_PLANS += record/record_udf
 TEST_PLANS += stream/stream_udf
 TEST_PLANS += validation/validation_basics
 TEST_PLANS += hash/hash_udf
+TEST_PLANS += sandbox/sandbox_basics
 
 TEST_UTIL =
 TEST_UTIL += util/consumer_stream

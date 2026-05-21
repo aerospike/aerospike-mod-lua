@@ -127,6 +127,7 @@ static pthread_rwlock_t g_cache_lock = PTHREAD_RWLOCK_INITIALIZER;
 static mod_lua_config g_lua_cfg = {
 		.server_mode = true,
 		.cache_enabled = true,
+		.unsafe_lua_disabled = false,
 		.user_path = MOD_LUA_CONFIG_USRPATH
 };
 
@@ -159,6 +160,7 @@ static int pushargs(lua_State* l, as_list* args);
 static bool pushargs_foreach(as_val* val, void* context);
 static int apply(lua_State* l, as_udf_context* udf_ctx, int err, int argc, as_result* res, bool is_stream);
 static void release_state(const char* filename, cache_item* citem);
+static void sandbox_state(lua_State* l);
 static lua_State* create_state(const char* user_path, const char* filename);
 static bool load_buffer(lua_State* l, const char* script, size_t size, const char* name);
 static bool is_native_module(const char* user_path, const char* filename);
@@ -178,6 +180,16 @@ void lua_hash_clear(lua_hash* h, void (*cb)(cache_entry*));
 // Inlines & macros.
 //
 
+// Case-sensitive: the runtime open path (create_state's "%s/%s.lua" snprintf
+// plus luaL_loadfilex, require()'s package.path "%s/?.lua" lookup, and
+// is_native_module's "%s/%s.so" stat) is byte-exact on case-sensitive
+// filesystems - which is every production Aerospike target (ext4, xfs). A
+// case-insensitive gate here would accept foo.LUA at registration only for
+// invocation to fail with a generic UDF error when the open misses the
+// lowercase path. Match the gates to the runtime instead. Sibling gates
+// cache_add_file's strcmp below and udf_filename_has_ext in udf_cask.c are
+// case-sensitive for the same reason. Dev environments on case-insensitive
+// filesystems (default macOS, vfat, NTFS) must use lowercase extensions.
 static inline bool
 hasext(const char* name, size_t name_len, const char* ext, size_t ext_len)
 {
@@ -321,6 +333,7 @@ update(as_module* m, as_module_event* e)
 
 		g_lua_cfg.server_mode = config->server_mode;
 		g_lua_cfg.cache_enabled = config->cache_enabled;
+		g_lua_cfg.unsafe_lua_disabled = config->unsafe_lua_disabled;
 
 		if (g_lua_hash == NULL && g_lua_cfg.cache_enabled) {
 			g_lua_hash = lua_hash_create(64);
@@ -402,6 +415,20 @@ validate(as_module* m, as_aerospike* as, const char* filename,
 	err->line = 0;
 	err->func[0] = '\0';
 
+	if (g_lua_cfg.unsafe_lua_disabled &&
+			! hasext(filename, strlen(filename), ".lua", 4)) {
+		// Scope/code follow populate_error's convention: scope 2 = "UDF
+		// module", codes 10-13 map to LUA_ERR* values. 14 is the next free
+		// slot, used here to signal a UDF-policy rejection (not a Lua
+		// interpreter error).
+		err->scope = 2;
+		err->code = 14;
+		strcpy(err->file, filename);
+		strcpy(err->message,
+				"unsafe Lua disabled; only .lua UDFs accepted");
+		return err->code;
+	}
+
 	lua_State* l = luaL_newstate();
 
 	if (l == NULL) {
@@ -414,7 +441,14 @@ validate(as_module* m, as_aerospike* as, const char* filename,
 	luaL_openlibs(l);
 
 	package_path_set(l, g_lua_cfg.user_path);
-	package_cpath_set(l, g_lua_cfg.user_path);
+
+	// When unsafe Lua is disabled, sandbox_state() nils package.cpath, so
+	// computing it here is wasted work. Skip the build in that case.
+	if (! g_lua_cfg.unsafe_lua_disabled) {
+		package_cpath_set(l, g_lua_cfg.user_path);
+	}
+
+	sandbox_state(l);
 
 	mod_lua_aerospike_register(l);
 	mod_lua_record_register(l);
@@ -445,7 +479,10 @@ validate(as_module* m, as_aerospike* as, const char* filename,
 		goto Cleanup;
 	}
 
-	int rc = luaL_loadbuffer(l, content, size, filename);
+	// Sandbox on - force text-only ("t") so a bytecode chunk masquerading as a
+	// .lua UDF can't bypass the sandbox.
+	const char* mode = g_lua_cfg.unsafe_lua_disabled ? "t" : NULL;
+	int rc = luaL_loadbufferx(l, content, size, filename, mode);
 
 	if (rc != 0) {
 		populate_error(l, filename, rc, err);
@@ -626,8 +663,9 @@ cache_scan_dir(const char* user_path)
 		if (dropext(key, len, ".lua", 4)) {
 			cache_init(user_path, key);
 		}
-		// If file ends with ".so", then drop ".so"
-		else if (dropext(key, len, ".so", 3)) {
+		// If unsafe Lua is not disabled and file ends with ".so", drop ".so".
+		else if (! g_lua_cfg.unsafe_lua_disabled &&
+				dropext(key, len, ".so", 3)) {
 			cache_init(user_path, key);
 		}
 	}
@@ -657,6 +695,12 @@ cache_add_file(const char* user_path, const char* filename)
 	// No extension, '.' is first, '.' is last or 1-char extension.
 	if (p == NULL || p == key || strlen(p) <= 1) {
 		as_log_error("lua registration: invalid filename %s", key);
+		return -1;
+	}
+
+	// Case-sensitive: matches hasext/dropext above and the runtime open path.
+	if (g_lua_cfg.unsafe_lua_disabled && strcmp(p, ".lua") != 0) {
+		as_log_error("lua registration: unsafe Lua disabled (%s)", key);
 		return -1;
 	}
 
@@ -1110,6 +1154,87 @@ release_state(const char* filename, cache_item* citem)
 	pthread_rwlock_unlock(&g_lock);
 }
 
+static void
+sandbox_state(lua_State* l)
+{
+	if (! g_lua_cfg.unsafe_lua_disabled) {
+		return;
+	}
+
+	// Globals to remove. Note - "loadstring" is gone in Lua 5.2+ but is kept
+	// here defensively for embedders that link an older Lua.
+	static const char* drop_globals[] = {
+		"os",
+		"io",
+		"debug",
+		"dofile",
+		"loadfile",
+		"load",
+		"loadstring",
+		NULL
+	};
+
+	// Subset of drop_globals that luaL_openlibs() also registers in
+	// package.loaded - "os", "io", and "debug" are modules; the rest are
+	// standalone functions with no package.loaded entry.
+	static const char* drop_loaded_modules[] = {
+		"os",
+		"io",
+		"debug",
+		NULL
+	};
+
+	for (uint32_t i = 0; drop_globals[i] != NULL; i++) {
+		lua_pushnil(l);
+		lua_setglobal(l, drop_globals[i]);
+	}
+
+	lua_getglobal(l, "package");
+
+	if (lua_istable(l, -1)) {
+		// Nilling the globals isn't enough: luaL_openlibs() inserted refs into
+		// package.loaded, so require("os") would still hand them back. Clear
+		// those cache entries.
+		lua_getfield(l, -1, "loaded");
+
+		if (lua_istable(l, -1)) {
+			for (uint32_t i = 0; drop_loaded_modules[i] != NULL; i++) {
+				lua_pushnil(l);
+				lua_setfield(l, -2, drop_loaded_modules[i]);
+			}
+		}
+
+		lua_pop(l, 1); // pop package.loaded
+
+		lua_pushnil(l);
+		lua_setfield(l, -2, "searchpath");
+		lua_pushnil(l);
+		lua_setfield(l, -2, "loadlib");
+		lua_pushnil(l);
+		lua_setfield(l, -2, "cpath");
+
+		// Nilling package.cpath/loadlib isn't enough on its own: the C
+		// searchers in package.searchers[3] (searcher_C) and [4]
+		// (searcher_Croot) call dlopen directly via Lua's internal lsys_load,
+		// bypassing package.loadlib, and they re-read package.cpath at every
+		// require(). A UDF that reassigns package.cpath could still load
+		// native modules. Drop the C searchers so require() stops at the Lua
+		// searcher.
+		lua_getfield(l, -1, "searchers");
+
+		if (lua_istable(l, -1)) {
+			lua_pushnil(l);
+			lua_rawseti(l, -2, 3);
+			lua_pushnil(l);
+			lua_rawseti(l, -2, 4);
+		}
+
+		lua_pop(l, 1); // pop package.searchers
+	}
+
+	lua_pop(l, 1);
+}
+
 // Creates a new context (lua_State) and populates it with default values.
 static lua_State*
 create_state(const char* user_path, const char* filename)
@@ -1121,7 +1246,14 @@ create_state(const char* user_path, const char* filename)
 	lua_gc(l, LUA_GCGEN, 0, 0);
 
 	package_path_set(l, user_path);
-	package_cpath_set(l, user_path);
+
+	// When unsafe Lua is disabled, sandbox_state() nils package.cpath, so
+	// computing it here is wasted work. Skip the build in that case.
+	if (! g_lua_cfg.unsafe_lua_disabled) {
+		package_cpath_set(l, user_path);
+	}
+
+	sandbox_state(l);
 
 	mod_lua_aerospike_register(l);
 	mod_lua_record_register(l);
@@ -1146,17 +1278,37 @@ create_state(const char* user_path, const char* filename)
 		return NULL;
 	}
 
-	if (is_native_module(user_path, filename)) {
+	if (! g_lua_cfg.unsafe_lua_disabled &&
+			is_native_module(user_path, filename)) {
 		return l;
 	}
 
-	lua_getglobal(l, "require");
-	lua_pushstring(l, filename);
+	if (g_lua_cfg.unsafe_lua_disabled) {
+		// Sandbox is on - load the .lua file directly with mode "t" so a
+		// bytecode chunk masquerading as a .lua UDF can't escape the sandbox.
+		// (Default mode for require()/luaL_loadfile() accepts both text and
+		// binary, and Lua bytecode is not memory-safe.)
+		char full_path[sizeof(g_lua_cfg.user_path) + CACHE_ENTRY_KEY_MAX + 8];
 
-	if (lua_pcall(l, 1, 1, 0) != 0) {
-		as_log_error("lua create error: %s", lua_tostring(l, -1));
-		lua_close(l);
-		return NULL;
+		snprintf(full_path, sizeof(full_path), "%s/%s.lua", user_path,
+				filename);
+
+		if (luaL_loadfilex(l, full_path, "t") != 0 ||
+				lua_pcall(l, 0, 1, 0) != 0) {
+			as_log_error("lua create error: %s", lua_tostring(l, -1));
+			lua_close(l);
+			return NULL;
+		}
+	}
+	else {
+		lua_getglobal(l, "require");
+		lua_pushstring(l, filename);
+
+		if (lua_pcall(l, 1, 1, 0) != 0) {
+			as_log_error("lua create error: %s", lua_tostring(l, -1));
+			lua_close(l);
+			return NULL;
+		}
 	}
 
 	as_log_debug("lua state created for %s is %d kbytes", filename,

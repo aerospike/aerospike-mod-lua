@@ -28,5 +28,6 @@ typedef struct mod_lua_config_s mod_lua_config;
 struct mod_lua_config_s {
     bool    server_mode;
     bool    cache_enabled;
+    bool    unsafe_lua_disabled;
     char    user_path[256];
 };

@@ -32,4 +32,5 @@ PLAN(mod_lua_test)
 	plan_add(record_udf);
 	plan_add(stream_udf);
 	plan_add(validation_basics);
+	plan_add(sandbox_basics);
 }
